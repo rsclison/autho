@@ -1,0 +1,11 @@
+[
+ {:person "001" :delegate [(= id "002")]
+  :resources [
+              {:class "Facture" :operations (lire)}
+              {:class "EJ" :id "1234" :operations (ecrire)}]}
+
+ {:person "0001" :delegate [(= role "chef_de_service")]
+  :resources [
+              {:class "Agent" :operations (lire)}
+              ]}
+ ]

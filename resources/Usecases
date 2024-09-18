@@ -1,0 +1,44 @@
+(?ressource type "Note")
+(?subject role "Professeur")
+(?subject structure ?struct)
+(> (?struct taille) 100)
+
+Comment répondre à une requête du type "Quelles sont les notes auxquelles j'ai accès" ?
+
+L'idée est de renvoyer une expression à évaluer par l'application
+
+?? Comment transformer des prédicats en HQL
+
+On doit pouvoir répondre à des requêtes :
+    - avec un subject vide : on cherche donc une liste de personnes qui ont des droits sur une ressource donnée
+    - avec une ressource vide : on cherche donc une liste de ressources sur lesquelles la personne a des droits
+
+Dans une request on peut passe une ressource qui n'est pas forcément totalement identifiée. La liste des champs peit être par exemple réduite à sa classe.
+On peut aussi passer des caractéristiques qui ne seront pas suffisantes pour résoudre des attributs. Dans ce cas on va renvoyer une condition de caractéristiques à évaluer par l'envoyeur
+
+
+Seul le chef de service du service qui a enregistré une facture peut modifier cette facture
+Question : quelles sont les factures que peut modifier Paul ? (on considère que Paul est le chef du service "scolarite")
+On appelle le service Rest avec :
+{"subject" : "{class Person :name "Paul"}" "resource": {:class "Facture"} :operation "modifier" :context {:date "2019-08-14T04:03:27.456"} }
+
+Facture modifier
+[Facture ?f ((< montant 10000)(service ?serv))]
+[Person ?subject ((= role chef_de_service)(service ?serv))]
+
+Si on complique la règle en ajoutant qu'il n'existe aucune facture fille
+Facture modifier
+[Facture ?f ((< montant 10000)(= service ?serv))]
+[Person ?subject ((= role chef_de_service)(= service ?serv))]
+NOT  [Facture ? (= mere ?f)]
+
+Les conditions sont un nu-uplets composé de :
+    - un operateur soit EXIST soit NOT
+    - un type d'objet : pour les ressources il s'agit du type de la ressource, pour le sujet il s'agit soit de Personne soit de Application, pour les opérations "Operation"
+    - un symbole ( ?xxx)
+    - une suite de clauses : une clause est composée soit
+        - d'un attribut et d'une variable : ce type de clause sert à affecter une variable qui sera utilisée par la suite
+        - d'un opérateur, d'un attribut et d'une valeur. Les opérateurs autorisés sont =, >, <, in
+
+On va limiter le pouvoir d'expression dans un premier temps en permettant uniquement 2 conditions : une sur la ressource, une sur la personne. Ces conditions peuvent en revanche comporter autant de clauses
+que l'on souhaite

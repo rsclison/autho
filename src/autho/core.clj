@@ -1,7 +1,7 @@
 (ns autho.core
-  (:gen-class))
+  (:require [com.brunobonacci.mulog :as u])
+ )
 
-(defn -main
-  "I don't do a whole lot ... yet."
-  [& args]
-  (println "Hello, World!"))
+
+(u/start-publisher! {:type :console})
+

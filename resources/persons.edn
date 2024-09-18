@@ -1,0 +1,4 @@
+[
+ {:id "001" :name "Paul" :role "chef_de_service" :service "service1"}
+ {:id "002" :name "John" :role "agent" :service "service2"}
+ ]

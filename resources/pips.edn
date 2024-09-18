@@ -1,0 +1,10 @@
+; array of pips
+; a pip is described by a map
+; :class is the class of the business object resolved by the pip
+; :attributes is an array of the attributes (in the form of symbols) resolved by the pip for the class. :attributes could be missing which means the pip can resolve any attribute
+; :pip is a description for the call. :type is the type of pip (for example :rest). For a rest pip there should be a :url.
+[
+ {:class :person :attributes [:name :surname] :pip {:type :rest :url "http://xxx" :cacheable false}}
+ {:class :person :attributes [:grade] :pip {:type :rest :url "http://yyy" :cacheable false}}
+ {:class :junk :pip {:type :internal :func "junkJsonPip"}}
+]

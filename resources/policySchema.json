@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+   "definitions": {},
+   "$id": "http://example.com/root.json",
+   "title": "The Root Schema",
+   "required": [
+     "resourceClass",
+     "strategy",
+     "rules"
+   ],
+   "properties": {
+     "resourceClass": {
+       "$id": "#/properties/resourceClass",
+       "type": "string",
+       "title": "The Resourceclass Schema",
+       "default": "",
+       "examples": [
+         "Note"
+       ],
+       "pattern": "^(.*)$"
+     },
+     "strategy": {
+       "$id": "#/properties/strategy",
+       "type": "string",
+       "title": "The Strategy Schema",
+       "default": "",
+       "examples": [
+         "test"
+       ],
+       "pattern": "^(.*)$"
+     },
+     "rules": {
+       "$id": "#/properties/rules",
+       "type": "array",
+       "title": "The Rules Schema",
+       "items": {
+         "$id": "#/properties/rules/items",
+         "type": "object",
+         "title": "The Items Schema",
+         "required": [
+           "name",
+           "resourceClass",
+           "priority",
+           "operation",
+           "condition",
+           "effect",
+           "startDate",
+           "endDate"
+         ],
+         "properties": {
+           "name": {
+             "$id": "#/properties/rules/items/properties/name",
+             "type": "string",
+             "title": "The Name Schema",
+             "default": "",
+             "examples": [
+               "R1"
+             ],
+             "pattern": "^(.*)$"
+           },
+           "resourceClass": {
+             "$id": "#/properties/rules/items/properties/resourceClass",
+             "type": "string",
+             "title": "The Resourceclass Schema",
+             "default": "",
+             "examples": [
+               "Note"
+             ],
+             "pattern": "^(.*)$"
+           },
+           "priority": {
+             "$id": "#/properties/rules/items/properties/priority",
+             "type": "number",
+             "title": "The Priority Schema",
+             "default": "0"
+           },
+           "operation": {
+             "$id": "#/properties/rules/items/properties/operation",
+             "type": "string",
+             "title": "The Operation Schema",
+             "default": "",
+             "examples": [
+               "lire"
+             ],
+             "pattern": "^(.*)$"
+           },
+           "condition": {
+             "$id": "#/properties/rules/items/properties/condition",
+             "type": "string",
+             "title": "The Condition Schema",
+             "default": "",
+             "examples": [
+               "xxxx"
+             ],
+             "pattern": "^(.*)$"
+           },
+           "effect": {
+             "$id": "#/properties/rules/items/properties/effect",
+             "type": "string",
+             "title": "The Effect Schema",
+             "default": "",
+             "examples": [
+               "effect"
+             ],
+             "pattern": "^(.*)$"
+           },
+           "startDate": {
+             "$id": "#/properties/rules/items/properties/startDate",
+             "type": "string",
+             "format": "date-time",
+             "title": "The Startdate Schema",
+             "default": "",
+             "examples": [
+               "2019-11-6"
+             ],
+             "pattern": "^(.*)$"
+           },
+           "endDate": {
+             "$id": "#/properties/rules/items/properties/endDate",
+             "type": "string",
+             "format": "date-time",
+             "title": "The Enddate Schema",
+             "default": "",
+             "examples": [
+               "2019-12-3"
+             ],
+             "pattern": "^(.*)$"
+           }
+         }
+       }
+     }
+   }
+ }

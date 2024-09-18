@@ -1,0 +1,26 @@
+;; Request
+
+{:subject {:id "John" :role "etudiant"} :resource {:class "Note" :id "NOte2356"} :operation "lire" :context {:date "2019-08-14T04:03:27.456" :application "Mangue"} }
+
+{"subject":  {"id": "John", "role": "etudiant"} , "resource": {"class": "Note"} , "operation": "lire", "context": {"date": "2019-08-14T04:03:27.456"} }
+
+(evalRequest '{:subject {:id "John" :role "Professeur"} :resource {:class "Note"} :operation "lire" :context {} })
+
+
+
+
+Exemples 2.0
+
+(evalRequest 
+ '{:subject {:id "John" :role "chef_de_service" :service "compta" :seuil 5000} :resource {:class "Facture" :montant 1000 :service "compta"} :operation "lire" :context {} })
+
+
+
+SYNTAXE 2.0 des règles
+
+condition ::= [clause]+
+clause ::= [operator operand operand]
+operand ::= value | [type object attribute]
+object ::= variable | [type object attribute]
+
+operande ==> [Person [Agent $s pere] age]

@@ -1,0 +1,65 @@
+{"Facture" {:global {
+                      :rules    [{:name          "R1"
+                                  :priority 0
+                                         :resourceClass "Facture"
+                                         :domain        "GFC"
+                                         :operation     "lire"
+                                         :conditions       [[= [Person $s role] "chef_de_service"] [= [Person $s service] [Person $r service]] [< [Facture $r montant] [Person $s seuil]]]
+                                         :effect        "allow"
+                                         :startDate     "inf"
+                                         :endDate       "inf"}
+
+    ;;                             {:name          "R2"
+      ;;                                   :resourceClass "Facture"
+        ;;                                 :domain        "GFC"
+          ;;                               :operation     "lire"
+            ;;                             :resource      [Facture ?f]
+              ;;                           :subject       [Person ?subject (= role "directeur")]
+                ;;                         :effect        "allow"
+                  ;;                       :startDate     "inf"
+                    ;;                     :endDate       "inf"}
+                                 {:name "R3"
+                                  :ressourceClass "Mouvement"
+                                  :priority 0
+                                  :effect "allow"
+                                  :domain   "GRH"
+                                  :roles ["gestionnaire RH"]
+                                  :operations ["créer" ]
+                                  :conditions  [[= [Person $s code] [Mouvement $r codegestion]]]
+                                  }
+                                 ]
+                      :strategy :almost_one_allow_no_deny}
+             }
+
+ 
+
+ "Diplome" {:global {
+                     :rules [
+                             {:name "DIP1"
+                              :resourceClass "Diplome"
+                              :priority 0
+                              :domain   "SVE"
+                              :operation "lire"
+                              :conditions    [[= [Person $s role] "professeur"]]
+                              :effect     "allow"
+                              :startDate  "inf"
+                              :endDate    "inf"
+                              }
+                             ]
+                     }}
+
+ "Application" {:global {
+                         :rules [
+                                 {:name "APP1"
+                                  :resourceClass "Application"
+                                  :priority 0
+                                  :domain   "GFC"
+                                  :operation "executer"
+                                  :conditions    [[= [Person $s role] "comptable"] [= [Application $r name] "gfc-compta"]]
+                                  :effect     "allow"
+                                  :startDate  "inf"
+                                  :endDate    "inf"
+                                  }
+                                 ]
+                         }}
+ }
