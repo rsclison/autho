@@ -11,7 +11,7 @@
 ;; callPip return a map which is like a context. In fact alaways return the object map with the attribute included
 ;; so for a person pip which is called for the age attribute the result of callPip should be like {:class :person :id "fziffo2343" :name "John" :age 33 }
 ;; resolveAttr then gets the right attribute in this map
-(defn resolveAttr [ctxt att]
+#_(defn resolveAttr [ctxt att]
   (if (map? ctxt)
     (if-let [val (get ctxt (keyword att))] val
             (get (pip/callPip (prp/findPip (:class ctxt) att) ctxt att) (keyword att)))
@@ -19,13 +19,13 @@
 
 
 
-(defn walkResolveJPath [path context]
+#_(defn walkResolveJPath [path context]
   (let [pathcol (rest (str/split path #"\."))] ;; omit the $
     (reduce #(resolveAttr %1 %2) context pathcol)))
 
 ;; ctxt is a map with the primary and the secondary context of evaluation
 ;; 
-#_(defn evalOperand [op subjOrRess ctxt]
+(defn evalOperand [op subjOrRess ctxt]
   (if-not (= (subs op 0 1) "$")
     op
     (case (subs op 0 2)
@@ -35,7 +35,7 @@
       "$r" (js/at-path (str "$" (subs op 2)) (:resource ctxt))
       "$s" (js/at-path (str "$" (subs op 2)) (:subject ctxt)))))
 
-(defn evalOperand [ops subjOrRess ctxt]
+#_(defn evalOperand [ops subjOrRess ctxt]
   (let [op (str ops)]
     (if-not (= (subs op 0 1) "$")
       op  ;; scalar value
@@ -47,7 +47,7 @@
         "$s" (walkResolveJPath (str "$" (subs op 2)) (:subject ctxt))))))
 
 
-(defn evalOperand2 [op ctxt]
+#_(defn evalOperand2 [op ctxt]
   (if-not (coll? op)
     (case (str op)
       "$s" (:subject ctxt)
@@ -67,13 +67,11 @@
         opv2 (evalOperand op2 subjOrRess ctxt)
         func (resolve(symbol "autho.attfun" operator))
         ]
-    (println "OPV1" opv1)
      (apply func [op1 op2])
     )
   )
 
-(defn evalClause2 [[operator op1 op2] ctxt]
-  (println "IN EVALCLAUSE2")
+#_(defn evalClause2 [[operator op1 op2] ctxt]
   (let [opv1 (evalOperand2 op1 ctxt)
         opv2 (evalOperand2 op2 ctxt)
         func (resolve (symbol "autho.attfun" (str operator)))
@@ -90,13 +88,12 @@
 ;; catch Exception while evaluating
 (defn evaluateRule [rule request]
   (let [subjectClauses (:subjectCond rule) resourceClauses (:resourceCond rule) ctxtwtype (assoc request :class :Person)]
-    (println "EVAL RULES")
     (doall (map #(evalClause % :Person ctxtwtype :subject) (rest subjectClauses)))
     (map #(evalClause % :Person ctxtwtype :resource) (rest resourceClauses))
     )
 )
 
-(defn evaluateRule2 [rule request]
+#_(defn evaluateRule2 [rule request]
   (loop [conds (:conditions rule)]
     (if (empty? conds)
       true
