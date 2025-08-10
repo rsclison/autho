@@ -1,7 +1,7 @@
 #_{:clj-kondo/ignore [:namespace-name-mismatch]}
 (ns autho.walker
 
-  [:require [hyauth.match :as m]])
+  (:require [autho.match :as m]))
 
 (declare walk eval-expr)
 

@@ -1,9 +1,8 @@
 (ns autho.jsonrule
   (:require [clojure.string :as str]
-            [hyauth.jsonpath :as js]
-            [hyauth.pip :as pip]
-            [hyauth.prp :as prp]
-            [hashp.core]
+            [autho.jsonpath :as js]
+            [autho.pip :as pip]
+            [autho.prp :as prp]
             )
   (:use clojure.test)
   )
@@ -13,8 +12,6 @@
 ;; so for a person pip which is called for the age attribute the result of callPip should be like {:class :person :id "fziffo2343" :name "John" :age 33 }
 ;; resolveAttr then gets the right attribute in this map
 (defn resolveAttr [ctxt att]
-  #p ctxt
-  #p att
   (if (map? ctxt)
     (if-let [val (get ctxt (keyword att))] val
             (get (pip/callPip (prp/findPip (:class ctxt) att) ctxt att) (keyword att)))
@@ -23,8 +20,6 @@
 
 
 (defn walkResolveJPath [path context]
-  #p path
-  #p context
   (let [pathcol (rest (str/split path #"\."))] ;; omit the $
     (reduce #(resolveAttr %1 %2) context pathcol)))
 
@@ -53,8 +48,6 @@
 
 
 (defn evalOperand2 [op ctxt]
-  #p op
-  #p (type op)
   (if-not (coll? op)
     (case (str op)
       "$s" (:subject ctxt)
@@ -70,10 +63,9 @@
 
 
 (defn evalClause [[operator op1 op2] type ctxt subjOrRess]
-  #p "IN EVALCLAUSE"
   (let [opv1 (evalOperand op1 subjOrRess ctxt)
         opv2 (evalOperand op2 subjOrRess ctxt)
-        func (resolve(symbol "hyauth.attfun" operator))
+        func (resolve(symbol "autho.attfun" operator))
         ]
     (println "OPV1" opv1)
      (apply func [op1 op2])
@@ -84,10 +76,9 @@
   (println "IN EVALCLAUSE2")
   (let [opv1 (evalOperand2 op1 ctxt)
         opv2 (evalOperand2 op2 ctxt)
-        func (resolve (symbol "hyauth.attfun" (str operator)))
+        func (resolve (symbol "autho.attfun" (str operator)))
         ]
-#p (str operator " " opv1 " " opv2)
-    #p (apply func [opv1 opv2])
+    (apply func [opv1 opv2])
     )
   )
 
@@ -100,9 +91,6 @@
 (defn evaluateRule [rule request]
   (let [subjectClauses (:subjectCond rule) resourceClauses (:resourceCond rule) ctxtwtype (assoc request :class :Person)]
     (println "EVAL RULES")
-    #p rule
-    #p (rest subjectClauses)
-    #p request
     (doall (map #(evalClause % :Person ctxtwtype :subject) (rest subjectClauses)))
     (map #(evalClause % :Person ctxtwtype :resource) (rest resourceClauses))
     )

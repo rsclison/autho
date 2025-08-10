@@ -1,8 +1,8 @@
 #_{:clj-kondo/ignore [:namespace-name-mismatch]}
 (ns autho.jsonpath
-  [:require [hyauth.parser :as parser]
-   [hyauth.match :as m]
-   [hyauth.walker :as walker]])
+  (:require [autho.parser :as parser]
+            [autho.match :as m]
+            [autho.walker :as walker]))
 
 (defn query [path object]
   (walker/walk (parser/parse-path path) {:root (m/root object)}))
