@@ -6,7 +6,7 @@
             )
   (:require [clojure.java.io :as io] [clojure.edn :as edn])
   (:require [java-time :as ti])
-  (:require [hyauth.utils :as utl])
+  (:require [autho.utils :as utl])
 
   )
 
@@ -126,14 +126,7 @@
   (println "PIPS " @attributeMap)
   )
 
-
-;;(defn findPip [attribute]
-  ;;(apply (keyword attribute) [@attributeMap])
-  ;;)
-
 (defn findPip [class attribute]
-  #p class
-  #p attribute
   (some #(if (and (= class (:class %))
                   (or (nil? (:attributes %))(some (fn [v] (= v attribute)) (:attributes %))))
           %) @pips)
@@ -163,9 +156,7 @@
   )
 
 (defn initf [rulesf]
-  #p rulesf
   (let [rules-map (utl/load-edn rulesf)]
-    #p rules-map
     (swap! policiesMap
            (fn [a] (reduce (fn [hm ke]                      ;; treat a resourceClass rules
                              (let [rls (get rules-map ke)]

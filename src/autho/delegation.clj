@@ -1,7 +1,7 @@
 (ns autho.delegation
-  (:require [hyauth.prp :as prp]
-            [hyauth.rule :as rule]
-            [hyauth.utils :as utl])
+  (:require [autho.prp :as prp]
+            [autho.rule :as rule]
+            [autho.utils :as utl])
   )
 
 
