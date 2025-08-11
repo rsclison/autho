@@ -67,7 +67,7 @@
         opv2 (evalOperand op2 subjOrRess ctxt)
         func (resolve(symbol "autho.attfun" operator))
         ]
-     (apply func [op1 op2])
+     (apply func [opv1 opv2])
     )
   )
 
@@ -87,11 +87,23 @@
 ;; a request is like : {:subject {:id "Mary", :role "Professeur"} :resource {:class "Note"} :operation "lire" :context {:date "2019-08-14T04:03:27.456"}}
 ;; catch Exception while evaluating
 (defn evaluateRule [rule request]
-  (let [subjectClauses (:subjectCond rule) resourceClauses (:resourceCond rule) ctxtwtype (assoc request :class :Person)]
-    (doall (map #(evalClause % :Person ctxtwtype :subject) (rest subjectClauses)))
-    (map #(evalClause % :Person ctxtwtype :resource) (rest resourceClauses))
-    )
-)
+  (let [subjectClauses (rest (:subjectCond rule))
+        resourceClauses (rest (:resourceCond rule))
+        ctxtwtype (assoc request :class :Person)
+        all-true? (and
+                    (every? #(evalClause % :Person ctxtwtype :subject) subjectClauses)
+                    (every? #(evalClause % :Person ctxtwtype :resource) resourceClauses))]
+    {:value all-true?}))
+
+(defn evalRuleWithResource [rule request]
+  (let [resourceClauses (rest (:resourceCond rule))
+        ctxtwtype (assoc request :class :Person)]
+    (every? #(evalClause % :Person ctxtwtype :resource) resourceClauses)))
+
+(defn evalRuleWithSubject [rule request]
+  (let [subjectClauses (rest (:subjectCond rule))
+        ctxtwtype (assoc request :class :Person)]
+    (every? #(evalClause % :Person ctxtwtype :subject) subjectClauses)))
 
 #_(defn evaluateRule2 [rule request]
   (loop [conds (:conditions rule)]

@@ -4,6 +4,8 @@
   (:gen-class
     :name autho.javainterop
     :methods [#^{:static true} [isAuthorized [String] String]
+              #^{:static true} [whoAuthorized [String] String]
+              #^{:static true} [whichAuthorized [String] String]
               #^{:static true} [getPolicies [] String]
               #^{:static true} [getPolicy [String] String]
               #^{:static true} [updatePolicy [String String] void]
@@ -24,6 +26,12 @@
     "allow"
     "deny")
   )
+
+(defn -whoAuthorized [req]
+  (json/write-str (pdp/whoAuthorized (json/read-str req :key-fn keyword))))
+
+(defn -whichAuthorized [req]
+  (json/write-str (pdp/whichAuthorized (json/read-str req :key-fn keyword))))
 
 (defn -getPolicies []
   (json/write-str (prp/get-policies)))

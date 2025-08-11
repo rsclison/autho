@@ -170,7 +170,7 @@
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
 ;; on simplifie en retournant la 1ere règle en allow sans vérifier les deny
-(comment(defn whoAuthorized [^Map request]
+(defn whoAuthorized [^Map request]
 ;; verify we have a resource
   (if (:resource request)
     (let [candrules
@@ -186,9 +186,9 @@
          evrules)
       )
     )
-  ))
+  )
 
-(comment(defn whichAuthorized [^Map request]
+(defn whichAuthorized [^Map request]
   ;; verify we have a subject
   (if (:subject request)
     (let [allowrules
@@ -215,7 +215,7 @@
        }
       )
     )
-  ))
+  )
 
 (defn explain [^Map request]  ;; //TODO
 
