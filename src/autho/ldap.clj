@@ -19,9 +19,9 @@
     (ldap/search @ldap-server base-dn opts)))
 
 (defn groupMember [uid groupname]
-  (let [group (ldap/get @ldap-server groupname)]
-    )
-  )
+  (let [group (ldap/get @ldap-server groupname)
+        members (get-in group [:attributes :member])]
+    (some #(= (str "uid=" uid ",ou=users,ou=system") %) members)))
 
 
 (defn findUser [id]
