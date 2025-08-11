@@ -10,6 +10,7 @@
             [autho.ldap :as ldap]
             [clojure.string :as str]
             [autho.unify :as unf]
+            [autho.person :as person]
             [java-time :as ti]
  ;;           [taoensso.timbre :as timbre
  ;;            :refer [log  trace  debug  info  warn  error  fatal report
@@ -245,7 +246,7 @@
   ;; init delegations
   (prp/initDelegations)
   ;; init persons
-  (map #(cache/mergeEntityWithCache % cache/subject-cache) (prp/initPersons))
+  (person/loadPersons {:type (keyword (getProperty :person.source)) :props @properties})
 
   (deleg/batchCompile)
 
