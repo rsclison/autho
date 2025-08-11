@@ -1,12 +1,20 @@
 (ns autho.person
-  (:require [hyauth.utils :as utl]
-            [hyauth.prp :as prp]))
+  (:require [autho.utils :as utl]
+            [autho.prp :as prp]
+            [autho.ldap :as ldap]))
 
 
-(defmulti loadPersons (fn [personSingleton] (:type personSingleton)))
-(defmethod loadPersons :file
-  (swap! prp/personSingleton (utl/load-edn (:path prp/personSingleton)))
+(defmulti loadPersons (fn [config] (:type config)))
+(defmethod loadPersons :file [config]
+  []
   )
-(defmethod loadPersons :grhum)
-(defmethod loadPersons :ldap)
+(defmethod loadPersons :grhum [config])
+(defmethod loadPersons :ldap [config]
+  (let [props (:props config)
+        base-dn (:ldap.basedn props)
+        filter (:ldap.filter props)
+        attributes (clojure.string/split (:ldap.attributes props) #",")]
+    (let [persons (ldap/search base-dn {:filter filter :attributes attributes})
+          person-map (map (fn [p] (into {} (for [[k v] (:attributes p)] [(keyword k) (first v)]))) persons)]
+      (reset! prp/personSingleton person-map))))
 
