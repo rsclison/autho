@@ -1,16 +1,16 @@
 (ns autho.pdp
   (:use [clojure.test :exclude [report]])
-  (:use [hashp.core])
-  (:require [hyauth.prp :as prp]
-            [hyauth.jsonrule :as rule]
-            [hyauth.cache :as cache]
-            [hyauth.delegation :as deleg]
+  (:require [autho.prp :as prp]
+            [autho.jsonrule :as rule]
+            [autho.cache :as cache]
+            [autho.delegation :as deleg]
             [clojure.java.io :as io]
             [clj-http [client]]
             [clojure.data.json :as json]
-            [hyauth.ldap :as ldap]
+            [autho.ldap :as ldap]
             [clojure.string :as str]
-            [hyauth.unify :as unf]
+            [autho.unify :as unf]
+            [autho.person :as person]
             [java-time :as ti]
  ;;           [taoensso.timbre :as timbre
  ;;            :refer [log  trace  debug  info  warn  error  fatal report
@@ -38,7 +38,7 @@
   )
 
 
-(defn- resolve-conflict [policy success-rules]
+(defn resolve-conflict [policy success-rules]
   (if (empty? success-rules)
     false
   (case (:strategy policy)
@@ -46,7 +46,7 @@
                                 false
                                 (let [fa (filter (fn [r] (= "allow" (:effect r))) success-rules)
                                       fd (filter (fn [r] (= "deny" (:effect r))) success-rules)
-                                      maxr-allow (apply max-key (fn [zz] (println zz)(:priority zz)) (filter (fn [r] (= "allow" (:effect r))) success-rules))
+                                      maxr-allow (apply max-key :priority (filter (fn [r] (= "allow" (:effect r))) success-rules))
                                       maxr-deny (if (not(empty? fd))
                                                   (apply max-key :priority fd)
                                                   {:priority -1000})
@@ -65,18 +65,15 @@
           jsresp (json/read-str (:body resp) :key-fn keyword)]
       jsresp                                                ;; return the augmented object
       )
-    (catch Exception e (println e)
-                       object                               ;; return the original object
-                       )
-    ))
+    (catch Exception e (do (.getMessage e) object))))
 
 (defn- callFillers [request]                                ;; TODO review implementation
   (let [
         subfill (prp/getSubjectFiller (:class (:subject request)))
         ressfill (prp/getResourceFiller (:class (:resource request)))]
 
-    (let [augs (if subfill (apply (ns-resolve (symbol "hyauth.attfun") (symbol (:type subfill))) [subfill (:subject request)]))
-          augr (if ressfill (apply (ns-resolve (symbol "hyauth.attfun") (symbol (:type ressfill))) [ressfill (:resource request)]))]
+    (let [augs (if subfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type subfill))) [subfill (:subject request)]))
+          augr (if ressfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type ressfill))) [ressfill (:resource request)]))]
       (cache/mergeEntityWithCache augs cache/subject-cache)
       (cache/mergeEntityWithCache augr cache/resource-cache)
       (-> request
@@ -116,15 +113,13 @@
             ;; call the fillers
             augreq (passThroughCache request)                                ;; //TODO reactivate fillers  (callFillers request)
             evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                              (do (println "found " (:name rule)) (conj res rule))
+                                              (conj res rule)
                                               res
                                               ))
                              [] (:rules globalPolicy))
             resolve (resolve-conflict globalPolicy evalglob)
             ]
 
-        (println "EVALGLOB ==== " evalglob)
-        (println "RESOLVE ====" resolve)
         (if resolve
           {:result resolve :rules evalglob}
           ;; try delegations
@@ -163,7 +158,7 @@
             ;; call the fillers
             augreq (passThroughCache request)               ;; (callFillers request)    //TODO reactivate fillers
             evalglob (do (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                                  (do (println "found " (:name rule)) (conj res rule))
+                                                  (conj res rule)
                                                   res
                                                   ))
                                  [] (:rules globalPolicy)))
@@ -175,7 +170,7 @@
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
 ;; on simplifie en retournant la 1ere règle en allow sans vérifier les deny
-(comment(defn whoAuthorized [^Map request]
+(defn whoAuthorized [^Map request]
 ;; verify we have a resource
   (if (:resource request)
     (let [candrules
@@ -191,9 +186,9 @@
          evrules)
       )
     )
-  ))
+  )
 
-(comment(defn whichAuthorized [^Map request]
+(defn whichAuthorized [^Map request]
   ;; verify we have a subject
   (if (:subject request)
     (let [allowrules
@@ -202,10 +197,10 @@
           (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class(:resource request)))))
           evrules1
           (keep (fn [rule]
-                       #p (rule/evalRuleWithSubject rule request)) allowrules)
+                       (rule/evalRuleWithSubject rule request)) allowrules)
           evrules2
           (keep (fn [rule]
-                  #p (rule/evalRuleWithSubject rule request)) denyrules)
+                  (rule/evalRuleWithSubject rule request)) denyrules)
           ]
       {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
                                :resourceCond  (rest (rest (:resourceCond rule)))
@@ -220,27 +215,13 @@
        }
       )
     )
-  ))
+  )
 
 (defn explain [^Map request]  ;; //TODO
 
   )
 
 
-(deftest simpleRequest
-  ;; (with-redefs [prp/getSubjectFiller (fn [class] nil) prp/getResourceFiller (fn [class] nil)
-  ;;              prp/get-Policy (fn [class] {:rules [(rule/rule {:name "R1"
-  ;;                                                            :resourceClass "Note"
-  ;;                                                          :operation "lire"
-  ;;                                                        :condition "(egal (att \"role\" ?subject) \"Professeur\")"
-  ;;                                                      :effect "allow"
-  ;;                                                    :startDate "inf"
-  ;;                                                  :endDate "inf"})
-  ;;                                    ] :strategy :almost_one_allow_no_deny})]
-
-  (is (= (:result(evalRequest {:subject {:id "Mary", :role "Professeur"} :resource {:class "Note"} :operation "lire" :context {:date "2019-08-14T04:03:27.456"}}) )
-         false))
-  )
 
 
 (defn- load-props
@@ -265,7 +246,7 @@
   ;; init delegations
   (prp/initDelegations)
   ;; init persons
-  (map #(cache/mergeEntityWithCache % cache/subject-cache) (prp/initPersons))
+  (person/loadPersons {:type (keyword (getProperty :person.source)) :props @properties})
 
   (deleg/batchCompile)
 

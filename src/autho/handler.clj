@@ -1,6 +1,6 @@
 (ns autho.handler
-  (:require [hyauth.pdp :as pdp])
-  (:require [hyauth.prp :as prp])
+  (:require [autho.pdp :as pdp])
+  (:require [autho.prp :as prp])
   (:require [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
             [com.appsflyer.donkey.server :refer [start]]
@@ -13,7 +13,7 @@
 
 
 (defn destroy []
-  (println "hyauth is shutting down"))
+  (println "autho is shutting down"))
 
 (defn json-response [data & [status]]
   {:status (or status (:code data))
@@ -80,7 +80,7 @@
 
 
 (defn init []
-  (u/log "hyauth is starting")
+  (u/log "autho is starting")
   (->
    (create-donkey)
    (create-server {:port   8080

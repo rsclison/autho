@@ -5,22 +5,25 @@
 
 
 
-(def ldap-server (atom {}))
+(def ldap-server (atom nil))
 
 (defn init [props]
-  (swap! ldap-server (fn [ld]
-                       (ldap/connect {:host (:ldap.server props)
-                                     :bind-dn ()}
-                                     ))))
+  (let [conn (ldap/connect {:host (:ldap.server props)
+                            :port (:ldap.port props)
+                            :bind-dn (:ldap.connectstring props)
+                            :password (:ldap.password props)})]
+    (reset! ldap-server conn)))
 
-
+(defn search [base-dn opts]
+  (when @ldap-server
+    (ldap/search @ldap-server base-dn opts)))
 
 (defn groupMember [uid groupname]
-  (let [group (ldap/get @ldap-server groupname)]
-    )
-  )
+  (let [group (ldap/get @ldap-server groupname)
+        members (get-in group [:attributes :member])]
+    (some #(= (str "uid=" uid ",ou=users,ou=system") %) members)))
 
 
 (defn findUser [id]
-  (ldap/get ldap-server (str "uid=" id ",ou=users,ou=system"))
+  (ldap/get @ldap-server (str "uid=" id ",ou=users,ou=system"))
   )

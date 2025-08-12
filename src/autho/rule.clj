@@ -1,11 +1,10 @@
 (ns autho.rule
   (:require [clojure.reflect :as cr]
-            [hyauth.prp :as prp]
+            [autho.prp :as prp]
             [clojure.string :as str]
             [clojure.test :refer :all]
             )
-  (:use hyauth.attfun clojure.test hyauth.prp)
-  (:use [hashp.core])
+  (:use autho.attfun clojure.test autho.prp)
   )
 
 
@@ -28,10 +27,10 @@
     form
     (if-not (list? form)
       (if (= (cr/typename (type form)) "clojure.lang.Symbol") ;; this is ?subject or ?resource or etc.
-        (do {:value (var-get (find-var (symbol "hyauth.rule" (name form)))) :explain {}})
+        (do {:value (var-get (find-var (symbol "autho.rule" (name form)))) :explain {}})
         {:value form :explain {}})
       ;; it is a list so let evaluate s-expr
-      (let [func (symbol "hyauth.attfun" (str (first form)))
+      (let [func (symbol "autho.attfun" (str (first form)))
             funcres (resolve func)
             ]
 
@@ -40,7 +39,7 @@
             (let [res (apply funcres (map (fn [arg] (:value (evalform arg request))) (rest form)))]
               {:value res :explain {}}
               )
-            (catch Exception e (println "EXCEPTION !!!!" (.getMessage e)) {:value nil :explain {:form form :error (.getMessage e)}})
+            (catch Exception e {:value nil :explain {:form form :error (.getMessage e)}})
             )
           )))))
 
@@ -77,7 +76,6 @@
 ;; return a list composed of the status of the eval (:succeeded , :failed or :unevaluated) and the bindings eventually augmented
 ;; //TODO pourquoi renvoyer une liste dont le premier argument est un array avec seulement un symbol. Simplifier !!!
 (defn evalClause2 [clause object bindings]
-  (println "EVALCLAUSE " clause object bindings)
   (if (and (= (first clause) '=) (isVariableTerm (nth clause 2)))
     ;; maybe its a variable binding clause. If the variable is already bound test the equality else add a binding
     (let [val (getVarValue (nth clause 2) bindings) valatt (att (second clause) object)]
@@ -95,10 +93,10 @@
       (list [:unevaluated] bindings)                          ;;(->evalClauseResult true bindings false)
       ;; else it's a clause to truly evaluate
       (let [resev (att (second clause) object)
-            op (symbol "hyauth.attfun" (str (first clause)))
+            op (symbol "autho.attfun" (str (first clause)))
             opr (resolve op)
             val (if (isVariableTerm (nth clause 2)) (getVarValue (nth clause 2) bindings) (nth clause 2))
-            evcl (try (apply opr [resev val]) (catch Exception e (do (println "Exception eval clause " (.getMessage e)))))] ;; TODO store the exception
+            evcl (try (apply opr [resev val]) (catch Exception e nil))] ;; TODO store the exception
         evcl
 
         (if evcl (list [:succeeded] bindings) (list [:failed] bindings)) ;;(->evalClauseResult evcl bindings true)
@@ -116,14 +114,12 @@
   )
 
 (defn evalCond [clauses object bindings]                    ;; return a triplet (bool_result bindings not_evaluated_clauses)
-  (println "IN EVALCOND " clauses object bindings)
   (if (empty? clauses)
-    (do (println "NO CONDITIONS") (list true bindings ()))  ;; there is no conditions
+    (list true bindings ())  ;; there is no conditions
 
     (let [not-evaluated ()
           res2 (reduce (fn [[bdings notevs] cl]
                          (let [res (evalClause2 cl object bdings)] ;; remember the result is a pair (symbol bindings)
-                           (println "RESULT OF EVCL " res)
                            (case (first(first res))
                              :succeeded (list (second res) notevs)
                              :failed (reduced (list false (replaceVarValue cl bdings)))
@@ -160,7 +156,6 @@
 ;; a request is like : {:subject {:id "Mary", :role "Professeur"} :resource {:class "Note"} :operation "lire" :context {:date "2019-08-14T04:03:27.456"}}
 (defn evaluateRule [rule request]
   ;; implementation with explanation of exception
-  (println "EVALRULE : " rule "/ " request)
   (binding [?subject (assoc (:subject request) :type :subject)
             ?resource (assoc (:resource request) :type :resource)
             ?operation (if (map? (:operation request)) (assoc (:operation request) :type :operation)
@@ -178,8 +173,6 @@
           (and (= true (first resress)) (= true (first ressubj)) (not (empty? (nth resress 2))))
           (let [resresspass2                                ;; just do a second pass if necessary on resscond
                 (evalCond (nth resress 2) (:resource request) (second ressubj))]
-            (println "PASS2")
-            (println resresspass2)
             (if (and (= true (first resresspass2)) (empty? (nth resresspass2 2)))
               {:value true}
               {:value false}
@@ -276,15 +269,13 @@
         ;; replace the attribute of the resource with the value and the clause to the result
         ;; while replacing the var with the value for the subject
         affBindings (keep (fn [clause]
-                           #p clause
                            (if (and (= (first clause) '=) (hasClauseVariable clause))
                                         (list (nth clause 2) (nth clause 1))
                                         ))
                          (rest (rest resi))
                          )
-        resscl #p (map (fn [unevclause]
-                      #p unevclause
-                      (list (hyauth.attfun/inverseOp (first unevclause))
+        resscl (map (fn [unevclause]
+                      (list (autho.attfun/inverseOp (first unevclause))
                             (getVarValue (nth unevclause 2) affBindings)
                             (att (nth unevclause 1) (:resource request)))
                       )
@@ -318,9 +309,6 @@
 
 
 (defn evalRuleWithSubject [rule request]
-  #p "evalRuleWithSubject"
-  #p rule
-  #p request
   (let [res (evalSubjectPart2 rule request)
         uneval (nth res 2)
         ;; ok lets instantiate the subject condition with bindings coming from the evaluation of the resource condition
@@ -337,18 +325,13 @@
                           (rest (rest resi))
                           )
         resscl (map (fn [unevclause]
-                      (list (hyauth.attfun/inverseOp (first unevclause))
+                      (list (autho.attfun/inverseOp (first unevclause))
                             (getVarValue (nth unevclause 2) affBindings)
                             (att (nth unevclause 1) (:subject request)))
                       )
                     uneval
                     )
         ]
-
-    #p resi
-    #p uneval
-    #p resscl
-
 
     ;; now delete aff clause in resource and add above clauses
     (assoc rule :resourceCond (into []

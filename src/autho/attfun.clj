@@ -9,7 +9,7 @@
  ;; (:require [clj-time.core :as t])
   (:require
     ;;[clj-time.format :as f]
-            [hyauth.prp :as prp])
+            [autho.prp :as prp])
 
   )
 
@@ -32,7 +32,7 @@
   (let [pipdecl (prp/findPip attName)]  ;; TODO the PIP is attached only to attribute not to class/attribute
     (if (nil? pipdecl)
       nil
-      (try (apply (ns-resolve (symbol "hyauth.attfun") (symbol(:type pipdecl))) [pipdecl attName obj])
+      (try (apply (ns-resolve (symbol "autho.attfun") (symbol(:type pipdecl))) [pipdecl attName obj])
            (catch Exception e nil))
       )
     )
@@ -73,7 +73,7 @@
 
 
 (defn internalPip [decl att obj]
-  (apply (ns-resolve (symbol "hyauth.attfun") (symbol(:method decl))) [obj])
+  (apply (ns-resolve (symbol "autho.attfun") (symbol(:method decl))) [obj])
   )
 
 (defn role [obj]
@@ -87,7 +87,7 @@
   )
 
 (defn internalFiller [filler obj]
-  (apply (ns-resolve (symbol "hyauth.attfun") (symbol(:method filler))) [obj])
+  (apply (ns-resolve (symbol "autho.attfun") (symbol(:method filler))) [obj])
   )
 
 ;; (defmacro json-read-extd [st]
@@ -152,10 +152,6 @@
   ))
 
 (defn < [arg1 arg2]
-  #p arg1
-  #p (type arg1)
-  #p arg2
-  #p (type arg2)
   (clojure.core/< (read-string arg1) (read-string arg2))
   )
 

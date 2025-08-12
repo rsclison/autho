@@ -1,7 +1,9 @@
 #_{:clj-kondo/ignore [:namespace-name-mismatch]}
 (ns autho.walker
 
-  [:require [hyauth.match :as m]])
+  (:require [autho.match :as m]
+            [autho.pip :as pip]
+            [autho.prp :as prp]))
 
 (declare walk eval-expr)
 
@@ -68,8 +70,13 @@
   (if (= (first operands) "*")
     (select-all current-context)
     (let [obj (:value current-context)
-          key (keyword (first operands))]
-      (m/with-context key (key obj) current-context))))
+          key (keyword (first operands))
+          val (get obj key)]
+      (if (some? val)
+        (m/with-context key val current-context)
+        ;; if not found, try PIP
+        (let [pip-val (get (pip/callPip (prp/findPip (:class obj) (name key)) obj (name key)) key)]
+          (m/with-context key pip-val current-context))))))
 
 (defn- obj-vals [current-context]
   (let [obj (:value current-context)]

@@ -2,38 +2,48 @@
   (:import
            (org.cocktail Pip))
   (:gen-class
-    :name hyauth.javainterop
-    :methods [#^{:static true} [hello [org.cocktail.Pip] String]
-              #^{:static true} [isAuthorized [String org.cocktail.Pip] String]
+    :name autho.javainterop
+    :methods [#^{:static true} [isAuthorized [String] String]
+              #^{:static true} [whoAuthorized [String] String]
+              #^{:static true} [whichAuthorized [String] String]
+              #^{:static true} [getPolicies [] String]
+              #^{:static true} [getPolicy [String] String]
+              #^{:static true} [updatePolicy [String String] void]
+              #^{:static true} [deletePolicy [String] void]
               #^{:static true} [init [org.cocktail.Pip] void]
               ]
     )
-  (:require [hyauth.prp :as prp]
-            [hyauth.pdp :as pdp]
-            [hyauth.journal :as jrnl]
+  (:require [autho.prp :as prp]
+            [autho.pdp :as pdp]
+            [autho.journal :as jrnl]
             [clojure.data.json :as json]
             )
   )
 
-
-(defn hello [nn]
-  (println "Hello Ray")
-  (println nn)
-  (let [res (.resolveAttribute nn "My" "God")]
-    (println "IN CLOJ " res)
-    (str "RESULT from CLOJ " res)
-  ))
-
-(defn -hello [nn]
-  (println "hello-")
-  (hello nn))
-
-(defn -isAuthorized [req pip]
+(defn -isAuthorized [req]
   (println "isAuthorized")
   (if (:result(pdp/evalRequest (json/read-str req :key-fn keyword)))
     "allow"
     "deny")
   )
+
+(defn -whoAuthorized [req]
+  (json/write-str (pdp/whoAuthorized (json/read-str req :key-fn keyword))))
+
+(defn -whichAuthorized [req]
+  (json/write-str (pdp/whichAuthorized (json/read-str req :key-fn keyword))))
+
+(defn -getPolicies []
+  (json/write-str (prp/get-policies)))
+
+(defn -getPolicy [resource-class]
+  (json/write-str (prp/getPolicy resource-class nil)))
+
+(defn -updatePolicy [resource-class policy]
+  (prp/submit-policy resource-class policy))
+
+(defn -deletePolicy [resource-class]
+  (prp/delete-policy resource-class))
 
 (defn -init [pip]
   (let [attributes (.getAttributes pip)]

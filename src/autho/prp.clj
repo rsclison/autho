@@ -6,7 +6,7 @@
             )
   (:require [clojure.java.io :as io] [clojure.edn :as edn])
   (:require [java-time :as ti])
-  (:require [hyauth.utils :as utl])
+  (:require [autho.utils :as utl])
 
   )
 
@@ -30,7 +30,7 @@
 (def policySchema (validjs/prepare-schema (slurp "resources/policySchema.json")))
 
 (def delegationSingleton (atom {:type :file :path "resources/delegations.edn"}))
-(def personSingleton (atom {:type :file :path "resources/persons.edn"}))
+(def personSingleton (atom []))
 
 (def pips (atom (utl/load-edn "resources/pips.edn")))
 
@@ -62,14 +62,8 @@
 (defmulti getCompiledDelegations (fn [] (:type @delegationSingleton)))
 (defmethod getCompiledDelegations :file [] (:compiled @delegationSingleton))
 
-(defmulti getPersons (fn [](:type @personSingleton)))
-(defmethod getPersons :file []
-  (:persons @personSingleton)
-  )
-
-(defmulti initPersons (fn [] (:type @personSingleton)))
-(defmethod initPersons :file [] (utl/load-edn (:path @personSingleton)))
-
+(defn getPersons []
+  @personSingleton)
 
 (defmulti saveCompDelegations (fn [compdel](:type @delegationSingleton)))
 (defmethod saveCompDelegations :file [rescomp]
@@ -123,17 +117,9 @@
                    map
                    attributes
                    )))
-  (println "PIPS " @attributeMap)
   )
 
-
-;;(defn findPip [attribute]
-  ;;(apply (keyword attribute) [@attributeMap])
-  ;;)
-
 (defn findPip [class attribute]
-  #p class
-  #p attribute
   (some #(if (and (= class (:class %))
                   (or (nil? (:attributes %))(some (fn [v] (= v attribute)) (:attributes %))))
           %) @pips)
@@ -163,9 +149,7 @@
   )
 
 (defn initf [rulesf]
-  #p rulesf
   (let [rules-map (utl/load-edn rulesf)]
-    #p rules-map
     (swap! policiesMap
            (fn [a] (reduce (fn [hm ke]                      ;; treat a resourceClass rules
                              (let [rls (get rules-map ke)]
@@ -219,7 +203,6 @@
   )
 
 (defn getPolicy [resourceClass application]
-  (println "get policy for " resourceClass)
   (let [res (get (get @policiesMap resourceClass) application)]
     res
     )
