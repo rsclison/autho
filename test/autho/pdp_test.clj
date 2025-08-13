@@ -86,3 +86,83 @@
       (let [policy {:strategy :default}
             rules [{:effect "allow" :priority 1}]]
         (is (= false (resolve-conflict policy rules)))))))
+
+(deftest whoAuthorized-test
+  (testing "whoAuthorized function"
+    (let [request {:resource {:class "doc"}}]
+      (testing "when a rule allows the request"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "allow-rule"
+                                                      :effect "allow"
+                                                      :resourceClass "doc"
+                                                      :subjectCond [:and [:eq "role" "user"]]
+                                                      :operation "read"}]})
+                      rule/evalRuleWithResource (fn [rule req] true)]
+          (is (= [{:resourceClass "doc" :subjectCond '([:eq "role" "user"]) :operation "read"}]
+                 (whoAuthorized request)))))
+      (testing "when no rule is applicable"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "allow-rule"
+                                                      :effect "allow"
+                                                      :resourceClass "doc"
+                                                      :subjectCond [:and [:eq "role" "user"]]
+                                                      :operation "read"}]})
+                      rule/evalRuleWithResource (fn [rule req] false)]
+          (is (= [] (whoAuthorized request)))))
+      (testing "when no allow rule exists"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "deny-rule"
+                                                      :effect "deny"
+                                                      :resourceClass "doc"
+                                                      :subjectCond [:and [:eq "role" "admin"]]
+                                                      :operation "read"}]})
+                      rule/evalRuleWithResource (fn [rule req] true)]
+          (is (= [] (whoAuthorized request)))))
+      (testing "when request has no resource"
+        (is (= nil (whoAuthorized {})))))))
+
+(deftest whichAuthorized-test
+  (testing "whichAuthorized function"
+    (let [request {:subject {:id "user1"}}]
+      (testing "when a rule allows the request"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "allow-rule"
+                                                      :effect "allow"
+                                                      :resourceClass "doc"
+                                                      :resourceCond [:and [:eq "public" true]]
+                                                      :operation "read"}]})
+                      rule/evalRuleWithSubject (fn [rule req]
+                                                 (when (= (:effect rule) "allow") rule))]
+          (is (= {:allow [{:resourceClass "doc"
+                           :resourceCond '([:eq "public" true])
+                           :operation "read"}]
+                  :deny []}
+                 (whichAuthorized request)))))
+      (testing "when a rule denies the request"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "deny-rule"
+                                                      :effect "deny"
+                                                      :resourceClass "doc"
+                                                      :resourceCond [:and [:eq "private" true]]
+                                                      :operation "read"}]})
+                      rule/evalRuleWithSubject (fn [rule req]
+                                                 (when (= (:effect rule) "deny") rule))]
+          (is (= {:allow []
+                  :deny [{:resourceClass "doc"
+                          :resourceCond '([:eq "private" true])
+                          :operation "read"}]}
+                 (whichAuthorized request)))))
+      (testing "when both allow and deny rules match"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "allow-rule" :effect "allow" :resourceClass "doc" :resourceCond [:and [:eq "public" true]] :operation "read"}
+                                                     {:name "deny-rule" :effect "deny" :resourceClass "doc" :resourceCond [:and [:eq "private" true]] :operation "read"}]})
+                      rule/evalRuleWithSubject (fn [rule req] rule)]
+          (is (= {:allow [{:resourceClass "doc" :resourceCond '([:eq "public" true]) :operation "read"}]
+                  :deny [{:resourceClass "doc" :resourceCond '([:eq "private" true]) :operation "read"}]}
+                 (whichAuthorized request)))))
+      (testing "when no rule is applicable"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class] {:rules []})
+                      rule/evalRuleWithSubject (fn [rule req] nil)]
+          (is (= {:allow [] :deny []} (whichAuthorized request)))))
+      (testing "when request has no subject"
+        (is (= nil (whichAuthorized {})))))))

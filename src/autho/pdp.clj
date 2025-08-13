@@ -180,7 +180,7 @@
           ]
 
     (map (fn [rule] {:resourceClass (:resourceClass rule)
-                     :subjectCond (rest(rest (:subjectCond rule)))
+                     :subjectCond (rest (:subjectCond rule))
                      :operation (:operation rule)
                      })
          evrules)
@@ -203,12 +203,12 @@
                   (rule/evalRuleWithSubject rule request)) denyrules)
           ]
       {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
-                               :resourceCond  (rest (rest (:resourceCond rule)))
+                               :resourceCond  (rest (:resourceCond rule))
                                :operation     (:operation rule)
                                })
                    evrules1)
        :deny  (map (fn [rule] {:resourceClass (:resourceClass rule)
-                               :resourceCond  (rest (rest (:resourceCond rule)))
+                               :resourceCond  (rest (:resourceCond rule))
                                :operation     (:operation rule)
                                })
                    evrules2)
