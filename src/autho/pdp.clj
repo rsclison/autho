@@ -4,6 +4,7 @@
             [autho.jsonrule :as rule]
             [autho.cache :as cache]
             [autho.delegation :as deleg]
+            [autho.journal :as jrnl]
             [clojure.java.io :as io]
             [clj-http [client]]
             [clojure.data.json :as json]
@@ -101,40 +102,39 @@
 ;; return a map composed of the result (:result) and the set of applicable rules (:rules)
 
 (defn evalRequest [^Map request]
-  ;;(info "EvalRequest")
-  (if-not (:resource request)
-    {:error "No resource specified"}
-    (if-not (:subject request)
-      {:error "No subject specified"}
-      (let [
-            globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
-            policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
+  (let [response (if-not (:resource request)
+                   {:error "No resource specified"}
+                   (if-not (:subject request)
+                     {:error "No subject specified"}
+                     (let [
+                           globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
+                           policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
             ;;evals  (doall(map (fn [rule] [rule(rule/evaluateRule rule request)]) (:rules policy)))
             ;; call the fillers
-            augreq (passThroughCache request)                                ;; //TODO reactivate fillers  (callFillers request)
-            evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                              (conj res rule)
-                                              res
-                                              ))
-                             [] (:rules globalPolicy))
-            resolve (resolve-conflict globalPolicy evalglob)
-            ]
+                           augreq (passThroughCache request)                                ;; //TODO reactivate fillers  (callFillers request)
+                           evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                                             (conj res rule)
+                                                             res
+                                                             ))
+                                            [] (:rules globalPolicy))
+                           resolve (resolve-conflict globalPolicy evalglob)
+                           ]
 
-        (if resolve
-          {:result resolve :rules evalglob}
+                       (if resolve
+                         {:result resolve :rules evalglob}
           ;; try delegations
-          (let [deleg (deleg/findDelegation (:subject request))
-                one (some #(let [ev (evalRequest (assoc request :subject (:delegate %)))]
-                             (when ev ev)
+                         (let [deleg (deleg/findDelegation (:subject request))
+                               one (some #(let [ev (evalRequest (assoc request :subject (:delegate %)))]
+                                             (when ev ev)
+                                             )
+                                         deleg
+                                         )
+                               ]
+                           (if one one
+                             {:result false :rules evalglob}
                              )
-                          deleg
-                          )
-                ]
-            (if one one
-                    {:result false :rules evalglob}
-                    )
-            )
-          )
+                           )
+                         )
 ;;          (let [evala (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
 ;;                                               (do (println "found " (:name rule)) (conj res rule))
 ;;                                               res
@@ -143,9 +143,10 @@
 ;;            (if (empty? evala)
 ;;              false
 ;;              (resolve-conflict policy evala))
-            )
-          )
-        ))
+                       )
+                     ))]
+    (jrnl/logRequest request response)
+    response))
 
 (defn isAuthorized [request]
   ;; {:resource {:class cc} :subject yy}
