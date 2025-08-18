@@ -33,7 +33,7 @@
 ;;  (jwt/unsign token secret))
 
 
-(defn- getProperty [prop]
+(defn getProperty [prop]
   (get @properties prop)
   )
 
