@@ -10,8 +10,9 @@
 
 ;; journal of authorization requests
 
-(defn logRequest [request]
-
+(defn logRequest [request response]
+  (info "Authorization request: " request)
+  (info "Authorization response: " response)
   )
 
 (defn logClient [client])
