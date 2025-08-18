@@ -4,6 +4,8 @@
 
 The core of `autho` is a Policy Decision Point (PDP) that evaluates incoming requests against a set of policies to determine if access should be granted or denied. Policies are defined using a simple JSON-based rule language.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Geek13)
+
 ## Concepts
 
 `autho` is built around the XACML (eXtensible Access Control Markup Language) standard, which defines a reference architecture for attribute-based access control (ABAC). The key components in this architecture are:
