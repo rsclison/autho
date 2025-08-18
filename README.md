@@ -28,9 +28,20 @@ The core of `autho` is a Policy Decision Point (PDP) that evaluates incoming req
 ### Prerequisites
 
 *   Java (version 8 or later)
-*   [Leiningen](https://leiningen.org/) (the Clojure build tool)
 
-### Building and Running
+### Running from the JAR
+
+A pre-compiled, standalone JAR is available in the `bin` directory. To run the server, simply execute the following command:
+
+```bash
+java -jar bin/autho.jar
+```
+
+The server will start on port 8080 by default.
+
+### Building from Source
+
+If you want to build the project from source, you will need to install [Leiningen](https://leiningen.org/) (the Clojure build tool).
 
 1.  **Clone the repository:**
     ```bash
@@ -40,7 +51,7 @@ The core of `autho` is a Policy Decision Point (PDP) that evaluates incoming req
 
 2.  **Build the standalone JAR:**
     ```bash
-    lein uberjar
+    ./lein uberjar
     ```
     This will create a file named `autho-0.1.0-SNAPSHOT-standalone.jar` in the `target/uberjar` directory.
 

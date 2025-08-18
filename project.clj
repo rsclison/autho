@@ -20,8 +20,9 @@
                  [clj-json "0.5.3"]
                  [com.h2database/h2 "2.3.232"]
                  [com.brunobonacci/mulog "0.9.0"]
-                 [com.datomic/datomic-free "0.9.5697"]]
-  :main ^:skip-aot autho.core
+                 [com.datomic/datomic-free "0.9.5697"]
+                 [com.taoensso/timbre "5.2.1"]]
+  :main autho.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}})
