@@ -267,6 +267,12 @@ A JSON object confirming the deletion.
 
 The `autho` server is configured through the `resources/pdp-prop.properties` file. This file uses a simple key-value format.
 
+### Deployment Mode
+
+*   `autho.mode`: Specifies the deployment mode. Can be one of the following:
+    *   `rest`: (Default) The server will start the REST API.
+    *   `embedded`: The server will not start the REST API. This is useful when using the server as a library in another application.
+
 ### Policy and Rule Storage
 
 *   `rules.repository`: The path to the file containing the authorization policies. By default, this is `resources/jrules.edn`.
