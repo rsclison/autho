@@ -62,7 +62,7 @@
       )))
 
 
-(defn evalClause [[operator op1 op2] type ctxt subjOrRess]
+(defn evalClause [[operator op1 op2] ctxt subjOrRess]
   (let [opv1 (evalOperand op1 subjOrRess ctxt)
         opv2 (evalOperand op2 subjOrRess ctxt)
         func (resolve(symbol "autho.attfun" operator))
@@ -81,7 +81,7 @@
   )
 
 (deftest evalClause-testscalar
-        (is (= (evalClause [">" "1" "2"] {:class :toto :a 1 :b 2} :subject)
+        (is (= (evalClause [">" "2" "1"] {:class :toto :a 1 :b 2} :subject)
                true)))
 
 ;; a request is like : {:subject {:id "Mary", :role "Professeur"} :resource {:class "Note"} :operation "lire" :context {:date "2019-08-14T04:03:27.456"}}
@@ -91,19 +91,19 @@
         resourceClauses (rest (:resourceCond rule))
         ctxtwtype (assoc request :class :Person)
         all-true? (and
-                    (every? #(evalClause % :Person ctxtwtype :subject) subjectClauses)
-                    (every? #(evalClause % :Person ctxtwtype :resource) resourceClauses))]
+                    (every? #(evalClause % ctxtwtype :subject) subjectClauses)
+                    (every? #(evalClause % ctxtwtype :resource) resourceClauses))]
     {:value all-true?}))
 
 (defn evalRuleWithResource [rule request]
   (let [resourceClauses (rest (:resourceCond rule))
         ctxtwtype (assoc request :class :Person)]
-    (every? #(evalClause % :Person ctxtwtype :resource) resourceClauses)))
+    (every? #(evalClause % ctxtwtype :resource) resourceClauses)))
 
 (defn evalRuleWithSubject [rule request]
   (let [subjectClauses (rest (:subjectCond rule))
         ctxtwtype (assoc request :class :Person)]
-    (every? #(evalClause % :Person ctxtwtype :subject) subjectClauses)))
+    (every? #(evalClause % ctxtwtype :subject) subjectClauses)))
 
 #_(defn evaluateRule2 [rule request]
   (loop [conds (:conditions rule)]
