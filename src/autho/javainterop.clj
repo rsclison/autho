@@ -1,6 +1,4 @@
 (ns autho.javainterop
-  (:import
-           (org.cocktail Pip))
   (:gen-class
     :name autho.javainterop
     :methods [#^{:static true} [isAuthorized [String] String]
@@ -10,7 +8,7 @@
               #^{:static true} [getPolicy [String] String]
               #^{:static true} [updatePolicy [String String] void]
               #^{:static true} [deletePolicy [String] void]
-              #^{:static true} [init [org.cocktail.Pip] void]
+              #^{:static true} [init [Object] void]
               ]
     )
   (:require [autho.prp :as prp]
