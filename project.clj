@@ -20,8 +20,9 @@
                  [clj-json "0.5.3"]
                  [com.h2database/h2 "2.3.232"]
                  [com.brunobonacci/mulog "0.9.0"]
-                 [com.datomic/datomic-free "0.9.5697"]
-                 [com.taoensso/timbre "5.2.1"]]
+                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
+                 [org.slf4j/slf4j-api "1.7.32"]
+                 [ch.qos.logback/logback-classic "1.2.6"]]
   :main autho.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all

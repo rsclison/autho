@@ -1,11 +1,7 @@
 (ns autho.core
-  (:require [com.brunobonacci.mulog :as u]
-            [autho.handler :as handler]
+  (:require [autho.handler :as handler]
             [autho.pdp :as pdp])
   (:gen-class))
-
-
-(u/start-publisher! {:type :console})
 
 (defn -main [& args]
   (pdp/init)

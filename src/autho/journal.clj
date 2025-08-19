@@ -1,18 +1,11 @@
 (ns autho.journal
-  (:require
-    [taoensso.timbre :as timbre
-     :refer [log  trace  debug  info  warn  error  fatal report
-             logf tracef debugf infof warnf errorf fatalf reportf
-             spy get-env]]
-    )
-  )
+  (:import (org.slf4j LoggerFactory)))
 
-
-;; journal of authorization requests
+(defonce logger (LoggerFactory/getLogger "autho.journal"))
 
 (defn logRequest [request response]
-  (info "Authorization request: " request)
-  (info "Authorization response: " response)
-  )
+  (.info logger "Authorization request: {}" (pr-str request))
+  (.info logger "Authorization response: {}" (pr-str response)))
 
-(defn logClient [client])
+(defn logClient [client]
+  (.info logger "Client initialized: {}" (pr-str client)))
