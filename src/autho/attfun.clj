@@ -29,7 +29,7 @@
 
 
 (defn findAndCallPip [attName obj]
-  (let [pipdecl (prp/findPip (:class obj) attName)]
+  (let [pipdecl (prp/findPip (:class obj) attName)]  ;; TODO the PIP is attached only to attribute not to class/attribute
     (if (nil? pipdecl)
       nil
       (try (apply (ns-resolve (symbol "autho.attfun") (symbol(:type pipdecl))) [pipdecl attName obj])

@@ -1,8 +1,9 @@
 (ns autho.utils
   (:require [clojure.java.io :as io]
             [clojure.edn :as edn])
-  )
+  (:import (org.slf4j LoggerFactory)))
 
+(defonce logger (LoggerFactory/getLogger "autho.utils"))
 
 (defn load-edn
   "Load edn from an io/reader source (filename or io/resource)."
@@ -12,6 +13,8 @@
       (edn/read (java.io.PushbackReader. r)))
 
     (catch java.io.IOException e
-      (printf "Couldn't open '%s': %s\n" source (.getMessage e)))
+      (.error logger "Couldn't open EDN source '{}': {}" source (.getMessage e))
+      (throw e))
     (catch RuntimeException e
-      (printf "Error parsing edn file '%s': %s\n" source (.getMessage e)))))
+      (.error logger "Error parsing EDN file '{}': {}" source (.getMessage e))
+      (throw e))))
