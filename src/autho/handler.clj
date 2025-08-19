@@ -91,6 +91,10 @@
            (GET "/explain" {body :body}
              (println "TODO") ;; //TODO
              )
+           (context "/admin" []
+             (POST "/reload" []
+               (pdp/init)
+               (json-response {:status "ok"})))
            (route/not-found "Not Found"))
 
 
