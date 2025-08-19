@@ -4,7 +4,6 @@
             [autho.jsonrule :as rule]
             [autho.cache :as cache]
             [autho.delegation :as deleg]
-            [autho.journal :as jrnl]
             [clojure.java.io :as io]
             [clj-http [client]]
             [clojure.data.json :as json]
@@ -102,121 +101,76 @@
 ;; return a map composed of the result (:result) and the set of applicable rules (:rules)
 
 (defn evalRequest [^Map request]
-  (let [response (if-not (:resource request)
-                   {:error "No resource specified"}
-                   (if-not (:subject request)
-                     {:error "No subject specified"}
-                     (let [
-                           globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
-                           policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
-            ;;evals  (doall(map (fn [rule] [rule(rule/evaluateRule rule request)]) (:rules policy)))
-            ;; call the fillers
-                           augreq (passThroughCache request)                                ;; //TODO reactivate fillers  (callFillers request)
-                           evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                                             (conj res rule)
-                                                             res
-                                                             ))
-                                            [] (:rules globalPolicy))
-                           resolve (resolve-conflict globalPolicy evalglob)
-                           ]
+  (if-not (:resource request)
+    (throw (ex-info "No resource specified" {:status 400})))
+  (if-not (:subject request)
+    (throw (ex-info "No subject specified" {:status 400})))
 
-                       (if resolve
-                         {:result resolve :rules evalglob}
-          ;; try delegations
-                         (let [deleg (deleg/findDelegation (:subject request))
-                               one (some #(let [ev (evalRequest (assoc request :subject (:delegate %)))]
-                                             (when ev ev)
-                                             )
-                                         deleg
-                                         )
-                               ]
-                           (if one one
-                             {:result false :rules evalglob}
-                             )
-                           )
-                         )
-;;          (let [evala (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-;;                                               (do (println "found " (:name rule)) (conj res rule))
-;;                                               res
-;;                                               ))
-;;                              [] (:rules policy))]
-;;            (if (empty? evala)
-;;              false
-;;              (resolve-conflict policy evala))
-                       )
-                     ))]
-    (jrnl/logRequest request response)
-    response))
+  (let [globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
+        policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
+        augreq (passThroughCache request)
+        evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                           (conj res rule)
+                                           res))
+                         [] (:rules globalPolicy))
+        resolve (resolve-conflict globalPolicy evalglob)]
+
+    (if resolve
+      {:result resolve :rules evalglob}
+      (let [deleg (deleg/findDelegation (:subject request))
+            one (some #(let [ev (evalRequest (assoc request :subject (:delegate %)))]
+                         (when ev ev))
+                      deleg)]
+        (if one
+          one
+          {:result false :rules evalglob})))))
 
 (defn isAuthorized [request]
-  ;; {:resource {:class cc} :subject yy}
   (if-not (:resource request)
-    {:error "No resource specified"}
-    (if-not (:subject request)
-      {:error "No subject specified"}
-      (let [
-            globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
-            ;; call the fillers
-            augreq (passThroughCache request)               ;; (callFillers request)    //TODO reactivate fillers
-            evalglob (do (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                                  (conj res rule)
-                                                  res
-                                                  ))
-                                 [] (:rules globalPolicy)))
-            ]
-        (if-not globalPolicy {:error "No global policy applicable"}
-                             {:results (map #(:name %1) evalglob)}))
-      )))
+    (throw (ex-info "No resource specified" {:status 400})))
+  (if-not (:subject request)
+    (throw (ex-info "No subject specified" {:status 400})))
+
+  (let [globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
+        augreq (passThroughCache request)
+        evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                           (conj res rule)
+                                           res))
+                         [] (:rules globalPolicy))]
+    (if-not globalPolicy
+      (throw (ex-info "No global policy applicable" {:status 404})))
+    {:results (map #(:name %1) evalglob)}))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
 ;; on simplifie en retournant la 1ere règle en allow sans vérifier les deny
 (defn whoAuthorized [^Map request]
-;; verify we have a resource
-  (if (:resource request)
-    (let [candrules
-          (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class(:resource request)))))
-          evrules
-           (filter #(rule/evalRuleWithResource % request) candrules)
-          ]
+  (if-not (:resource request)
+    (throw (ex-info "No resource specified" {:status 400})))
 
+  (let [candrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource request)))))
+        evrules (filter #(rule/evalRuleWithResource % request) candrules)]
     (map (fn [rule] {:resourceClass (:resourceClass rule)
                      :subjectCond (rest (:subjectCond rule))
-                     :operation (:operation rule)
-                     })
-         evrules)
-      )
-    )
-  )
+                     :operation (:operation rule)})
+         evrules)))
 
 (defn whichAuthorized [^Map request]
-  ;; verify we have a subject
-  (if (:subject request)
-    (let [allowrules
-          (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class(:resource request)))))
-          denyrules
-          (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class(:resource request)))))
-          evrules1
-          (keep (fn [rule]
-                       (rule/evalRuleWithSubject rule request)) allowrules)
-          evrules2
-          (keep (fn [rule]
-                  (rule/evalRuleWithSubject rule request)) denyrules)
-          ]
-      {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
-                               :resourceCond  (rest (:resourceCond rule))
-                               :operation     (:operation rule)
-                               })
-                   evrules1)
-       :deny  (map (fn [rule] {:resourceClass (:resourceClass rule)
-                               :resourceCond  (rest (:resourceCond rule))
-                               :operation     (:operation rule)
-                               })
-                   evrules2)
-       }
-      )
-    )
-  )
+  (if-not (:subject request)
+    (throw (ex-info "No subject specified" {:status 400})))
+
+  (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource request)))))
+        denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource request)))))
+        evrules1 (keep #(rule/evalRuleWithSubject % request) allowrules)
+        evrules2 (keep #(rule/evalRuleWithSubject % request) denyrules)]
+    {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
+                             :resourceCond (rest (:resourceCond rule))
+                             :operation (:operation rule)})
+                 evrules1)
+     :deny (map (fn [rule] {:resourceClass (:resourceClass rule)
+                            :resourceCond (rest (:resourceCond rule))
+                            :operation (:operation rule)})
+                evrules2)}))
 
 (defn explain [^Map request]  ;; //TODO
 

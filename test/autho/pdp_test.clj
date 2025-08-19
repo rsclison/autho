@@ -44,11 +44,11 @@
           (is (= {:result false :rules []}
                  (evalRequest request)))))
       (testing "with no subject"
-        (is (= {:error "No subject specified"}
-               (evalRequest {:resource {:class "doc"}}))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No subject specified"
+                                (evalRequest {:resource {:class "doc"}}))))
       (testing "with no resource"
-        (is (= {:error "No resource specified"}
-               (evalRequest {:subject {:id "user1"}}))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No resource specified"
+                                (evalRequest {:subject {:id "user1"}}))))
       (testing "simple request from original test"
         (with-redefs [prp/getGlobalPolicy (fn [c] {:rules []})
                       prp/getPolicy (fn [c a] {:rules []})
@@ -119,7 +119,8 @@
                       rule/evalRuleWithResource (fn [rule req] true)]
           (is (= [] (whoAuthorized request)))))
       (testing "when request has no resource"
-        (is (= nil (whoAuthorized {})))))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No resource specified"
+                                (whoAuthorized {})))))))
 
 (deftest whichAuthorized-test
   (testing "whichAuthorized function"
@@ -165,4 +166,5 @@
                       rule/evalRuleWithSubject (fn [rule req] nil)]
           (is (= {:allow [] :deny []} (whichAuthorized request)))))
       (testing "when request has no subject"
-        (is (= nil (whichAuthorized {})))))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No subject specified"
+                                (whichAuthorized {})))))))
