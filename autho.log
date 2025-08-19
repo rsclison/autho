@@ -58,3 +58,12 @@ io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already
 io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already in use
 2025-08-18 09:43:49.123 [vert.x-eventloop-thread-0] ERROR c.a.donkey.server.ServerVerticle - bind(..) failed: Address already in use
 io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already in use
+2025-08-19 13:26:52.401 [main] INFO  autho.handler - autho is starting
+2025-08-19 13:26:52.758 [vert.x-eventloop-thread-1] ERROR c.a.donkey.server.ServerVerticle - bind(..) failed: Address already in use
+io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already in use
+2025-08-19 13:26:52.758 [vert.x-eventloop-thread-2] ERROR c.a.donkey.server.ServerVerticle - bind(..) failed: Address already in use
+io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already in use
+2025-08-19 13:26:52.759 [vert.x-eventloop-thread-0] ERROR c.a.donkey.server.ServerVerticle - bind(..) failed: Address already in use
+io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already in use
+2025-08-19 13:26:52.758 [vert.x-eventloop-thread-3] ERROR c.a.donkey.server.ServerVerticle - bind(..) failed: Address already in use
+io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already in use
