@@ -23,6 +23,10 @@ The core of `autho` is a Policy Decision Point (PDP) that evaluates incoming req
 *   **Delegation of Rights:** Users can delegate their access rights to other users.
 *   **Extensible:** Connect to various attribute sources like databases or LDAP to enrich authorization requests.
 
+## Implementation Status
+
+**Note:** The Datomic/Kafka implementation is currently under development and is not yet ready for production use.
+
 ## Getting Started
 
 ### Prerequisites
