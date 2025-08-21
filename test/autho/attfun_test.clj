@@ -48,7 +48,13 @@
       (is (sut/notin "d" test-set))
       (is (not (sut/notin nil test-set)))
       (is (not (sut/notin 1 test-set)))
-      (is (sut/notin 4 test-set)))))
+      (is (sut/notin 4 test-set))))
+
+  (testing "Test collection operators with boundary cases"
+    (is (not (sut/in "a" #{})))
+    (is (sut/notin "a" #{}))
+    (is (thrown? Exception (sut/in "a" "not-a-collection")))
+    (is (thrown? Exception (sut/notin "a" "not-a-collection")))))
 
 (deftest comparison-operators-test
   (testing "Test for the '>' function"
@@ -73,14 +79,31 @@
     (is (sut/<= "1" "2"))
     (is (not (sut/<= "2" "1")))
     (is (sut/<= "1" "1"))
-    (is (sut/<= "1.0" "1.1"))))
+    (is (sut/<= "1.0" "1.1")))
+
+  (testing "Test comparison operators with invalid inputs"
+    (is (thrown? Exception (sut/> "a" "1")))
+    (is (thrown? Exception (sut/> "1" "a")))
+    (is (thrown? Exception (sut/>= "a" "1")))
+    (is (thrown? Exception (sut/>= "1" "a")))
+    (is (thrown? Exception (sut/< "a" "1")))
+    (is (thrown? Exception (sut/< "1" "a")))
+    (is (thrown? Exception (sut/<= "a" "1")))
+    (is (thrown? Exception (sut/<= "1" "a")))))
 
 (deftest date-comparison-test
   (testing "Test for the 'date>' function"
     (is (sut/date> "2023-01-02" "2023-01-01"))
     (is (not (sut/date> "2023-01-01" "2023-01-02")))
     (is (not (sut/date> "2023-01-01" "2023-01-01")))
-    (is (sut/date> "2024-01-01" "2023-12-31"))))
+    (is (sut/date> "2024-01-01" "2023-12-31")))
+
+  (testing "Test 'date>' with invalid date formats"
+    (is (thrown? Exception (sut/date> "not-a-date" "2023-01-01")))
+    (is (thrown? Exception (sut/date> "2023-01-01" "not-a-date")))
+    (is (thrown? Exception (sut/date> "2023-13-01" "2023-01-01")))
+    (is (thrown? Exception (sut/date> "2023-01-32" "2023-01-01")))
+    (is (thrown? Exception (sut/date> "2023/01/01" "2023-01-01")))))
 
 (deftest inverse-op-test
   (testing "Test for the 'inverseOp' function"
