@@ -14,4 +14,6 @@ pom.xml.asc
 /.clj-kondo
 .calva/output-window/output.calva-repl
 .lsp/.cache/db.transit.json
+**/db.transit.json
 autho.log
+autho.*.log
