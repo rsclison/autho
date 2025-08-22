@@ -2,6 +2,11 @@
 
 Ce répertoire contient des exemples de clients dans différents langages pour interagir avec le service d'autorisation.
 
+Les exemples montrent comment utiliser les trois principaux points d'entrée de l'API :
+- `POST /isAuthorized`: Vérifie si un sujet donné est autorisé à effectuer une opération sur une ressource donnée.
+- `POST /whoAuthorized`: Renvoie les conditions sur le sujet pour être autorisé à effectuer une opération sur une ressource donnée.
+- `POST /whichAuthorized`: Renvoie les conditions sur la ressource pour qu'un sujet donné soit autorisé à effectuer une opération.
+
 Avant d'exécuter ces exemples, assurez-vous que le service d'autorisation est en cours d'exécution sur `http://localhost:8080`. Vous pouvez le démarrer avec la commande suivante à la racine du projet :
 
 ```bash
