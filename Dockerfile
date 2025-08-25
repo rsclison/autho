@@ -1,6 +1,9 @@
 # Use an official Clojure image as a parent image
 FROM clojure:lein-2.11.2-bookworm-slim
 
+# Update system packages to reduce vulnerabilities
+RUN apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
