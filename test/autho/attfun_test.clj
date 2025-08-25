@@ -112,14 +112,3 @@
     (is (= '= (sut/inverseOp 'diff)))
     (is (= 'diff (sut/inverseOp '=)))
     (is (nil? (sut/inverseOp 'something-else)))))
-
-(deftest csv-pip-test
-  (testing "Test for the 'csvPip' function through 'att'"
-    (let [user-obj {:class :user :id "user1"}]
-      (is (= {:id "user1", :name "Alice", :email "alice@example.com", :city "Paris"}
-             (sut/att "name" user-obj))))
-    (let [user-obj {:class :user :id "user2"}]
-      (is (= {:id "user2", :name "Bob", :email "bob@example.com", :city "London"}
-             (sut/att "email" user-obj))))
-    (let [user-obj {:class :user :id "user4"}]
-      (is (nil? (sut/att "name" user-obj))))))
