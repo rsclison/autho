@@ -9,7 +9,8 @@
  ;; (:require [clj-time.core :as t])
   (:require
     ;;[clj-time.format :as f]
-            [autho.prp :as prp])
+            [autho.prp :as prp]
+            [autho.pip :as pip])
 
   )
 
@@ -29,14 +30,13 @@
 
 
 (defn findAndCallPip [attName obj]
-  (let [pipdecl (prp/findPip (:class obj) attName)]  ;; TODO the PIP is attached only to attribute not to class/attribute
+  (let [pipdecl (prp/findPip (:class obj) attName)]
     (if (nil? pipdecl)
       nil
-      (try (apply (ns-resolve (symbol "autho.attfun") (symbol(:type pipdecl))) [pipdecl attName obj])
-           (catch Exception e nil))
-      )
-    )
-  )
+      (try (pip/callPip pipdecl attName obj)
+           (catch Exception e
+             (println (str "Error calling pip for " attName " on " obj))
+             nil)))))
 
 #_(defn att [attribute obj]
   ;; the object is a symbol map not a json string
@@ -72,10 +72,6 @@
     ))
 
 
-(defn internalPip [decl att obj]
-  (apply (ns-resolve (symbol "autho.attfun") (symbol(:method decl))) [obj])
-  )
-
 (defn role [obj]
   (println "Calling ldapRole")
   "Professeur"
@@ -95,25 +91,6 @@
 ;;                  (catch NumberFormatException e# (try (#'clojure.instant/read-instant-date ~st) (catch Exception e# nil))))]
 ;;     res#
 ;;  ))
-
-(defn urlPip [decl att obj]
-  (println "IN urlPip")
-  (if (= (:verb decl) "post")
-    (try
-      (let [resp (clj-http.client/post (:url decl) {:form-params obj :content-type :json})
-            jsresp (json/read-str (:body resp) :key-fn keyword)]
-        jsresp
-        )
-      (catch Exception e (println e) nil)
-      )
-    nil
-    ))
-
-
-(defn javaPip [decl att obj]
-  (println "in Java Pip")
-  (.resolveAttribute (:instance decl) att obj)
-  )
 
 ;; FUNCTIONS
 
@@ -172,5 +149,5 @@
        > '<=
        diff '=
        = 'diff
-       )
+       nil)
   )
