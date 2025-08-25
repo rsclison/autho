@@ -13,10 +13,5 @@ target/
 # Log files
 *.log
 
-# Docker files
-Dockerfile
-.dockerignore
-
-# Git files
-.git/
+# Git files to exclude from image
 .gitignore
