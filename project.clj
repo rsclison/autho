@@ -25,5 +25,6 @@
                  [ch.qos.logback/logback-classic "1.2.6"]]
   :main autho.core
   :target-path "target/%s"
-  :profiles {:uberjar {:aot :all
+  :profiles {:dev {:plugins [[gorillalabs/lein-docker "1.5.0"]]}
+             :uberjar {:aot :all
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}})
