@@ -8,10 +8,31 @@ Ce document explique comment construire et utiliser l'image Docker pour cette ap
 
 ## Build de l'image Docker
 
-Pour construire l'image Docker, exécutez la commande suivante à la racine du projet :
+Il y a deux façons de construire l'image :
+
+### Avec Leiningen (recommandé)
+
+Le projet est configuré avec le plugin `lein-docker`. Pour construire l'image, exécutez :
+
+```bash
+lein docker build
+```
+Cette commande utilise le nom d'image `autho-pdp` configuré dans `project.clj`.
+
+### Avec Docker directement
+
+Vous pouvez également utiliser la commande `docker build` standard :
 
 ```bash
 docker build -t autho-pdp .
+```
+
+## Push de l'image
+
+Si vous avez les droits nécessaires sur un registre Docker (par exemple, Docker Hub), vous pouvez pousser l'image avec :
+
+```bash
+lein docker push
 ```
 
 ## Lancement du conteneur Docker

@@ -1,2 +1,0 @@
-2025-08-22 12:34:26.114 [main] ERROR autho.utils - Couldn't open EDN source 'non-existent-file.edn': non-existent-file.edn (No such file or directory)
-2025-08-22 12:34:26.129 [main] ERROR autho.utils - Error parsing EDN file 'invalid.edn': EOF while reading
