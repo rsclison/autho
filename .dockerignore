@@ -1,0 +1,22 @@
+# Leiningen build output
+target/
+
+# Local Leiningen configuration
+.lein-env
+.lein-profiles
+
+# IDE and editor files
+.idea/
+.vscode/
+.lsp/
+
+# Log files
+*.log
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# Git files
+.git/
+.gitignore
