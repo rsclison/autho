@@ -1,5 +1,5 @@
 # Use an official Clojure image as a parent image
-FROM clojure:lein-2.10.0-slim-bullseye
+FROM clojure:lein-2.10.0-bullseye-slim
 
 # Set the working directory in the container
 WORKDIR /usr/src/app
