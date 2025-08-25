@@ -7,4 +7,5 @@
  {:class :person :attributes [:name :surname] :pip {:type :rest :url "http://xxx" :cacheable false}}
  {:class :person :attributes [:grade] :pip {:type :rest :url "http://yyy" :cacheable false}}
  {:class :junk :pip {:type :internal :func "junkJsonPip"}}
+ {:class :user :attributes [:name :email :city] :pip {:type :csv :path "resources/users.csv"}}
 ]

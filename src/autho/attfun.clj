@@ -2,6 +2,8 @@
   ;;(:use clojure.instant)
 ;;  (:import (org.cocktail Pip))
   (:require [clojure.string :as str])
+  (:require [clojure.data.csv :as csv])
+  (:require [clojure.java.io :as io])
   (:require [clojure.data.json :as json])
   (:require [clojure.core.cache :as cache])
   (:require [clj-http [client]])
@@ -114,6 +116,29 @@
   (println "in Java Pip")
   (.resolveAttribute (:instance decl) att obj)
   )
+
+(defn csvPip [decl att obj]
+  (let [file-path (get-in decl [:pip :path])
+        id-key (get-in decl [:pip :id-key] :id)
+        obj-id (get obj id-key)]
+    (if (and file-path obj-id)
+      (try
+        (with-open [reader (io/reader file-path)]
+          (let [csv-data (csv/read-csv reader)
+                headers (map keyword (first csv-data))
+                id-col-name (name id-key)
+                rows (rest csv-data)
+                id-index (.indexOf (first csv-data) id-col-name)]
+            (if (= -1 id-index)
+              nil
+              (let [found-row (first (filter #(= (str (get % id-index)) (str obj-id)) rows))]
+                (if found-row
+                  (zipmap headers found-row)
+                  nil)))))
+        (catch java.io.FileNotFoundException e
+          (println (str "CSV file not found: " file-path))
+          nil))
+      nil)))
 
 ;; FUNCTIONS
 
