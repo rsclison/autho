@@ -5,6 +5,15 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :plugins [[gorillalabs/lein-docker "1.5.0"]]
   :docker {:image-name "autho-pdp"}
+  :managed-dependencies [[io.netty/netty-common "4.1.72.Final"]
+                         [io.netty/netty-buffer "4.1.72.Final"]
+                         [io.netty/netty-transport "4.1.72.Final"]
+                         [io.netty/netty-handler "4.1.72.Final"]
+                         [io.netty/netty-codec "4.1.72.Final"]
+                         [io.netty/netty-codec-http "4.1.72.Final"]
+                         [io.netty/netty-codec-http2 "4.1.72.Final"]
+                         [io.netty/netty-resolver "4.1.72.Final"]
+                         [io.netty/netty-all "4.1.72.Final"]]
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.1"]
                  [compojure "1.7.1"]
@@ -23,7 +32,7 @@
                  [clj-json "0.5.3"]
                  [com.h2database/h2 "2.3.232"]
                  [com.brunobonacci/mulog "0.9.0"]
-                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop io.netty/netty-all]]
+                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
                  [org.slf4j/slf4j-api "1.7.32"]
                  [ch.qos.logback/logback-classic "1.2.6"]]
   :main autho.core
