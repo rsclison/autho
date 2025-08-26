@@ -44,6 +44,43 @@ def which_authorized(subject, operation):
         "operation": operation
     })
 
+def publish_to_kafka(topic, key, value):
+    """
+    Publishes a key-value message to a specified Kafka topic.
+    This example requires a Kafka client library, like 'kafka-python'.
+    Install it using: pip install kafka-python
+    """
+    from kafka import KafkaProducer
+    from kafka.errors import KafkaError
+
+    print("\n" + "-" * 20 + "\n")
+    print("=== Kafka Producer Example ===")
+
+    producer = KafkaProducer(
+        bootstrap_servers=['localhost:9092'],
+        key_serializer=lambda k: k.encode('utf-8'),
+        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+    )
+
+    print(f"Publishing message to topic '{topic}':")
+    print(f"Key: {key}")
+    print(f"Value: {json.dumps(value)}")
+
+    try:
+        # asychronous send
+        future = producer.send(topic, key=key, value=value)
+        # block for 'synchronous' sends
+        record_metadata = future.get(timeout=10)
+        print("Message sent successfully to partition {} at offset {}".format(
+            record_metadata.partition, record_metadata.offset))
+    except KafkaError as e:
+        print(f"Error publishing to Kafka: {e}")
+    finally:
+        producer.flush()
+        producer.close()
+        print("Producer closed.")
+
+
 if __name__ == "__main__":
     # isAuthorized examples
     print("=== isAuthorized ===")
@@ -80,3 +117,10 @@ if __name__ == "__main__":
     print("Finding which resources are authorized for:", subject4, operation4)
     response4 = which_authorized(subject4, operation4)
     print(f"Response: {response4}")
+
+    # Kafka producer example
+    publish_to_kafka(
+        topic="user-attributes-compacted",
+        key="user1011",
+        value={"name": "David", "role": "auditor", "region": "emea"}
+    )
