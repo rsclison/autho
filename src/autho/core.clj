@@ -7,5 +7,7 @@
   (pdp/init)
   (let [mode (or (pdp/getProperty :autho.mode) "rest")]
     (if (= mode "rest")
-      (handler/init)
+      (do
+        (handler/init)
+        @(promise))
       (println "autho started in embedded mode."))))
