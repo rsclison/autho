@@ -41,6 +41,11 @@
    :headers {"Content-Type" "application/json"}
    :body (json/write-value-as-string data)})
 
+(defn- rules-not-loaded-response []
+  (json-response
+    {:error {:message "Rule repository is not loaded. Please check server logs."}}
+    503))
+
 (defroutes app-routes
            (route/resources "/")
            (GET "/test" req
@@ -59,33 +64,51 @@
              )
 
            (POST "/isAuthorized" {body :body}
-             (if (nil? body)
+             (cond
+               (= :failed (prp/get-rules-repository-status))
+               (rules-not-loaded-response)
+
+               (nil? body)
                (json-response
                  {:error {:message "Request body is empty."
                           :example {:subject {:id "user1"}
                                     :resource {:class "doc" :id "doc1"}
                                     :operation "read"}}}
                  400)
+
+               :else
                (json-response (pdp/isAuthorized (json/read-value (slurp body) json/keyword-keys-object-mapper)))))
 
            (POST "/whoAuthorized" {body :body}
-             (if (nil? body)
+             (cond
+               (= :failed (prp/get-rules-repository-status))
+               (rules-not-loaded-response)
+
+               (nil? body)
                (json-response
                  {:error {:message "Request body is empty."
                           :example {:resource {:class "doc"}
                                     :operation "read"}}}
                  400)
+
+               :else
                (let [input-json (json/read-value (slurp body) json/keyword-keys-object-mapper)
                      result (pdp/whoAuthorized input-json)]
                  (json-response result))))
 
            (POST "/whichAuthorized" {body :body}
-             (if (nil? body)
+             (cond
+               (= :failed (prp/get-rules-repository-status))
+               (rules-not-loaded-response)
+
+               (nil? body)
                (json-response
                  {:error {:message "Request body is empty."
                           :example {:subject {:id "user1"}
                                     :operation "read"}}}
                  400)
+
+               :else
                (json-response (pdp/whichAuthorized (json/read-value (slurp body) json/keyword-keys-object-mapper)))))
 
 
