@@ -1,6 +1,8 @@
 (ns client
   (:require [clj-http.client :as client]
-            [clojure.data.json :as json]))
+            [clojure.data.json :as json])
+  (:import (org.apache.kafka.clients.producer KafkaProducer ProducerRecord)
+           (java.util Properties)))
 
 (defn- post-request [endpoint body]
   (try
@@ -25,6 +27,27 @@
 (defn which-authorized [subject operation]
   (post-request "whichAuthorized" {:subject subject
                                    :operation operation}))
+
+(defn publish-to-kafka [topic key value]
+  ;; This example requires the kafka-clients library on the classpath.
+  ;; e.g., [org.apache.kafka/kafka-clients "4.0.0"]
+  (println "\n=== Kafka Producer Example ===")
+  (println "Publishing to topic" topic)
+  (println "  Key:" key)
+  (println "  Value:" value)
+  (let [props (doto (Properties.)
+                (.put "bootstrap.servers" "localhost:9092")
+                (.put "key.serializer" "org.apache.kafka.common.serialization.StringSerializer")
+                (.put "value.serializer" "org.apache.kafka.common.serialization.StringSerializer"))
+        producer (KafkaProducer. props)
+        record (ProducerRecord. topic key (json/write-str value))]
+    (try
+      (.send producer record)
+      (.flush producer)
+      (println "Message sent successfully.")
+      (catch Exception e
+        (println (str "Error publishing to Kafka: " (.getMessage e)))))
+    (.close producer)))
 
 (defn -main [& args]
   (println "=== isAuthorized ===")
@@ -60,4 +83,8 @@
     (println "Finding which resources are authorized for:")
     (println "  Subject:" subject)
     (println "  Operation:" operation)
-    (println "Response:" (which-authorized subject operation))))
+    (println "Response:" (which-authorized subject operation)))
+
+  (publish-to-kafka "user-attributes-compacted"
+                    "user789"
+                    {:name "Charles" :role "manager" :team "product"}))

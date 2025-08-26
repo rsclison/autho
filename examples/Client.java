@@ -1,8 +1,15 @@
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.StringSerializer;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Properties;
 
 public class Client {
 
@@ -80,6 +87,40 @@ public class Client {
 
         } catch (IOException | InterruptedException e) {
             System.err.println("Error connecting to the server: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        System.out.println("\n--------------------\n");
+        System.out.println("=== Kafka Producer Example ===");
+        publishToKafka("user-attributes-compacted", "user456", "{\"name\": \"Bob\", \"role\": \"developer\", \"team\": \"backend\"}");
+    }
+
+    /**
+     * Publishes a key-value message to a specified Kafka topic.
+     * This example can be used to feed data to the KafkaPIP.
+     * Note: To run this, you need the kafka-clients dependency in your project.
+     */
+    public static void publishToKafka(String topic, String key, String value) {
+        // --- Configuration ---
+        String bootstrapServers = "localhost:9092";
+
+        // --- Create Kafka Producer Properties ---
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+
+        // --- Create and use the Producer ---
+        try (Producer<String, String> producer = new KafkaProducer<>(props)) {
+            System.out.println("Publishing message to topic '" + topic + "':");
+            System.out.println("Key: " + key);
+            System.out.println("Value: " + value);
+
+            producer.send(new ProducerRecord<>(topic, key, value));
+            producer.flush();
+            System.out.println("Message sent successfully.");
+        } catch (Exception e) {
+            System.err.println("Error publishing to Kafka: " + e.getMessage());
             e.printStackTrace();
         }
     }
