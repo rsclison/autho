@@ -7,8 +7,9 @@
   (:require [clojure.java.io :as io] [clojure.edn :as edn])
   (:require [java-time :as ti])
   (:require [autho.utils :as utl])
+  (:import (org.slf4j LoggerFactory)))
 
-  )
+(defonce logger (LoggerFactory/getLogger "autho.prp"))
 
 (def h2db
   {:classname   "org.h2.Driver"
@@ -44,6 +45,11 @@
 
 
 (def ^{:private true} policiesMap (atom {}))
+
+(defonce rules-repository-status (atom :not-loaded))
+
+(defn get-rules-repository-status []
+  @rules-repository-status)
 
 
 (defn initdb []
@@ -149,15 +155,19 @@
   )
 
 (defn initf [rulesf]
-  (let [rules-map (utl/load-edn rulesf)]
-    (swap! policiesMap
-           (fn [a] (reduce (fn [hm ke]                      ;; treat a resourceClass rules
-                             (let [rls (get rules-map ke)]
-                               (assoc hm ke {:global {:rules (map #(rule2 %) (:rules (:global rls))) ;; TODO :global and :strategy are hard coded
-                                                      :strategy :almost_one_allow_no_deny}})))
-                           {}
-                           (keys rules-map))))
-    ))
+  (try
+    (let [rules-map (utl/load-edn rulesf)]
+      (swap! policiesMap
+             (fn [a] (reduce (fn [hm ke]                      ;; treat a resourceClass rules
+                               (let [rls (get rules-map ke)]
+                                 (assoc hm ke {:global {:rules (map #(rule2 %) (:rules (:global rls))) ;; TODO :global and :strategy are hard coded
+                                                        :strategy :almost_one_allow_no_deny}})))
+                             {}
+                             (keys rules-map))))
+      (reset! rules-repository-status :loaded))
+    (catch Exception e
+      (.error logger (str "Failed to load rule repository from " rulesf) e)
+      (reset! rules-repository-status :failed))))
 
 
 
