@@ -129,9 +129,12 @@
              (println "TODO") ;; //TODO
              )
            (context "/admin" []
-             (POST "/reload" []
+             (POST "/reinit" []
                (pdp/init)
-               (json-response {:status "ok"})))
+               (json-response {:status "ok" :message "PDP reinitialized."}))
+             (POST "/reload_rules" []
+               (prp/initf (pdp/get-rules-repository-path))
+               (json-response {:status "ok" :message "Rule repository reloaded."})))
            (route/not-found "Not Found"))
 
 
