@@ -121,7 +121,7 @@
 
 (defn findPip [class attribute]
   (some #(if (and (= class (:class %))
-                  (or (nil? (:attributes %))(some (fn [v] (= v (keyword attribute))) (:attributes %))))
+                  (or (nil? (:attributes %))(some (fn [v] (= v attribute)) (:attributes %))))
           %) @pips)
   )
 
