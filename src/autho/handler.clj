@@ -7,8 +7,7 @@
             [com.appsflyer.donkey.server :refer [start]]
             [com.appsflyer.donkey.result :refer [on-success]]
             [compojure.route :as route]
-            [clj-json.core :as json-core]
-            [clojure.data.json :as json])
+            [jsonista.core :as json])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.handler"))
@@ -32,7 +31,7 @@
                         "An unexpected error occurred.")]
           {:status status
            :headers {"Content-Type" "application/json"}
-           :body (json-core/generate-string {:error {:message message}})})))))
+           :body (json/write-value-as-string {:error {:message message}})})))))
 
 (defn destroy []
   (println "autho is shutting down"))
@@ -40,7 +39,7 @@
 (defn json-response [data & [status]]
   {:status (or status 200)
    :headers {"Content-Type" "application/json"}
-   :body (json-core/generate-string data)})
+   :body (json/write-value-as-string data)})
 
 (defroutes app-routes
            (route/resources "/")
@@ -60,18 +59,18 @@
              )
 
            (POST "/isAuthorized" {body :body}
-               (json-response (pdp/isAuthorized (json/read-str (slurp body) :key-fn keyword)))
+               (json-response (pdp/isAuthorized (json/read-value (slurp body) json/keyword-keys-object-mapper)))
                )
 
            (POST "/whoAuthorized" {body :body}
-             (let [input-json (json/read-str (slurp body) :key-fn keyword)
+             (let [input-json (json/read-value (slurp body) json/keyword-keys-object-mapper)
                    result (pdp/whoAuthorized input-json)
                    ]
                (json-response result)
                ))
 
            (POST "/whichAuthorized" {body :body}
-               (json-response (pdp/whichAuthorized (json/read-str (slurp body) :key-fn keyword)))
+               (json-response (pdp/whichAuthorized (json/read-value (slurp body) json/keyword-keys-object-mapper)))
                )
 
 
