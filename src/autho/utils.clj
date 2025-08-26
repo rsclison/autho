@@ -11,7 +11,8 @@
   (try
     (with-open [r (io/reader source)]
       (edn/read (java.io.PushbackReader. r)))
-
+    (catch java.io.FileNotFoundException e
+      nil) ; Return nil if file is not found.
     (catch java.io.IOException e
       (.error logger "Couldn't open EDN source '{}': {}" source (.getMessage e))
       (throw e))

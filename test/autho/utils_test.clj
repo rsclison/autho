@@ -4,8 +4,8 @@
             [clojure.java.io :as io]))
 
 (deftest load-edn-test
-  (testing "loading a non-existent file"
-    (is (thrown? java.io.IOException (utils/load-edn "non-existent-file.edn"))))
+  (testing "loading a non-existent file should return nil"
+    (is (nil? (utils/load-edn "non-existent-file.edn"))))
 
   (testing "loading an invalid EDN file"
     (let [invalid-edn-file "invalid.edn"]
