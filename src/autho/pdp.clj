@@ -37,6 +37,9 @@
   (get @properties prop)
   )
 
+(defn get-rules-repository-path []
+  (getProperty :rules.repository))
+
 
 (defn resolve-conflict [policy success-rules]
   (if (empty? success-rules)
