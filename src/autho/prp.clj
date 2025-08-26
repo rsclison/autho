@@ -35,6 +35,9 @@
 
 (def pips (atom (utl/load-edn "resources/pips.edn")))
 
+(defn get-pips []
+  @pips)
+
 ;;(defn rule [{:keys [name resourceClass operation condition effect]}]
 ;;  (->Rule name resourceClass operation condition effect (ti/local-date "yyyy-MM-dd" "1961-01-01")(ti/local-date  "yyyy-MM-dd" "3000-12-31"))
 ;;  )

@@ -9,3 +9,12 @@
  {:class :junk :pip {:type :internal :func "junkJsonPip"}}
  {:class :user :attributes [:name :email :city] :pip {:type :csv :path "resources/users.csv"}}
 ]
+
+;; Example for a Kafka PIP:
+;; {:class "User"
+;;  :type :kafka-pip
+;;  :kafka-topic "user-attributes-compacted"
+;;  :kafka-bootstrap-servers "localhost:9092"
+;;  :rocksdb-path "/tmp/rocksdb/users"
+;;  :id-key :user-id ;; Optional, defaults to :id
+;; }

@@ -3,7 +3,8 @@
             [clojure.data.json :as json]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [com.brunobonacci.mulog :as u]))
+            [com.brunobonacci.mulog :as u]
+            [autho.kafka-pip :as kafka-pip]))
 
 ;; Multimethod for PIP calls, dispatches on the :type from the :pip map
 (defmulti callPip (fn [decl _ _] (get-in decl [:pip :type])))
@@ -24,6 +25,15 @@
         (catch Exception e
           (u/log ::pip-exception :exception e :pip-info pip-info)
           nil))
+      nil)))
+
+(defmethod callPip :kafka-pip [decl att obj]
+  (let [pip-info (:pip decl)
+        class-name (:class pip-info)
+        id-key (or (:id-key pip-info) :id)
+        obj-id (get obj id-key)]
+    (if (and class-name obj-id)
+      (kafka-pip/query-pip class-name (str obj-id))
       nil)))
 
 ;; Java PIP implementation

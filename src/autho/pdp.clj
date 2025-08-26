@@ -2,6 +2,7 @@
   (:use [clojure.test :exclude [report]])
   (:require [autho.prp :as prp]
             [autho.jsonrule :as rule]
+            [autho.kafka-pip :as kafka-pip]
             [autho.cache :as cache]
             [autho.delegation :as deleg]
             [clojure.java.io :as io]
@@ -192,12 +193,15 @@
 
 (defn init []
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
-  (let [ldapprop (filter (fn [propunit] (str/starts-with? (name propunit) "ldap")) @properties)]
+  (.addShutdownHook (Runtime/getRuntime) (Thread. #(kafka-pip/stop-all-pips)))
+  (let [ldapprop (filter (fn [propunit] (str/starts-with? (name propunit) "ldap")) @properties)
+        kafka-pips (filter #(= :kafka-pip (:type %)) (prp/get-pips))]
     (if (getProperty :ldap.server) (ldap/init {:host     (getProperty :ldap.server)
                                                :bind-dn  (getProperty :ldap.connectstring)
                                                :password (getProperty :ldap.password)
                                                }))
-    )
+    (doseq [pip-config kafka-pips]
+      (kafka-pip/init-pip pip-config)))
   ;; init the prp
   (prp/initf (getProperty :rules.repository))
 
