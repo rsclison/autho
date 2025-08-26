@@ -4,6 +4,9 @@ FROM clojure:lein-2.11.2-bookworm-slim
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
+# Install curl
+RUN apt-get update && apt-get install -y curl
+
 # Copy the project definition file
 COPY project.clj .
 
