@@ -1,61 +1,59 @@
 (ns autho.kafka-pip-test
   (:require [clojure.test :refer :all]
             [autho.kafka-pip :as kafka-pip]
-            [jsonista.core :as json]))
+            [jsonista.core :as json])
+  (:import (java.io File)))
 
-(deftest kafka-pip-lifecycle-test
-  (testing "Initialization of a Kafka PIP"
+(defn- setup-test-db [f]
+  ;; This fixture creates a temporary shared DB for tests
+  (let [db-path (str "/tmp/rocksdb/test-" (System/currentTimeMillis))]
+    (.mkdirs (File. db-path))
+    (kafka-pip/open-shared-db db-path)
+    (f)
+    (kafka-pip/close-shared-db)))
+
+(use-fixtures :each setup-test-db)
+
+(deftest kafka-pip-shared-db-lifecycle-test
+  (testing "Initialization of a Kafka PIP with a shared DB"
     (let [config {:class "TestUser"
                   :type :kafka-pip
-                  :kafka-topic "test-topic"
-                  :kafka-bootstrap-servers "localhost:9092"
-                  :rocksdb-path "/tmp/rocksdb/test-users"}
-          open-db-called (atom false)
-          create-consumer-called (atom false)
+                  :kafka-topic "test-topic"}
           start-thread-called (atom false)]
-      (with-redefs [kafka-pip/open-db (fn [path]
-                                        (is (= "/tmp/rocksdb/test-users" path))
-                                        (reset! open-db-called true)
-                                        :mock-db)
-                    kafka-pip/create-kafka-consumer (fn [cfg]
-                                                      (is (= config cfg))
-                                                      (reset! create-consumer-called true)
-                                                      :mock-consumer)
-                    kafka-pip/start-consumer-thread (fn [consumer topic db]
-                                                      (is (= :mock-consumer consumer))
+      (with-redefs [kafka-pip/start-consumer-thread (fn [consumer class-name topic]
+                                                      (is (= "TestUser" class-name))
                                                       (is (= "test-topic" topic))
-                                                      (is (= :mock-db db))
                                                       (reset! start-thread-called true)
-                                                      {:stop-fn (fn []) :thread (future)})]
+                                                      {:stop-fn (fn []) :thread (future)})
+                    ;; Mock consumer creation to avoid real connection
+                    kafka-pip/create-kafka-consumer (fn [_] :mock-consumer)]
         (kafka-pip/init-pip config)
-        (is @open-db-called)
-        (is @create-consumer-called)
         (is @start-thread-called)
-        (is (contains? @kafka-pip/pip-instances "TestUser")))))
+        ;; After init, the consumer handle should be stored
+        (is (= 1 (count @kafka-pip/consumer-handles))))
+      ;; Cleanup after test
+      (kafka-pip/stop-all-pips)))
 
-  (testing "Querying a Kafka PIP"
-    (let [mock-instance {:db :mock-db}
-          user-id "user123"
+  (testing "Querying a Kafka PIP uses a composite key"
+    (let [class-name "TestUser"
+          object-id "user123"
+          composite-key "TestUser:user123"
           user-attributes {:name "Alice" :role "admin"}]
-      (swap! kafka-pip/pip-instances assoc "TestUser" mock-instance)
-      (with-redefs [kafka-pip/db-get (fn [db key]
-                                       (is (= :mock-db db))
-                                       (is (= user-id key))
+      (with-redefs [kafka-pip/db-get (fn [key]
+                                       (is (= composite-key key))
                                        (json/write-value-as-string user-attributes))]
-        (let [result (kafka-pip/query-pip "TestUser" user-id)]
+        (let [result (kafka-pip/query-pip class-name object-id)]
           (is (= user-attributes result))))))
 
-  (testing "Stopping all Kafka PIPs"
-    (let [stop-fn-called (atom false)
-          close-db-called (atom false)
-          mock-instance {:db :mock-db
-                         :consumer-handle {:stop-fn (fn [] (reset! stop-fn-called true))
-                                           :thread (future)}}]
-      (swap! kafka-pip/pip-instances assoc "TestUser" mock-instance)
-      (with-redefs [kafka-pip/close-db (fn [db]
-                                         (is (= :mock-db db))
-                                         (reset! close-db-called true))]
+  (testing "Stopping all PIPs closes the shared DB"
+    (let [close-db-called (atom false)
+          stop-fn-called (atom false)
+          mock-handle {:stop-fn (fn [] (reset! stop-fn-called true))
+                       :thread (future)}]
+      ;; Manually set up a consumer handle for the test
+      (reset! kafka-pip/consumer-handles [mock-handle])
+      (with-redefs [kafka-pip/close-shared-db (fn [] (reset! close-db-called true))]
         (kafka-pip/stop-all-pips)
         (is @stop-fn-called)
         (is @close-db-called)
-        (is (empty? @kafka-pip/pip-instances))))))
+        (is (empty? @kafka-pip/consumer-handles))))))

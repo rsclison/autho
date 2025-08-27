@@ -11,10 +11,10 @@
 ]
 
 ;; Example for a Kafka PIP:
+;; All Kafka PIPs share a single RocksDB instance configured globally in pdp-prop.properties.
 ;; {:class "User"
 ;;  :type :kafka-pip
 ;;  :kafka-topic "user-attributes-compacted"
 ;;  :kafka-bootstrap-servers "localhost:9092"
-;;  :rocksdb-path "/tmp/rocksdb/users"
 ;;  :id-key :user-id ;; Optional, defaults to :id
 ;; }

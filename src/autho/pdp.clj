@@ -195,13 +195,16 @@
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(kafka-pip/stop-all-pips)))
   (let [ldapprop (filter (fn [propunit] (str/starts-with? (name propunit) "ldap")) @properties)
-        kafka-pips (filter #(= :kafka-pip (:type %)) (prp/get-pips))]
+        kafka-pips (filter #(= :kafka-pip (:type %)) (prp/get-pips))
+        rocksdb-path (getProperty :kafka.pip.rocksdb.path)]
     (if (getProperty :ldap.server) (ldap/init {:host     (getProperty :ldap.server)
                                                :bind-dn  (getProperty :ldap.connectstring)
                                                :password (getProperty :ldap.password)
                                                }))
-    (doseq [pip-config kafka-pips]
-      (kafka-pip/init-pip pip-config)))
+    (when (and (seq kafka-pips) rocksdb-path)
+      (kafka-pip/open-shared-db rocksdb-path)
+      (doseq [pip-config kafka-pips]
+        (kafka-pip/init-pip pip-config))))
   ;; init the prp
   (prp/initf (getProperty :rules.repository))
 
