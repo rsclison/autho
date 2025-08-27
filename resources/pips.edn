@@ -15,6 +15,6 @@
 ;;  :type :kafka-pip
 ;;  :kafka-topic "user-attributes-compacted"
 ;;  :kafka-bootstrap-servers "localhost:9092"
-;;  :rocksdb-path "/tmp/rocksdb/users"
+;;  :rocksdb-path "/resources/rocksdb"
 ;;  :id-key :user-id ;; Optional, defaults to :id
 ;; }
