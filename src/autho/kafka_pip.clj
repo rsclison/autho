@@ -6,24 +6,35 @@
            (java.util Properties)
            (java.time Duration)))
 
-(defonce pip-instances (atom {}))
+;; Atom to hold the single, shared RocksDB instance
+(defonce shared-db (atom nil))
+;; Atom to hold the handles of the running consumer threads
+(defonce consumer-handles (atom []))
 
-(defn open-db [path]
-  (log/info "Opening RocksDB at" path)
+(defn- make-key [class-name object-id]
+  (str class-name ":" object-id))
+
+(defn open-shared-db [path]
+  (log/info "Opening shared RocksDB at" path)
   (let [opts (-> (Options.)
-                 (.setCreateIfMissing true))]
-    (RocksDB/open opts path)))
+                 (.setCreateIfMissing true))
+        db (RocksDB/open opts path)]
+    (reset! shared-db db)))
 
-(defn db-get [^RocksDB db key]
-  (when-let [value (.get db (.getBytes key "UTF-8"))]
-    (String. value "UTF-8")))
+(defn db-get [key]
+  (when-let [db @shared-db]
+    (when-let [value (.get db (.getBytes key "UTF-8"))]
+      (String. value "UTF-8"))))
 
-(defn- db-put [^RocksDB db key value]
-  (.put db (.getBytes key "UTF-8") (.getBytes value "UTF-8")))
+(defn- db-put [key value]
+  (when-let [db @shared-db]
+    (.put db (.getBytes key "UTF-8") (.getBytes value "UTF-8"))))
 
-(defn close-db [^RocksDB db]
-  (when db
-    (.close db)))
+(defn close-shared-db []
+  (when-let [db @shared-db]
+    (log/info "Closing shared RocksDB")
+    (.close db)
+    (reset! shared-db nil)))
 
 (defn create-kafka-consumer [{:keys [kafka-bootstrap-servers kafka-topic]}]
   (let [props (Properties.)]
@@ -35,17 +46,18 @@
       (.put ConsumerConfig/AUTO_OFFSET_RESET_CONFIG "earliest"))
     (KafkaConsumer. props)))
 
-(defn start-consumer-thread [consumer topic db]
+(defn start-consumer-thread [consumer class-name topic]
   (let [stop-atom (atom false)
         consumer-thread (future
                           (.subscribe consumer [topic])
-                          (log/info "Kafka consumer started for topic" topic)
+                          (log/info "Kafka consumer started for topic" topic "and class" class-name)
                           (while (not @stop-atom)
                             (try
                               (let [records (.poll consumer (Duration/ofMillis 1000))]
                                 (doseq [record records]
-                                  (log/debug "Consumed record:" (.key record) "=>" (.value record))
-                                  (db-put db (.key record) (.value record))))
+                                  (log/debug "Consumed record for class" class-name ":" (.key record) "=>" (.value record))
+                                  (let [composite-key (make-key class-name (.key record))]
+                                    (db-put composite-key (.value record)))))
                               (catch Exception e
                                 (log/error e "Error in Kafka consumer loop for topic" topic))))
                           (log/info "Kafka consumer stopped for topic" topic)
@@ -55,27 +67,22 @@
 
 (defn init-pip [config]
   (let [class-name (:class config)
-        db-path (:rocksdb-path config)
-        db (open-db db-path)
         consumer (create-kafka-consumer config)
-        consumer-handle (start-consumer-thread consumer (:kafka-topic config) db)]
-    (swap! pip-instances assoc class-name
-           {:db db
-            :consumer-handle consumer-handle
-            :config config})
-    (log/info "Initialized Kafka PIP for class" class-name)))
+        consumer-handle (start-consumer-thread consumer class-name (:kafka-topic config))]
+    (swap! consumer-handles conj consumer-handle)
+    (log/info "Initialized Kafka PIP consumer for class" class-name)))
 
 (defn query-pip [class-name object-id]
-  (when-let [instance (get @pip-instances class-name)]
-    (when-let [json-str (db-get (:db instance) object-id)]
+  (let [composite-key (make-key class-name object-id)]
+    (when-let [json-str (db-get composite-key)]
       (json/read-value json-str json/keyword-keys-object-mapper))))
 
 (defn stop-all-pips []
-  (doseq [[class-name instance] @pip-instances]
-    (log/info "Stopping Kafka PIP for class" class-name)
-    (when-let [stop-fn (get-in instance [:consumer-handle :stop-fn])]
-      (stop-fn))
-    (when-let [thread (get-in instance [:consumer-handle :thread])]
-      @thread)
-    (close-db (:db instance)))
-  (reset! pip-instances {}))
+  (doseq [handle @consumer-handles]
+    (when-let [stop-fn (:stop-fn handle)]
+      (stop-fn)))
+  (doseq [handle @consumer-handles]
+    (when-let [thread (:thread handle)]
+      @thread))
+  (reset! consumer-handles [])
+  (close-shared-db))
