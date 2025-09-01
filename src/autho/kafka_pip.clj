@@ -62,6 +62,24 @@
       (.put ConsumerConfig/AUTO_OFFSET_RESET_CONFIG "earliest"))
     (KafkaConsumer. props)))
 
+(def object-mapper (json/object-mapper {:decode-key-fn true}))
+
+(defn process-record [cf-handle record]
+  (let [key (.key record)
+        new-value-str (.value record)]
+    (log/debug "Processing record for key" key "=>" new-value-str)
+    (try
+      (let [existing-value-str (db-get cf-handle key)
+            existing-attrs (if (and existing-value-str (not-empty existing-value-str))
+                             (json/read-value existing-value-str object-mapper)
+                             {})
+            new-attrs (json/read-value new-value-str object-mapper)
+            merged-attrs (merge existing-attrs new-attrs)
+            merged-value-str (json/write-value-as-string merged-attrs)]
+        (db-put cf-handle key merged-value-str))
+      (catch Exception json-ex
+        (log/error json-ex "Failed to parse or merge JSON for key" key)))))
+
 (defn start-consumer-thread [consumer topic cf-handle]
   (let [stop-atom (atom false)
         consumer-thread (future
@@ -71,8 +89,7 @@
                             (try
                               (let [records (.poll consumer (Duration/ofMillis 1000))]
                                 (doseq [record records]
-                                  (log/debug "Consumed record for topic" topic ":" (.key record) "=>" (.value record))
-                                  (db-put cf-handle (.key record) (.value record))))
+                                  (process-record cf-handle record)))
                               (catch Exception e
                                 (log/error e "Error in Kafka consumer loop for topic" topic))))
                           (log/info "Kafka consumer stopped for topic" topic)
