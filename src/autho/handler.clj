@@ -2,6 +2,7 @@
   (:require [autho.pdp :as pdp]
             [autho.prp :as prp]
             [autho.pip :as pip]
+            [autho.kafka-pip :as kpip]
             [autho.journal :as jrnl]
             [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
@@ -138,6 +139,11 @@
              (println "TODO") ;; //TODO
              )
            (context "/admin" []
+             (GET "/listRDB" []
+               (json-response (kpip/list-column-families)))
+             (DELETE "/clearRDB/:class-name" [class-name]
+               (kpip/clear-column-family class-name)
+               (json-response {:status "ok" :message (str "Column family " class-name " cleared.")}))
              (POST "/reinit" []
                (pdp/init)
                (json-response {:status "ok" :message "PDP reinitialized."}))

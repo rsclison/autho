@@ -340,6 +340,40 @@ A JSON array where each element contains the PIP's declaration and the result of
 ]
 ```
 
+### Admin Endpoints
+
+These endpoints are for administrative tasks, such as managing the underlying data stores.
+
+#### `GET /admin/listRDB`
+
+Lists all the RocksDB column families currently in use. In `autho`, column families are used to store cached data for different classes of objects from Kafka PIPs.
+
+**Response Body:**
+
+A JSON array of strings, where each string is the name of a column family.
+
+```json
+[
+  "persons",
+  "documents"
+]
+```
+
+#### `DELETE /admin/clearRDB/:class-name`
+
+Clears all data from a specific RocksDB column family. The `:class-name` corresponds to the object class whose cache you want to clear.
+
+**Response Body:**
+
+A JSON object confirming the operation.
+
+```json
+{
+  "status": "ok",
+  "message": "Column family my_class cleared."
+}
+```
+
 ## Configuration
 
 The `autho` server is configured through the `resources/pdp-prop.properties` file. This file uses a simple key-value format.
