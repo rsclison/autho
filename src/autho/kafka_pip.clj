@@ -97,6 +97,27 @@
     {:thread consumer-thread
      :stop-fn #(reset! stop-atom true)}))
 
+;; --- Admin Functions ---
+
+(defn list-column-families []
+  (when-let [cf-handles (:cf-handles @db-state)]
+    (->> (keys cf-handles)
+         (filter #(not= % "default"))
+         (into []))))
+
+(defn clear-column-family [class-name]
+  (log/info "Clearing column family:" class-name)
+  (if-let [db (:db-instance @db-state)]
+    (if-let [cf-handle (get-cf-handle class-name)]
+      (with-open [iter (.newIterator db cf-handle)]
+        (.seekToFirst iter)
+        (while (.isValid iter)
+          (let [key-bytes (.key iter)]
+            (.delete db cf-handle key-bytes))
+          (.next iter)))
+      (log/warn "Attempted to clear non-existent column family:" class-name))
+    (log/error "RocksDB not initialized, cannot clear column family.")))
+
 ;; --- Public PIP Interface ---
 
 (defn init-pip [config]
