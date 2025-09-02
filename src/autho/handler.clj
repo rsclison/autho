@@ -1,6 +1,7 @@
 (ns autho.handler
   (:require [autho.pdp :as pdp]
             [autho.prp :as prp]
+            [autho.pip :as pip]
             [autho.journal :as jrnl]
             [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
@@ -134,7 +135,19 @@
                (json-response {:status "ok" :message "PDP reinitialized."}))
              (POST "/reload_rules" []
                (prp/initf (pdp/get-rules-repository-path))
-               (json-response {:status "ok" :message "Rule repository reloaded."})))
+               (json-response {:status "ok" :message "Rule repository reloaded."}))
+             (GET "/testpips" []
+               (let [pips (prp/get-pips)
+                     results (map (fn [pip-config]
+                                    (let [pip-class (:class pip-config "unknown")]
+                                      (try
+                                        ;; We don't care about the result, just that it doesn't throw.
+                                        (pip/callPip {:pip pip-config} :test {:id "test-id"})
+                                        {:class pip-class :status "ok"}
+                                        (catch Exception e
+                                          {:class pip-class :status "error" :message (.getMessage e)}))))
+                                  pips)]
+                 (json-response results))))
            (route/not-found "Not Found"))
 
 
