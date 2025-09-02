@@ -16,16 +16,32 @@
 
 ;; REST PIP implementation (from urlPip)
 (defmethod callPip :rest [decl att obj]
-  (let [pip-info (:pip decl)]
-    (if (= (:verb pip-info) "post") ; Note: the original urlPip only handles POST
-      (try
-        (let [resp (client/post (:url pip-info) {:form-params obj :content-type :json})
-              jsresp (json/read-str (:body resp) :key-fn keyword)]
-          jsresp)
-        (catch Exception e
-          (u/log ::pip-exception :exception e :pip-info pip-info)
-          nil))
-      nil)))
+  (let [pip-info (:pip decl)
+        verb (keyword (or (:verb pip-info) "get")) ; Default to GET
+        url (:url pip-info)
+        obj-id (:id obj)]
+    (try
+      (let [full-url (if (= verb :get) (str url "/" obj-id) url)
+            http-opts {:throw-exceptions false
+                       :content-type :json
+                       :as :json
+                       :coerce :always}
+            req-opts (if (= verb :post)
+                       (assoc http-opts :form-params obj)
+                       http-opts)
+            response (case verb
+                       :get (client/get full-url req-opts)
+                       :post (client/post url req-opts))]
+        (if (>= (:status response) 400)
+          (do
+            (u/log ::pip-call-failed :status (:status response) :body (:body response) :pip-info pip-info)
+            (if (= (:status response) 404)
+              {:error "object not found"}
+              {:error "pip_call_failed" :status (:status response)}))
+          (:body response)))
+      (catch Exception e
+        (u/log ::pip-exception :exception e :pip-info pip-info)
+        {:error "pip_exception" :message (.getMessage e)}))))
 
 (defmethod callPip :kafka-pip [decl att obj]
   (let [pip-info (:pip decl)

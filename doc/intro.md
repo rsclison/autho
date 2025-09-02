@@ -21,6 +21,73 @@ The core of `autho` is a Policy Decision Point (PDP) that evaluates incoming req
 *   **Delegation of Rights:** Users can delegate their access rights to other users.
 *   **Extensible:** Connect to various attribute sources like databases or LDAP to enrich authorization requests.
 
+## Policy Information Points (PIPs)
+
+Policy Information Points (PIPs) are used to fetch additional attributes from external sources to enrich the context of an authorization request. `autho` supports several types of PIPs, which are configured in the `resources/pips.edn` file.
+
+### REST PIPs
+
+REST PIPs allow `autho` to query external RESTful services to retrieve attributes.
+
+#### Configuration
+
+A REST PIP is defined in `resources/pips.edn` with the following properties:
+
+*   `:class`: The business object class that the PIP resolves.
+*   `:attributes`: A list of attributes that the PIP can resolve for the class.
+*   `:pip`: A map containing the PIP's configuration:
+    *   `:type`: Must be `:rest`.
+    *   `:url`: The base URL of the REST service.
+    *   `:verb`: (Optional) The HTTP verb to use. Can be `"get"` or `"post"`. Defaults to `"get"`.
+    *   `:cacheable`: (Optional) A boolean indicating if the response should be cached.
+
+**Example:**
+
+```edn
+[
+ {:class :person :attributes [:name :surname] :pip {:type :rest :url "http://person-service/persons"}}
+ {:class :document :attributes [:sensitivity] :pip {:type :rest :url "http://doc-info/docs" :verb "post"}}
+]
+```
+
+#### Expected Response Format
+
+When a REST PIP is called, it will make an HTTP request to the configured URL.
+
+*   For `GET` requests, the object ID is appended to the URL (e.g., `http://person-service/persons/123`).
+*   For `POST` requests, the request context is sent as a JSON object in the request body.
+
+The REST service is expected to return a JSON object representing the resolved attributes.
+
+**Success Response:**
+
+A successful response should have a `200 OK` status and a JSON body with the requested attributes.
+
+```json
+{
+  "name": "John",
+  "surname": "Doe",
+  "grade": "A"
+}
+```
+
+**Error Response:**
+
+If the requested object cannot be found, the service should return a `404 Not Found` status. `autho` will interpret this as a standardized error response. For other errors, `autho` will also generate a standardized error message.
+
+*   **Object Not Found (404):** `autho` will produce the following JSON object:
+    ```json
+    { "error": "object not found" }
+    ```
+*   **Other Errors:** For any other HTTP error status, `autho` will produce a generic error with the status code:
+    ```json
+    { "error": "pip_call_failed", "status": 500 }
+    ```
+*   **Exceptions:** For network issues or other exceptions during the call, `autho` will produce the following error:
+    ```json
+    { "error": "pip_exception", "message": "Connection refused" }
+    ```
+
 ## Getting Started
 
 ### Prerequisites
@@ -248,6 +315,29 @@ A JSON object confirming the deletion.
   "status": "success",
   "message": "Policy 'document' deleted."
 }
+```
+
+### Admin & Testing Endpoints
+
+#### `GET /pips/test`
+
+This endpoint tests all configured REST PIPs to ensure they are responsive. It iterates through all PIPs of type `:rest` in `pips.edn`, calls them with a dummy ID, and returns the results. This is useful for diagnosing issues with PIP connections.
+
+**Response Body:**
+
+A JSON array where each element contains the PIP's declaration and the result of the test call.
+
+```json
+[
+  {
+    "pip": {
+      "class": "person",
+      "attributes": ["name", "surname"],
+      "pip": { "type": "rest", "url": "http://person-service/persons" }
+    },
+    "result": { "error": "object not found" }
+  }
+]
 ```
 
 ## Configuration

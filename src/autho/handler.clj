@@ -1,6 +1,7 @@
 (ns autho.handler
   (:require [autho.pdp :as pdp]
             [autho.prp :as prp]
+            [autho.pip :as pip]
             [autho.journal :as jrnl]
             [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
@@ -56,6 +57,14 @@
            (GET "/policies" []
              (json-response (prp/get-policies))
              )
+           (GET "/pips/test" []
+             (let [pips (prp/get-pips)
+                   rest-pips (filter #(= :rest (get-in % [:pip :type])) pips)
+                   test-results (map (fn [pip-decl]
+                                       {:pip pip-decl
+                                        :result (pip/callPip pip-decl nil {:id "dummy-id"})})
+                                     rest-pips)]
+               (json-response test-results)))
            (GET "/policy/:resourceClass" [resourceClass]
              (json-response (prp/getPolicy resourceClass nil)))
 
