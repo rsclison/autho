@@ -17,6 +17,7 @@
   :dependencies [[org.clojure/clojure "1.12.2"]
                  [org.clojure/data.csv "1.1.0"]
                  [compojure "1.7.1"]
+                 [buddy/buddy-auth "3.0.323"]
                  [com.appsflyer/donkey "0.5.2" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [luposlip/json-schema "0.4.7" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [com.fasterxml.jackson.core/jackson-core "2.19.2"]

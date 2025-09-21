@@ -9,7 +9,8 @@
             [com.appsflyer.donkey.server :refer [start]]
             [com.appsflyer.donkey.result :refer [on-success]]
             [compojure.route :as route]
-            [jsonista.core :as json])
+            [jsonista.core :as json]
+            [autho.auth :as auth])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.handler"))
@@ -48,109 +49,100 @@
     {:error {:message "Rule repository is not loaded. Please check server logs."}}
     503))
 
-(defroutes app-routes
+(defroutes public-routes
            (route/resources "/")
            (GET "/test" req
-             (do (println "HEAD" (:headers req))(println "GET /test " (slurp(:body req)))(json-response {"coucou" "lala"})))
+                (do (println "HEAD" (:headers req))
+                    (println "GET /test " (slurp (:body req)))
+                    (json-response {"coucou" "lala"})))
            (GET "/init" []
-             (pdp/init)
-             )
+                (pdp/init))
+           (POST "/astro" {body :body}
+                 (println (slurp body))
+                 (json-response {:signe "poisson" :ascendant "poisson"})))
+
+(defroutes protected-routes
            (GET "/policies" []
-             (json-response (prp/get-policies))
-             )
+                (json-response (prp/get-policies)))
            (GET "/pips/test" []
-             (let [pips (prp/get-pips)
-                   rest-pips (filter #(= :rest (get-in % [:pip :type])) pips)
-                   test-results (map (fn [pip-decl]
-                                       {:pip pip-decl
-                                        :result (pip/callPip pip-decl nil {:id "dummy-id"})})
-                                     rest-pips)]
-               (json-response test-results)))
+                (let [pips (prp/get-pips)
+                      rest-pips (filter #(= :rest (get-in % [:pip :type])) pips)
+                      test-results (map (fn [pip-decl]
+                                          {:pip pip-decl
+                                           :result (pip/callPip pip-decl nil {:id "dummy-id"})})
+                                        rest-pips)]
+                  (json-response test-results)))
            (GET "/policy/:resourceClass" [resourceClass]
-             (json-response (prp/getPolicy resourceClass nil)))
-
+                (json-response (prp/getPolicy resourceClass nil)))
            (GET "/whoAuthorized/:resourceClass" [resourceClass]
-             (json-response (pdp/whoAuthorized {:resource {:class resourceClass}}))
-             )
+                (json-response {:error "Not Implemented"} 501))
 
-           (POST "/isAuthorized" {body :body}
-             (cond
-               (= :failed (prp/get-rules-repository-status))
-               (rules-not-loaded-response)
+           (POST "/isAuthorized" request
+                 (cond
+                   (= :failed (prp/get-rules-repository-status))
+                   (rules-not-loaded-response)
 
-               (nil? body)
-               (json-response
-                 {:error {:message "Request body is empty."
-                          :example {:subject {:id "user1"}
-                                    :resource {:class "doc" :id "doc1"}
-                                    :operation "read"}}}
-                 400)
+                   (nil? (:body request))
+                   (json-response
+                    {:error {:message "Request body is empty."}} 400)
 
-               :else
-               (json-response (pdp/isAuthorized (json/read-value (slurp body) json/keyword-keys-object-mapper)))))
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
+                     (json-response (pdp/isAuthorized request body)))))
 
-           (POST "/whoAuthorized" {body :body}
-             (cond
-               (= :failed (prp/get-rules-repository-status))
-               (rules-not-loaded-response)
+           (POST "/whoAuthorized" request
+                 (cond
+                   (= :failed (prp/get-rules-repository-status))
+                   (rules-not-loaded-response)
 
-               (nil? body)
-               (json-response
-                 {:error {:message "Request body is empty."
-                          :example {:resource {:class "doc"}
-                                    :operation "read"}}}
-                 400)
+                   (nil? (:body request))
+                   (json-response
+                    {:error {:message "Request body is empty."}} 400)
 
-               :else
-               (let [input-json (json/read-value (slurp body) json/keyword-keys-object-mapper)
-                     result (pdp/whoAuthorized input-json)]
-                 (json-response result))))
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
+                     (json-response (pdp/whoAuthorized request body)))))
 
-           (POST "/whichAuthorized" {body :body}
-             (cond
-               (= :failed (prp/get-rules-repository-status))
-               (rules-not-loaded-response)
+           (POST "/whichAuthorized" request
+                 (cond
+                   (= :failed (prp/get-rules-repository-status))
+                   (rules-not-loaded-response)
 
-               (nil? body)
-               (json-response
-                 {:error {:message "Request body is empty."
-                          :example {:subject {:id "user1"}
-                                    :operation "read"}}}
-                 400)
+                   (nil? (:body request))
+                   (json-response
+                    {:error {:message "Request body is empty."}} 400)
 
-               :else
-               (json-response (pdp/whichAuthorized (json/read-value (slurp body) json/keyword-keys-object-mapper)))))
-
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
+                     (json-response (pdp/whichAuthorized request body)))))
 
            (PUT "/policy/:resourceClass"
-             {params :params body :body}
-             (json-response (prp/submit-policy (:resourceClass params) (slurp body)))
-                                                         )
+                {params :params body :body}
+                (json-response (prp/submit-policy (:resourceClass params) (slurp body))))
            (DELETE "/policy/:resourceClass" [resourceClass]
-             (json-response (prp/delete-policy resourceClass))
-                   )
-
-           (POST "/astro" {body :body}
-             (println (slurp body))
-             (json-response {:signe "poisson" :ascendant "poisson"})
-             )
-
+                   (json-response (prp/delete-policy resourceClass)))
            (GET "/explain" {body :body}
-             (println "TODO") ;; //TODO
-             )
+                (println "TODO") ;; //TODO
+                )
            (context "/admin" []
-             (GET "/listRDB" []
-               (json-response (kpip/list-column-families)))
-             (DELETE "/clearRDB/:class-name" [class-name]
-               (kpip/clear-column-family class-name)
-               (json-response {:status "ok" :message (str "Column family " class-name " cleared.")}))
-             (POST "/reinit" []
-               (pdp/init)
-               (json-response {:status "ok" :message "PDP reinitialized."}))
-             (POST "/reload_rules" []
-               (prp/initf (pdp/get-rules-repository-path))
-               (json-response {:status "ok" :message "Rule repository reloaded."})))
-           (route/not-found "Not Found"))
+                    (GET "/listRDB" []
+                         (json-response (kpip/list-column-families)))
+                    (DELETE "/clearRDB/:class-name" [class-name]
+                            (kpip/clear-column-family class-name)
+                            (json-response {:status "ok" :message (str "Column family " class-name " cleared.")}))
+                    (POST "/reinit" []
+                          (pdp/init)
+                          (json-response {:status "ok" :message "PDP reinitialized."}))
+                    (POST "/reload_rules" []
+                          (prp/initf (pdp/get-rules-repository-path))
+                          (json-response {:status "ok" :message "Rule repository reloaded."}))))
+
+(def app-routes
+  (routes
+   public-routes
+   (-> protected-routes
+       (auth/wrap-authentication))
+   (route/not-found "Not Found")))
 
 
 (defn init []
