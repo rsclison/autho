@@ -38,6 +38,12 @@
   (get @properties prop)
   )
 
+(defn- get-subject [request body]
+  (let [identity (:identity request)]
+    (if (= :api-key (:auth-method identity))
+      (:subject body)
+      identity)))
+
 (defn get-rules-repository-path []
   (getProperty :rules.repository))
 
@@ -129,52 +135,56 @@
           one
           {:result false :rules evalglob})))))
 
-(defn isAuthorized [request]
-  (if-not (:resource request)
-    (throw (ex-info "No resource specified" {:status 400})))
-  (if-not (:subject request)
-    (throw (ex-info "No subject specified" {:status 400})))
+(defn isAuthorized [request body]
+  (let [subject (get-subject request body)
+        authz-request {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}]
+    (if-not (:resource authz-request)
+      (throw (ex-info "No resource specified" {:status 400})))
+    (if-not (:subject authz-request)
+      (throw (ex-info "No subject specified" {:status 400})))
 
-  (let [globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
-        augreq (passThroughCache request)
-        evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                           (conj res rule)
-                                           res))
-                         [] (:rules globalPolicy))]
-    (if-not globalPolicy
-      (throw (ex-info "No global policy applicable" {:status 404})))
-    {:results (map #(:name %1) evalglob)}))
+    (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
+          augreq (passThroughCache authz-request)
+          evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                             (conj res rule)
+                                             res))
+                           [] (:rules globalPolicy))]
+      (if-not globalPolicy
+        (throw (ex-info "No global policy applicable" {:status 404})))
+      {:results (map #(:name %1) evalglob)})))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
 ;; on simplifie en retournant la 1ere règle en allow sans vérifier les deny
-(defn whoAuthorized [^Map request]
-  (if-not (:resource request)
+(defn whoAuthorized [request body]
+  (if-not (:resource body)
     (throw (ex-info "No resource specified" {:status 400})))
 
-  (let [candrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource request)))))
-        evrules (filter #(rule/evalRuleWithResource % request) candrules)]
+  (let [candrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource body)))))
+        evrules (filter #(rule/evalRuleWithResource % body) candrules)]
     (map (fn [rule] {:resourceClass (:resourceClass rule)
                      :subjectCond (rest (:subjectCond rule))
                      :operation (:operation rule)})
          evrules)))
 
-(defn whichAuthorized [^Map request]
-  (if-not (:subject request)
-    (throw (ex-info "No subject specified" {:status 400})))
+(defn whichAuthorized [request body]
+  (let [subject (get-subject request body)
+        authz-request {:subject subject :resource (:resource body) :operation (:operation body)}]
+    (if-not (:subject authz-request)
+      (throw (ex-info "No subject specified" {:status 400})))
 
-  (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource request)))))
-        denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource request)))))
-        evrules1 (keep #(rule/evalRuleWithSubject % request) allowrules)
-        evrules2 (keep #(rule/evalRuleWithSubject % request) denyrules)]
-    {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
-                             :resourceCond (rest (:resourceCond rule))
-                             :operation (:operation rule)})
-                 evrules1)
-     :deny (map (fn [rule] {:resourceClass (:resourceClass rule)
-                            :resourceCond (rest (:resourceCond rule))
-                            :operation (:operation rule)})
-                evrules2)}))
+    (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
+          denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
+          evrules1 (keep #(rule/evalRuleWithSubject % authz-request) allowrules)
+          evrules2 (keep #(rule/evalRuleWithSubject % authz-request) denyrules)]
+      {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
+                               :resourceCond (rest (:resourceCond rule))
+                               :operation (:operation rule)})
+                   evrules1)
+       :deny (map (fn [rule] {:resourceClass (:resourceClass rule)
+                              :resourceCond (rest (:resourceCond rule))
+                              :operation (:operation rule)})
+                  evrules2)})))
 
 (defn explain [^Map request]  ;; //TODO
 
