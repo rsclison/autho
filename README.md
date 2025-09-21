@@ -65,6 +65,28 @@ If you want to build the project from source, you will need to install [Leininge
     ```
     The server will start on port 8080 by default.
 
+## Authentication
+
+Most API endpoints are protected and require authentication. The server supports two methods of authentication, designed for different use cases.
+
+### 1. JWT Token (OAuth2)
+
+This method is intended for end-users or services that have obtained a JSON Web Token (JWT) from an OAuth2 provider. The token must be sent in the `Authorization` header with the `Token` scheme.
+
+**Header:**
+`Authorization: Token <your-jwt-here>`
+
+When using this method, the user's identity (the `subject` for the authorization check) is securely derived from the claims inside the validated JWT. Any `subject` provided in the request body will be ignored.
+
+### 2. API Key
+
+This method is intended for trusted backend applications. The application must send a pre-shared secret key in the `X-API-Key` header.
+
+**Header:**
+`X-API-Key: <your-secret-api-key>`
+
+When a request is authenticated with a valid API key, the server considers it to be from a trusted source. In this case, the application is allowed to specify the `subject` for the authorization check directly in the request body. This is useful for internal services that need to check permissions on behalf of different users.
+
 ## API Documentation
 
 The `autho` server exposes a REST API for managing policies and evaluating authorization requests. All API endpoints accept and return JSON.
@@ -81,7 +103,7 @@ This is the main endpoint for checking permissions. It takes a subject, a resour
 
 The request body must be a JSON object with the following keys:
 
-*   `subject`: An object representing the user or service making the request.
+*   `subject`: An object representing the user or service making the request. **Note:** This field is only used when authenticating with an API Key. When using JWT authentication, the subject is derived from the token and this field is ignored.
 *   `resource`: An object representing the resource being accessed.
 *   `action`: A string representing the action being performed.
 
@@ -147,7 +169,7 @@ This endpoint is the inverse of `whoAuthorized`. It retrieves the resources that
 
 The request body must be a JSON object with the following keys:
 
-*   `subject`: An object representing the user or service making the request.
+*   `subject`: An object representing the user or service making the request. **Note:** This field is only used when authenticating with an API Key. When using JWT authentication, the subject is derived from the token and this field is ignored.
 *   `action`: A string representing the action being performed.
 
 ```json
