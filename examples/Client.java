@@ -18,6 +18,7 @@ public class Client {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:8080/" + endpoint))
                 .header("Content-Type", "application/json")
+                .header("X-API-Key", "trusted-app-secret") // Add API key for authentication
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 

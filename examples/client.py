@@ -6,7 +6,12 @@ def _post_request(endpoint, data):
     Helper function to send a POST request to a given endpoint.
     """
     url = f"http://localhost:8080/{endpoint}"
-    headers = {"Content-Type": "application/json"}
+    # Add the API key for authentication. In a real application,
+    # this secret should be handled securely.
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-Key": "trusted-app-secret"
+    }
 
     try:
         response = requests.post(url, data=json.dumps(data), headers=headers)

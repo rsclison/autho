@@ -9,7 +9,8 @@
     (let [response (client/post (str "http://localhost:8080/" endpoint)
                                 {:body (json/write-str body)
                                  :content-type :json
-                                 :accept :json})]
+                                 :accept :json
+                                 :headers {"X-API-Key" "trusted-app-secret"}})]
       (json/read-str (:body response) :key-fn keyword))
     (catch Exception e
       (println (str "Error connecting to the server: " (.getMessage e)))
