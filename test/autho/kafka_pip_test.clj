@@ -50,8 +50,8 @@
       (let [retrieved (.get db-instance cf-handle (.getBytes test-key StandardCharsets/UTF_8))
             retrieved-str (String. retrieved StandardCharsets/UTF_8)
             retrieved-data (json/read-value retrieved-str)]
-        (is (= "Alice" (get retrieved-data "name")))
-        (is (= "manager" (get retrieved-data "role")))))
+        (is (= "Alice" (get retrieved-data :name)))
+        (is (= "manager" (get retrieved-data :role)))))
     (sut/close-shared-db)))
 
 ;; =============================================================================
@@ -90,10 +90,10 @@
         (let [final-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
               final-str (String. final-bytes StandardCharsets/UTF_8)
               final-attrs (json/read-value final-str)]
-          (is (= "Bob" (get final-attrs "name")))          ;; Preserved
-          (is (= "senior-developer" (get final-attrs "role")))  ;; Updated
-          (is (= "backend" (get final-attrs "team")))       ;; Preserved
-          (is (= "Paris" (get final-attrs "location"))))))  ;; Added
+          (is (= "Bob" (get final-attrs :name)))          ;; Preserved
+          (is (= "senior-developer" (get final-attrs :role)))  ;; Updated
+          (is (= "backend" (get final-attrs :team)))       ;; Preserved
+          (is (= "Paris" (get final-attrs :location))))))  ;; Added
     (sut/close-shared-db)))
 
 (deftest json-merge-null-handling-test
@@ -119,8 +119,8 @@
       (let [final-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
             final-str (String. final-bytes StandardCharsets/UTF_8)
             final-attrs (json/read-value final-str)]
-        (is (= "Charlie" (get final-attrs "name")))
-        (is (= "manager" (get final-attrs "role")))))
+        (is (= "Charlie" (get final-attrs :name)))
+        (is (= "manager" (get final-attrs :role)))))
     (sut/close-shared-db)))
 
 ;; =============================================================================
@@ -144,9 +144,9 @@
       ;; Query via PIP
       (let [result (sut/query-pip "user" user-id)]
         (is (not (nil? result)))
-        (is (= "Diana" (get result "name")))
-        (is (= "admin" (get result "role")))
-        (is (= "IT" (get result "department")))))
+        (is (= "Diana" (get result :name)))
+        (is (= "admin" (get result :role)))
+        (is (= "IT" (get result :department)))))
     (sut/close-shared-db)))
 
 (deftest query-pip-nonexistent-key-test

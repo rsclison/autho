@@ -68,9 +68,9 @@
 
     ;; Step 2: Query PIP to verify data is accessible
     (let [result (kpip/query-pip "user" "alice")]
-      (is (= "Alice" (get result "name")))
-      (is (= "developer" (get result "role")))
-      (is (= "backend" (get result "team"))))
+      (is (= "Alice" (get result :name)))
+      (is (= "developer" (get result :role)))
+      (is (= "backend" (get result :team))))
 
     ;; Step 3: Simulate attribute update via Kafka
     (simulate-kafka-message "user" "alice"
@@ -78,10 +78,10 @@
 
     ;; Step 4: Verify merge-on-read preserved old attrs and updated new ones
     (let [updated-result (kpip/query-pip "user" "alice")]
-      (is (= "Alice" (get updated-result "name")))          ;; Preserved
-      (is (= "senior-developer" (get updated-result "role")))  ;; Updated
-      (is (= "backend" (get updated-result "team")))        ;; Preserved
-      (is (= 75000 (get updated-result "salary"))))         ;; Added
+      (is (= "Alice" (get updated-result :name)))          ;; Preserved
+      (is (= "senior-developer" (get updated-result :role)))  ;; Updated
+      (is (= "backend" (get updated-result :team)))        ;; Preserved
+      (is (= 75000 (get updated-result :salary))))         ;; Added
 
     (kpip/close-shared-db)))
 
@@ -105,12 +105,12 @@
     (let [user-result (kpip/query-pip "user" "bob")
           resource-result (kpip/query-pip "resource" "doc123")]
 
-      (is (= "Bob" (get user-result "name")))
-      (is (= "manager" (get user-result "role")))
+      (is (= "Bob" (get user-result :name)))
+      (is (= "manager" (get user-result :role)))
 
-      (is (= "Q4 Report" (get resource-result "title")))
-      (is (= "bob" (get resource-result "owner")))
-      (is (= "high" (get resource-result "sensitivity"))))
+      (is (= "Q4 Report" (get resource-result :title)))
+      (is (= "bob" (get resource-result :owner)))
+      (is (= "high" (get resource-result :sensitivity))))
 
     ;; Verify no cross-contamination
     (is (nil? (kpip/query-pip "user" "doc123")))
@@ -143,9 +143,9 @@
       (let [result (pip/callPip pip-decl att obj)]
         ;; callPip should return the entire attribute map
         (is (not (nil? result)))
-        (is (= "Charlie" (get result "name")))
-        (is (= "admin" (get result "role")))
-        (is (= 5 (get result "clearance")))))
+        (is (= "Charlie" (get result :name)))
+        (is (= "admin" (get result :role)))
+        (is (= 5 (get result :clearance)))))
 
     (kpip/close-shared-db)))
 
@@ -170,8 +170,8 @@
           resource-attrs (kpip/query-pip "resource" "secret-doc")]
 
       ;; Initial check: Should DENY (not a manager)
-      (is (= "developer" (get user-attrs "role")))
-      (is (not= "manager" (get user-attrs "role"))))
+      (is (= "developer" (get user-attrs :role)))
+      (is (not= "manager" (get user-attrs :role))))
 
     ;; Kafka message: User gets promoted!
     (simulate-kafka-message "user" "employee123"
@@ -179,8 +179,8 @@
 
     ;; Re-check: Should now ALLOW
     (let [updated-user-attrs (kpip/query-pip "user" "employee123")]
-      (is (= "manager" (get updated-user-attrs "role")))
-      (is (= "product" (get updated-user-attrs "team"))))  ;; Team preserved
+      (is (= "manager" (get updated-user-attrs :role)))
+      (is (= "product" (get updated-user-attrs :team))))  ;; Team preserved
 
     (kpip/close-shared-db)))
 
@@ -203,13 +203,13 @@
     (doseq [i (range 100)]
       (let [result (kpip/query-pip "user" (str "user" i))]
         (is (not (nil? result)))
-        (is (= (str "User" i) (get result "name")))
-        (is (= i (get result "id")))))
+        (is (= (str "User" i) (get result :name)))
+        (is (= i (get result :id)))))
 
     ;; Verify correct role distribution
-    (let [developers (filter #(= "developer" (get % "role"))
+    (let [developers (filter #(= "developer" (get % :role))
                              (map #(kpip/query-pip "user" (str "user" %)) (range 100)))
-          managers (filter #(= "manager" (get % "role"))
+          managers (filter #(= "manager" (get % :role))
                           (map #(kpip/query-pip "user" (str "user" %)) (range 100)))]
       (is (= 50 (count developers)))
       (is (= 50 (count managers))))
@@ -229,7 +229,7 @@
                             {:name "Temp" :role "contractor" :expiry "2024-12-31"})
 
     (let [initial (kpip/query-pip "user" "tempuser")]
-      (is (= "2024-12-31" (get initial "expiry"))))
+      (is (= "2024-12-31" (get initial :expiry))))
 
     ;; Update: Remove expiry (contract extended, no end date)
     ;; Note: In Clojure, merge with nil value keeps the key
@@ -239,8 +239,8 @@
 
     (let [updated (kpip/query-pip "user" "tempuser")]
       ;; With standard merge, nil value overwrites the key
-      (is (nil? (get updated "expiry")))
-      (is (= "Temp" (get updated "name"))))  ;; Other attrs preserved
+      (is (nil? (get updated :expiry)))
+      (is (= "Temp" (get updated :name))))  ;; Other attrs preserved
 
     (kpip/close-shared-db)))
 
@@ -260,12 +260,12 @@
                              :metadata {:created "2024-01-01" :last-login "2024-06-15"}})
 
     (let [result (kpip/query-pip "user" "admin")]
-      (is (= "Admin" (get result "name")))
-      (is (vector? (get result "roles")))
-      (is (= 3 (count (get result "roles"))))
-      (is (contains? (set (get result "roles")) "admin"))
+      (is (= "Admin" (get result :name)))
+      (is (vector? (get result :roles)))
+      (is (= 3 (count (get result :roles))))
+      (is (contains? (set (get result :roles)) "admin"))
 
-      (is (map? (get result "permissions")))
+      (is (map? (get result :permissions)))
       (is (true? (get-in result ["permissions" "write"])))
 
       (is (= "2024-01-01" (get-in result ["metadata" "created"]))))
@@ -290,9 +290,9 @@
                               {:login-count i :last-login (str "2024-06-" (+ 10 i))}))
 
     (let [final (kpip/query-pip "user" "activeuser")]
-      (is (= "Active" (get final "name")))        ;; Preserved from initial
-      (is (= 10 (get final "login-count")))       ;; Latest update
-      (is (= "2024-06-20" (get final "last-login"))))  ;; Latest timestamp
+      (is (= "Active" (get final :name)))        ;; Preserved from initial
+      (is (= 10 (get final :login-count)))       ;; Latest update
+      (is (= "2024-06-20" (get final :last-login))))  ;; Latest timestamp
 
     (kpip/close-shared-db)))
 

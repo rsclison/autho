@@ -83,14 +83,14 @@
               resource-attrs (kpip/query-pip "resource" "budget-report")]
 
           ;; Verify attributes were retrieved from Kafka PIP
-          (is (= "manager" (get subject-attrs "role")))
-          (is (= "finance" (get subject-attrs "department")))
-          (is (= "confidential" (get resource-attrs "classification")))
-          (is (= "finance" (get resource-attrs "department")))
+          (is (= "manager" (get subject-attrs :role)))
+          (is (= "finance" (get subject-attrs :department)))
+          (is (= "confidential" (get resource-attrs :classification)))
+          (is (= "finance" (get resource-attrs :department)))
 
           ;; Verify rule would match (same department)
-          (is (= (get subject-attrs "department")
-                 (get resource-attrs "department"))))))
+          (is (= (get subject-attrs :department)
+                 (get resource-attrs :department))))))
 
     (kpip/close-shared-db)))
 
@@ -112,8 +112,8 @@
     ;; Check 1: Developer should NOT have access
     (let [user-attrs (kpip/query-pip "user" "bob")
           resource-attrs (kpip/query-pip "resource" "prod-database")]
-      (is (= "developer" (get user-attrs "role")))
-      (is (not= (get user-attrs "role") (get resource-attrs "required-role"))))
+      (is (= "developer" (get user-attrs :role)))
+      (is (not= (get user-attrs :role) (get resource-attrs :required-role))))
 
     ;; Event: Bob gets promoted to admin (via Kafka message)
     (simulate-kafka-message "user" "bob"
@@ -122,11 +122,11 @@
     ;; Check 2: Admin should have access
     (let [updated-user-attrs (kpip/query-pip "user" "bob")
           resource-attrs (kpip/query-pip "resource" "prod-database")]
-      (is (= "admin" (get updated-user-attrs "role")))
-      (is (= (get updated-user-attrs "role") (get resource-attrs "required-role")))
+      (is (= "admin" (get updated-user-attrs :role)))
+      (is (= (get updated-user-attrs :role) (get resource-attrs :required-role)))
       ;; Verify other attributes preserved
-      (is (= "Bob" (get updated-user-attrs "name")))
-      (is (= "backend" (get updated-user-attrs "team"))))
+      (is (= "Bob" (get updated-user-attrs :name)))
+      (is (= "backend" (get updated-user-attrs :team))))
 
     (kpip/close-shared-db)))
 
@@ -152,14 +152,14 @@
     ;; Test 1: Manager can approve $5K (below limit)
     (let [user-attrs (kpip/query-pip "user" "manager1")
           resource-5k-attrs (kpip/query-pip "resource" "purchase-req-5k")]
-      (is (< (get resource-5k-attrs "amount")
-             (get user-attrs "approval-limit"))))
+      (is (< (get resource-5k-attrs :amount)
+             (get user-attrs :approval-limit))))
 
     ;; Test 2: Manager cannot approve $50K (above limit)
     (let [user-attrs (kpip/query-pip "user" "manager1")
           resource-50k-attrs (kpip/query-pip "resource" "purchase-req-50k")]
-      (is (> (get resource-50k-attrs "amount")
-             (get user-attrs "approval-limit"))))
+      (is (> (get resource-50k-attrs :amount)
+             (get user-attrs :approval-limit))))
 
     ;; Event: Manager gets limit increase via Kafka
     (simulate-kafka-message "user" "manager1"
@@ -168,8 +168,8 @@
     ;; Test 3: Now manager can approve $50K
     (let [updated-user-attrs (kpip/query-pip "user" "manager1")
           resource-50k-attrs (kpip/query-pip "resource" "purchase-req-50k")]
-      (is (< (get resource-50k-attrs "amount")
-             (get updated-user-attrs "approval-limit"))))
+      (is (< (get resource-50k-attrs :amount)
+             (get updated-user-attrs :approval-limit))))
 
     (kpip/close-shared-db)))
 
@@ -201,15 +201,15 @@
           resource-attrs (kpip/query-pip "resource" "project-alpha")]
 
       ;; Condition 1: Same team
-      (is (= (get user-attrs "team") (get resource-attrs "team")))
+      (is (= (get user-attrs :team) (get resource-attrs :team)))
 
       ;; Condition 2: Sufficient clearance
-      (is (>= (get user-attrs "clearance-level")
-              (get resource-attrs "required-clearance")))
+      (is (>= (get user-attrs :clearance-level)
+              (get resource-attrs :required-clearance)))
 
       ;; Condition 3: Allowed location
-      (is (some #(= % (get user-attrs "location"))
-                (get resource-attrs "allowed-locations"))))
+      (is (some #(= % (get user-attrs :location))
+                (get resource-attrs :allowed-locations))))
 
     (kpip/close-shared-db)))
 
@@ -238,10 +238,10 @@
           delegate-attrs (kpip/query-pip "user" "junior-manager")]
 
       ;; Check delegation conditions
-      (is (true? (get delegator-attrs "can-delegate")))
-      (is (= "senior-manager" (get delegate-attrs "reports-to")))
-      (is (= (get delegator-attrs "max-delegation-level")
-             (get delegate-attrs "role"))))
+      (is (true? (get delegator-attrs :can-delegate)))
+      (is (= "senior-manager" (get delegate-attrs :reports-to)))
+      (is (= (get delegator-attrs :max-delegation-level)
+             (get delegate-attrs :role))))
 
     (kpip/close-shared-db)))
 
@@ -268,19 +268,19 @@
           resource-attrs (kpip/query-pip "resource" "temp-project")]
 
       ;; Verify access is valid (expiry matches project end)
-      (is (= (get user-attrs "access-expiry")
-             (get resource-attrs "end-date")))
-      (is (= "active" (get user-attrs "status"))))
+      (is (= (get user-attrs :access-expiry)
+             (get resource-attrs :end-date)))
+      (is (= "active" (get user-attrs :status))))
 
     ;; Event: Contract expires (status update via Kafka)
     (simulate-kafka-message "user" "contractor"
                             {:status "expired"})
 
     (let [updated-user-attrs (kpip/query-pip "user" "contractor")]
-      (is (= "expired" (get updated-user-attrs "status")))
+      (is (= "expired" (get updated-user-attrs :status)))
       ;; Other attributes should be preserved
-      (is (= "Contractor" (get updated-user-attrs "name")))
-      (is (= "2024-12-31" (get updated-user-attrs "access-expiry"))))
+      (is (= "Contractor" (get updated-user-attrs :name)))
+      (is (= "2024-12-31" (get updated-user-attrs :access-expiry))))
 
     (kpip/close-shared-db)))
 
@@ -311,12 +311,12 @@
     (let [user-attrs (kpip/query-pip "user" "doctor")
           resource-attrs (kpip/query-pip "resource" "patient-record-123")]
 
-      (is (= (get user-attrs "specialty")
-             (get resource-attrs "department")))
-      (is (= (get user-attrs "hospital")
-             (get resource-attrs "hospital")))
-      (is (= (get user-attrs "verified")
-             (get resource-attrs "requires-verification"))))
+      (is (= (get user-attrs :specialty)
+             (get resource-attrs :department)))
+      (is (= (get user-attrs :hospital)
+             (get resource-attrs :hospital)))
+      (is (= (get user-attrs :verified)
+             (get resource-attrs :requires-verification))))
 
     ;; Event: Doctor transfers to different hospital
     (simulate-kafka-message "user" "doctor"
@@ -326,11 +326,11 @@
     (let [updated-user-attrs (kpip/query-pip "user" "doctor")
           resource-attrs (kpip/query-pip "resource" "patient-record-123")]
 
-      (is (not= (get updated-user-attrs "hospital")
-                (get resource-attrs "hospital")))
+      (is (not= (get updated-user-attrs :hospital)
+                (get resource-attrs :hospital)))
       ;; But specialty is still preserved
-      (is (= (get updated-user-attrs "specialty")
-             (get resource-attrs "department"))))
+      (is (= (get updated-user-attrs :specialty)
+             (get resource-attrs :department))))
 
     ;; Event: Patient record also transferred
     (simulate-kafka-message "resource" "patient-record-123"
@@ -340,8 +340,8 @@
     (let [user-attrs (kpip/query-pip "user" "doctor")
           resource-attrs (kpip/query-pip "resource" "patient-record-123")]
 
-      (is (= (get user-attrs "hospital")
-             (get resource-attrs "hospital"))))
+      (is (= (get user-attrs :hospital)
+             (get resource-attrs :hospital))))
 
     (kpip/close-shared-db)))
 
@@ -375,10 +375,10 @@
               resource-attrs (kpip/query-pip "resource" resource-id)
 
               ;; Simple authorization logic
-              authorized? (and (= (get user-attrs "role")
-                                  (get resource-attrs "required-role"))
-                               (>= (get user-attrs "level")
-                                   (get resource-attrs "required-level")))]
+              authorized? (and (= (get user-attrs :role)
+                                  (get resource-attrs :required-role))
+                               (>= (get user-attrs :level)
+                                   (get resource-attrs :required-level)))]
           authorized?))
 
       (let [end (System/currentTimeMillis)
