@@ -36,19 +36,21 @@
 (defn simulate-kafka-message
   "Simulates processing a Kafka message by directly calling process-record logic"
   [class-name entity-id attributes]
-  (let [cf-handle (get @kpip/column-families class-name)
+  (let [cf-handles (:cf-handles @kpip/db-state)
+        db-instance (:db-instance @kpip/db-state)
+        cf-handle (get cf-handles class-name)
         key entity-id
         new-value-str (json/write-value-as-string attributes)
 
         ;; Simulate the merge-on-read logic from kafka_pip.clj
-        existing-bytes (.get @kpip/shared-db cf-handle
+        existing-bytes (.get db-instance cf-handle
                              (.getBytes key java.nio.charset.StandardCharsets/UTF_8))
         existing-attrs (when existing-bytes
                          (json/read-value (String. existing-bytes java.nio.charset.StandardCharsets/UTF_8)))
         merged-attrs (merge existing-attrs attributes)
         merged-json (json/write-value-as-string merged-attrs)]
 
-    (.put @kpip/shared-db cf-handle
+    (.put db-instance cf-handle
           (.getBytes key java.nio.charset.StandardCharsets/UTF_8)
           (.getBytes merged-json java.nio.charset.StandardCharsets/UTF_8))))
 

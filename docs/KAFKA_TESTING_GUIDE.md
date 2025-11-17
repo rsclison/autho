@@ -148,7 +148,8 @@ lein cloverage --ns-regex autho.kafka-pip
 (deftest json-merge-logic-test
   (testing "New attributes overwrite existing ones"
     (kpip/open-shared-db test-db-path ["user"])
-    (let [cf-handle (get @kpip/column-families "user")]
+    (let [cf-handles (:cf-handles @kpip/db-state)
+          cf-handle (get cf-handles "user")]
 
       ;; État initial
       (put-to-rocksdb cf-handle "user456"
@@ -225,10 +226,12 @@ lein test :only autho.kafka-integration-test/kafka-message-processing-flow-test
 (defn simulate-kafka-message
   "Simule le traitement d'un message Kafka"
   [class-name entity-id attributes]
-  (let [cf-handle (get @kpip/column-families class-name)
+  (let [cf-handles (:cf-handles @kpip/db-state)
+        db-instance (:db-instance @kpip/db-state)
+        cf-handle (get cf-handles class-name)
         key entity-id
         ;; Récupérer état existant
-        existing-bytes (.get @kpip/shared-db cf-handle
+        existing-bytes (.get db-instance cf-handle
                              (.getBytes key StandardCharsets/UTF_8))
         existing-attrs (when existing-bytes
                          (json/read-value (String. existing-bytes)))
@@ -236,7 +239,7 @@ lein test :only autho.kafka-integration-test/kafka-message-processing-flow-test
         merged-attrs (merge existing-attrs attributes)
         merged-json (json/write-value-as-string merged-attrs)]
     ;; Écrire résultat
-    (.put @kpip/shared-db cf-handle
+    (.put db-instance cf-handle
           (.getBytes key StandardCharsets/UTF_8)
           (.getBytes merged-json StandardCharsets/UTF_8))))
 
@@ -557,7 +560,7 @@ lein trampoline run -m clojure.main \
     (f)
     (cleanup-test-db)
     ;; Force close si nécessaire
-    (when @kpip/shared-db
+    (when (:db-instance @kpip/db-state)
       (kpip/close-shared-db))))
 ```
 
