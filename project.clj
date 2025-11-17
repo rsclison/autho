@@ -37,7 +37,7 @@
                  [org.slf4j/slf4j-api "2.0.17"]
                  [ch.qos.logback/logback-classic "1.5.18"]
                  [org.apache.kafka/kafka-clients "4.1.0"]
-                 [org.rocksdb/rocksdbjni "10.4.2"]]
+                 [org.rocksdb/rocksdbjni "8.11.4"]]
   :main autho.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all
