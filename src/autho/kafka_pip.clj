@@ -1,7 +1,7 @@
 (ns autho.kafka-pip
   (:require [clojure.tools.logging :as log]
             [jsonista.core :as json])
-  (:import (org.rocksdb RocksDB Options ColumnFamilyDescriptor ColumnFamilyHandle)
+  (:import (org.rocksdb RocksDB Options DBOptions ColumnFamilyDescriptor ColumnFamilyHandle ColumnFamilyOptions)
            (org.apache.kafka.clients.consumer KafkaConsumer ConsumerConfig)
            (java.util Properties ArrayList List)
            (java.nio.charset StandardCharsets)
@@ -18,11 +18,12 @@
 
 (defn open-shared-db [path class-names]
   (log/info "Opening shared RocksDB at" path "for classes:" class-names)
-  (let [default-cf-descriptor (ColumnFamilyDescriptor. RocksDB/DEFAULT_COLUMN_FAMILY)
+  (let [db-opts (-> (DBOptions.) (.setCreateIfMissing true) (.setCreateMissingColumnFamilies true))
+        cf-opts (ColumnFamilyOptions.)
+        default-cf-descriptor (ColumnFamilyDescriptor. RocksDB/DEFAULT_COLUMN_FAMILY cf-opts)
         cf-descriptors (into [default-cf-descriptor]
-                             (map #(ColumnFamilyDescriptor. (.getBytes % StandardCharsets/UTF_8)) class-names))
+                             (map #(ColumnFamilyDescriptor. (.getBytes % StandardCharsets/UTF_8) (ColumnFamilyOptions.)) class-names))
         cf-handles-list (ArrayList.)
-        db-opts (-> (Options.) (.setCreateIfMissing true) (.setCreateMissingColumnFamilies true))
         db (RocksDB/open db-opts path cf-descriptors cf-handles-list)]
 
     (let [cf-handles-map (into {}
