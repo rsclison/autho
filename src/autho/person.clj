@@ -5,10 +5,13 @@
 
 
 (defmulti loadPersons (fn [config] (:type config)))
+
 (defmethod loadPersons :file [config]
+  ;; TODO: Implement file-based person loading
+  ;; Expected to read persons from a file specified in config
   []
   )
-(defmethod loadPersons :grhum [config])
+
 (defmethod loadPersons :ldap [config]
   (let [props (:props config)
         base-dn (:ldap.basedn props)

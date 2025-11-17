@@ -14,12 +14,13 @@
   (:require [autho.prp :as prp]
             [autho.pdp :as pdp]
             [autho.journal :as jrnl]
-            [clojure.data.json :as json]
-            )
-  )
+            [clojure.data.json :as json])
+  (:import (org.slf4j LoggerFactory)))
+
+(defonce logger (LoggerFactory/getLogger "autho.javainterop"))
 
 (defn -isAuthorized [req]
-  (println "isAuthorized")
+  (.debug logger "isAuthorized called via Java interop")
   (if (:result(pdp/evalRequest (json/read-str req :key-fn keyword)))
     "allow"
     "deny")
