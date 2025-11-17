@@ -15,3 +15,7 @@ pom.xml.asc
 .calva/output-window/output.calva-repl
 .lsp/.cache/db.transit.json
 autho.log
+
+# Claude Code configuration
+.claude/.session/
+.claude/.*.tmp
