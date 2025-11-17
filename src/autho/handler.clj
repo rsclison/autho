@@ -47,6 +47,21 @@
 ;; Structure: {ip-address [timestamp1 timestamp2 ...]}
 (defonce rate-limit-store (atom {}))
 
+(defn json-response [data & [status]]
+  {:status (or status 200)
+   :headers {"Content-Type" "application/json"}
+   :body (json/write-value-as-string data)})
+
+(defn error-response
+  "Creates a standardized error response with code, message, and timestamp."
+  [error-code message status]
+  {:status status
+   :headers {"Content-Type" "application/json"}
+   :body (json/write-value-as-string
+          {:error {:code error-code
+                   :message message
+                   :timestamp (str (java.time.Instant/now))}})})
+
 (defn- get-client-ip
   "Extracts the client IP address from the request.
   Checks X-Forwarded-For header first (for proxies), then falls back to remote-addr."
@@ -119,21 +134,6 @@
 
 (defn destroy []
   (.info logger "autho is shutting down"))
-
-(defn json-response [data & [status]]
-  {:status (or status 200)
-   :headers {"Content-Type" "application/json"}
-   :body (json/write-value-as-string data)})
-
-(defn error-response
-  "Creates a standardized error response with code, message, and timestamp."
-  [error-code message status]
-  {:status status
-   :headers {"Content-Type" "application/json"}
-   :body (json/write-value-as-string
-          {:error {:code error-code
-                   :message message
-                   :timestamp (str (java.time.Instant/now))}})})
 
 (defn- rules-not-loaded-response []
   (error-response "RULES_NOT_LOADED"
