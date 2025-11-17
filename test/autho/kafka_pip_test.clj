@@ -27,27 +27,27 @@
 
 (deftest rocksdb-initialization-test
   (testing "RocksDB database opens successfully with multiple column families"
-    (let [class-names ["user" "resource"]
-          result (sut/open-shared-db test-db-path class-names)]
-      (is (= :ok result))
-      (is (not (nil? @sut/shared-db)))
-      (is (= 2 (count @sut/column-families)))
+    (let [class-names ["user" "resource"]]
+      (sut/open-shared-db test-db-path class-names)
+      (is (not (nil? (:db-instance @sut/db-state))))
+      (is (= 2 (count (:cf-handles @sut/db-state))))
       (sut/close-shared-db))))
 
 (deftest rocksdb-column-family-operations-test
   (testing "Can write and read from column families"
     (sut/open-shared-db test-db-path ["user"])
-    (let [cf-handle (get @sut/column-families "user")
+    (let [db-instance (:db-instance @sut/db-state)
+          cf-handle (get (:cf-handles @sut/db-state) "user")
           test-key "user123"
           test-value (json/write-value-as-string {:name "Alice" :role "manager"})]
 
       ;; Write to RocksDB
-      (.put @sut/shared-db cf-handle
+      (.put db-instance cf-handle
             (.getBytes test-key StandardCharsets/UTF_8)
             (.getBytes test-value StandardCharsets/UTF_8))
 
       ;; Read from RocksDB
-      (let [retrieved (.get @sut/shared-db cf-handle (.getBytes test-key StandardCharsets/UTF_8))
+      (let [retrieved (.get db-instance cf-handle (.getBytes test-key StandardCharsets/UTF_8))
             retrieved-str (String. retrieved StandardCharsets/UTF_8)
             retrieved-data (json/read-value retrieved-str)]
         (is (= "Alice" (get retrieved-data "name")))
@@ -61,18 +61,19 @@
 (deftest json-merge-logic-test
   (testing "New attributes overwrite existing ones (merge-on-read)"
     (sut/open-shared-db test-db-path ["user"])
-    (let [cf-handle (get @sut/column-families "user")
+    (let [db-instance (:db-instance @sut/db-state)
+          cf-handle (get (:cf-handles @sut/db-state) "user")
           key "user456"]
 
       ;; Initial state
       (let [initial-attrs {:name "Bob" :role "developer" :team "backend"}
             initial-json (json/write-value-as-string initial-attrs)]
-        (.put @sut/shared-db cf-handle
+        (.put db-instance cf-handle
               (.getBytes key StandardCharsets/UTF_8)
               (.getBytes initial-json StandardCharsets/UTF_8)))
 
       ;; Simulate update from Kafka (role changed, new attribute added)
-      (let [existing-bytes (.get @sut/shared-db cf-handle (.getBytes key StandardCharsets/UTF_8))
+      (let [existing-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
             existing-str (String. existing-bytes StandardCharsets/UTF_8)
             existing-attrs (json/read-value existing-str)
 
@@ -81,12 +82,12 @@
             merged-json (json/write-value-as-string merged-attrs)]
 
         ;; Write merged result
-        (.put @sut/shared-db cf-handle
+        (.put db-instance cf-handle
               (.getBytes key StandardCharsets/UTF_8)
               (.getBytes merged-json StandardCharsets/UTF_8))
 
         ;; Verify merge
-        (let [final-bytes (.get @sut/shared-db cf-handle (.getBytes key StandardCharsets/UTF_8))
+        (let [final-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
               final-str (String. final-bytes StandardCharsets/UTF_8)
               final-attrs (json/read-value final-str)]
           (is (= "Bob" (get final-attrs "name")))          ;; Preserved
@@ -98,23 +99,24 @@
 (deftest json-merge-null-handling-test
   (testing "First message creates initial state (no existing value)"
     (sut/open-shared-db test-db-path ["user"])
-    (let [cf-handle (get @sut/column-families "user")
+    (let [db-instance (:db-instance @sut/db-state)
+          cf-handle (get (:cf-handles @sut/db-state) "user")
           key "user789"
           new-attrs {:name "Charlie" :role "manager"}
 
           ;; Simulate process-record logic for first message
-          existing-bytes (.get @sut/shared-db cf-handle (.getBytes key StandardCharsets/UTF_8))
+          existing-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
           merged-attrs (if (nil? existing-bytes)
                          new-attrs
                          (merge (json/read-value (String. existing-bytes StandardCharsets/UTF_8)) new-attrs))
           merged-json (json/write-value-as-string merged-attrs)]
 
-      (.put @sut/shared-db cf-handle
+      (.put db-instance cf-handle
             (.getBytes key StandardCharsets/UTF_8)
             (.getBytes merged-json StandardCharsets/UTF_8))
 
       ;; Verify
-      (let [final-bytes (.get @sut/shared-db cf-handle (.getBytes key StandardCharsets/UTF_8))
+      (let [final-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
             final-str (String. final-bytes StandardCharsets/UTF_8)
             final-attrs (json/read-value final-str)]
         (is (= "Charlie" (get final-attrs "name")))
@@ -128,13 +130,14 @@
 (deftest query-pip-test
   (testing "query-pip retrieves attributes from RocksDB"
     (sut/open-shared-db test-db-path ["user"])
-    (let [cf-handle (get @sut/column-families "user")
+    (let [db-instance (:db-instance @sut/db-state)
+          cf-handle (get (:cf-handles @sut/db-state) "user")
           user-id "user999"
           attrs {:name "Diana" :role "admin" :department "IT"}
           attrs-json (json/write-value-as-string attrs)]
 
       ;; Populate RocksDB
-      (.put @sut/shared-db cf-handle
+      (.put db-instance cf-handle
             (.getBytes user-id StandardCharsets/UTF_8)
             (.getBytes attrs-json StandardCharsets/UTF_8))
 
@@ -177,14 +180,15 @@
 (deftest clear-column-family-test
   (testing "clear-column-family removes all entries for a class"
     (sut/open-shared-db test-db-path ["user"])
-    (let [cf-handle (get @sut/column-families "user")]
+    (let [db-instance (:db-instance @sut/db-state)
+          cf-handle (get (:cf-handles @sut/db-state) "user")]
 
       ;; Populate with multiple entries
       (doseq [i (range 5)]
         (let [key (str "user" i)
               attrs {:name (str "User" i) :id i}
               attrs-json (json/write-value-as-string attrs)]
-          (.put @sut/shared-db cf-handle
+          (.put db-instance cf-handle
                 (.getBytes key StandardCharsets/UTF_8)
                 (.getBytes attrs-json StandardCharsets/UTF_8))))
 
@@ -206,12 +210,13 @@
 (deftest malformed-json-handling-test
   (testing "Handles malformed JSON gracefully"
     (sut/open-shared-db test-db-path ["user"])
-    (let [cf-handle (get @sut/column-families "user")
+    (let [db-instance (:db-instance @sut/db-state)
+          cf-handle (get (:cf-handles @sut/db-state) "user")
           key "user-malformed"
           malformed-json "{ invalid json }"]
 
       ;; Write malformed JSON directly to RocksDB
-      (.put @sut/shared-db cf-handle
+      (.put db-instance cf-handle
             (.getBytes key StandardCharsets/UTF_8)
             (.getBytes malformed-json StandardCharsets/UTF_8))
 
