@@ -65,6 +65,49 @@ If you want to build the project from source, you will need to install [Leininge
     ```
     The server will start on port 8080 by default.
 
+## Environment Variables
+
+For security reasons, sensitive configuration values must be provided as environment variables. The following environment variables are **required**:
+
+### Required Environment Variables
+
+*   **`JWT_SECRET`**: The secret key used for JWT token signing and verification. This should be a strong, randomly generated string.
+    ```bash
+    export JWT_SECRET="your-very-secure-jwt-secret-here"
+    ```
+
+*   **`API_KEY`**: The API key for trusted application authentication. This should be a strong, randomly generated string.
+    ```bash
+    export API_KEY="your-very-secure-api-key-here"
+    ```
+
+### Optional Environment Variables
+
+*   **`LDAP_PASSWORD`**: The password for the LDAP bind DN. If not set, the password from `pdp-prop.properties` will be used (not recommended for production).
+    ```bash
+    export LDAP_PASSWORD="your-ldap-password"
+    ```
+
+*   **`MAX_REQUEST_SIZE`**: Maximum request body size in bytes. Default is 1048576 (1MB).
+    ```bash
+    export MAX_REQUEST_SIZE=2097152  # 2MB
+    ```
+
+### Example: Running with Environment Variables
+
+```bash
+export JWT_SECRET="my-super-secret-jwt-key-change-this-in-production"
+export API_KEY="my-super-secret-api-key-change-this-in-production"
+export LDAP_PASSWORD="ldap-password-if-using-ldap"
+java -jar bin/autho.jar
+```
+
+**Important Security Notes:**
+- Never commit these secrets to version control
+- Use different secrets for development, staging, and production environments
+- Rotate secrets regularly
+- Consider using a secrets management system (e.g., HashiCorp Vault, AWS Secrets Manager) in production
+
 ## Authentication
 
 Most API endpoints are protected and require authentication. The server supports two methods of authentication, designed for different use cases.
@@ -313,7 +356,7 @@ The `autho` server is configured through the `resources/pdp-prop.properties` fil
 *   `ldap.filter`: The LDAP filter to use when searching for users.
 *   `ldap.attributes`: A comma-separated list of attributes to fetch from the LDAP directory.
 *   `ldap.connectstring`: The DN to use for binding to the LDAP server.
-*   `ldap.password`: The password for the bind DN.
+*   `ldap.password`: The password for the bind DN. **Note:** For production environments, it is strongly recommended to use the `LDAP_PASSWORD` environment variable instead of storing the password in this configuration file.
 
 ### Person Source
 

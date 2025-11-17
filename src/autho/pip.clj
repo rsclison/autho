@@ -1,10 +1,32 @@
 (ns autho.pip
   (:require [clj-http.client :as client]
+            [clj-http.conn-mgr :as conn-mgr]
             [clojure.data.json :as json]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [com.brunobonacci.mulog :as u]
-            [autho.kafka-pip :as kafka-pip]))
+            [autho.kafka-pip :as kafka-pip])
+  (:import (org.slf4j LoggerFactory)))
+
+(defonce logger (LoggerFactory/getLogger "autho.pip"))
+
+;; Connection pool for HTTP PIPs
+;; Reuses connections for better performance
+;; Configuration:
+;; - timeout: 10 seconds
+;; - threads: 20 concurrent connections per route
+;; - total connections: 100
+(defonce http-connection-manager
+  (conn-mgr/make-reusable-conn-manager
+   {:timeout 10
+    :threads 20
+    :default-per-route 20}))
+
+;; Shutdown hook to close connection manager
+(.addShutdownHook (Runtime/getRuntime)
+                  (Thread. #(do
+                              (.info logger "Closing HTTP connection manager")
+                              (conn-mgr/shutdown-manager http-connection-manager))))
 
 ;; Multimethod for PIP calls, dispatches on the :type from the :pip map
 (defmulti callPip (fn [decl _ _] (get-in decl [:pip :type])))
@@ -15,6 +37,7 @@
   nil)
 
 ;; REST PIP implementation (from urlPip)
+;; Uses connection pooling for better performance
 (defmethod callPip :rest [decl att obj]
   (let [pip-info (:pip decl)
         verb (keyword (or (:verb pip-info) "get")) ; Default to GET
@@ -25,7 +48,8 @@
             http-opts {:throw-exceptions false
                        :content-type :json
                        :as :json
-                       :coerce :always}
+                       :coerce :always
+                       :connection-manager http-connection-manager}
             req-opts (if (= verb :post)
                        (assoc http-opts :form-params obj)
                        http-opts)
@@ -41,6 +65,7 @@
           (:body response)))
       (catch Exception e
         (u/log ::pip-exception :exception e :pip-info pip-info)
+        (.error logger "Exception calling REST PIP: {}" (.getMessage e) e)
         {:error "pip_exception" :message (.getMessage e)}))))
 
 (defmethod callPip :kafka-pip [decl att obj]

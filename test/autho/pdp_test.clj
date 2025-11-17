@@ -170,3 +170,56 @@
       (testing "when request has no subject"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No subject specified"
                                 (whichAuthorized ring-req {})))))))
+
+(deftest circular-delegation-test
+  (testing "Circular delegation detection"
+    (let [request {:subject {:id "user1"} :resource {:class "doc"} :operation "read"}]
+      (testing "two-way circular delegation does not cause infinite recursion"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "allow-rule" :effect "allow" :priority 1}]
+                                             :strategy :almost_one_allow_no_deny})
+                      prp/getPolicy (fn [c a] {:rules []})
+                      deleg/findDelegation (fn [subject]
+                                             ;; Create circular delegation: user1 -> user2 -> user1
+                                             (cond
+                                               (= (:id subject) "user1") [{:delegate {:id "user2"}}]
+                                               (= (:id subject) "user2") [{:delegate {:id "user1"}}]
+                                               :else []))
+                      rule/evaluateRule (fn [rule req] {:value false})]
+          ;; Should not cause infinite recursion and should return false
+          (is (= {:result false :rules []}
+                 (evalRequest request)))))
+      (testing "three-way circular delegation does not cause infinite recursion"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "allow-rule" :effect "allow" :priority 1}]
+                                             :strategy :almost_one_allow_no_deny})
+                      prp/getPolicy (fn [c a] {:rules []})
+                      deleg/findDelegation (fn [subject]
+                                             ;; Create three-way circular: user1 -> user2 -> user3 -> user1
+                                             (cond
+                                               (= (:id subject) "user1") [{:delegate {:id "user2"}}]
+                                               (= (:id subject) "user2") [{:delegate {:id "user3"}}]
+                                               (= (:id subject) "user3") [{:delegate {:id "user1"}}]
+                                               :else []))
+                      rule/evaluateRule (fn [rule req] {:value false})]
+          ;; Should not cause infinite recursion and should return false
+          (is (= {:result false :rules []}
+                 (evalRequest request)))))
+      (testing "valid delegation chain still works"
+        (with-redefs [prp/getGlobalPolicy (fn [resource-class]
+                                            {:rules [{:name "allow-rule" :effect "allow" :priority 1}]
+                                             :strategy :almost_one_allow_no_deny})
+                      prp/getPolicy (fn [c a] {:rules []})
+                      deleg/findDelegation (fn [subject]
+                                             ;; Valid chain: user1 -> user2 -> user3
+                                             (cond
+                                               (= (:id subject) "user1") [{:delegate {:id "user2"}}]
+                                               (= (:id subject) "user2") [{:delegate {:id "user3"}}]
+                                               :else []))
+                      rule/evaluateRule (fn [rule req]
+                                          (if (= (:id (:subject req)) "user3")
+                                            {:value true}
+                                            {:value false}))]
+          ;; Should successfully find authorization through user3
+          (is (= {:result true :rules [{:name "allow-rule" :effect "allow" :priority 1}]}
+                 (evalRequest request))))))))
