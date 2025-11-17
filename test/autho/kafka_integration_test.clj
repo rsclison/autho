@@ -46,7 +46,7 @@
         existing-bytes (.get db-instance cf-handle
                              (.getBytes key java.nio.charset.StandardCharsets/UTF_8))
         existing-attrs (when existing-bytes
-                         (json/read-value (String. existing-bytes java.nio.charset.StandardCharsets/UTF_8)))
+                         (json/read-value (String. existing-bytes java.nio.charset.StandardCharsets/UTF_8) json/keyword-keys-object-mapper))
         merged-attrs (merge existing-attrs attributes)
         merged-json (json/write-value-as-string merged-attrs)]
 
