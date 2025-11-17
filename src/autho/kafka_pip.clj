@@ -7,6 +7,9 @@
            (java.nio.charset StandardCharsets)
            (java.time Duration)))
 
+;; Load RocksDB native library
+(RocksDB/loadLibrary)
+
 ;; State Management for the Shared DB and Consumers
 (defonce db-state (atom nil)) ; Will hold {:db-instance ... :cf-handles {...}}
 (defonce consumer-handles (atom []))
