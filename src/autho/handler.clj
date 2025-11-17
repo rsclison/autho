@@ -4,6 +4,7 @@
             [autho.pip :as pip]
             [autho.kafka-pip :as kpip]
             [autho.journal :as jrnl]
+            [autho.person :as person]
             [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
             [com.appsflyer.donkey.server :refer [start]]
@@ -288,7 +289,22 @@
                           (json-response {:status "ok" :message "PDP reinitialized."}))
                     (POST "/reload_rules" []
                           (prp/initf (pdp/get-rules-repository-path))
-                          (json-response {:status "ok" :message "Rule repository reloaded."}))))
+                          (json-response {:status "ok" :message "Rule repository reloaded."}))
+                    (POST "/reload_persons" []
+                          (try
+                            (let [person-source (pdp/getProperty :person.source)
+                                  person-type (if person-source (keyword person-source) :ldap)]
+                              (person/loadPersons {:type person-type :props @pdp/properties})
+                              (.info logger "Person cache reloaded successfully from source: {}" person-type)
+                              (json-response {:status "ok"
+                                              :message "Person cache reloaded successfully."
+                                              :source (name person-type)
+                                              :personCount (count @prp/personSingleton)}))
+                            (catch Exception e
+                              (.error logger "Failed to reload person cache" e)
+                              (error-response "PERSON_RELOAD_FAILED"
+                                              (str "Failed to reload person cache: " (.getMessage e))
+                                              500))))))
 
 (def app-routes
   (routes
