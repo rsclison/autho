@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "autho-local-shell": {
+      "command": "python3",
+      "args": [
+        "/ABSOLUTE/PATH/TO/autho/.claude/mcp/local-shell-server.py"
+      ]
+    }
+  }
+}
