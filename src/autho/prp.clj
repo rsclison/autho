@@ -54,14 +54,6 @@
 (defn get-rules-repository-status []
   @rules-repository-status)
 
-
-(defn initdb []
-  (jd/execute! h2db ["create table rules (name varchar(80), content json)"])
-  (jd/execute! h2db ["create table delegations (id bigint auto_increment primary key, person varchar(80), delegate_expr varchar(80), ressource varchar(100) )"])
-  (jd/execute! h2db ["create table delegresource (delegation_id bigint, content json, foreign key (delegation_id) references delegations(id) )"])
-  (jd/execute! h2db ["create table comp_delegations (delegation_id bigint, delegate varchar(80), resource_class varchar(80), resource_id varchar(80), operation varchar(80), foreign key (delegation_id) references delegations(id) )"])
-  )
-
 ;; return a collection of all delegations for compilation
 (defmulti getDelegations (fn [](:type @delegationSingleton)))
 (defmethod getDelegations :file []

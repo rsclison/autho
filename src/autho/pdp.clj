@@ -22,18 +22,7 @@
             )
   (:import (java.util Map)))
 
-;;(fs-api/connect)
-
-
-
 (def properties (atom {}))
-
-
-;;(def secret "mysecret")
-
-;;(defn unsign-token [token]
-;;  (jwt/unsign token secret))
-
 
 (defn getProperty [prop]
   (get @properties prop)
@@ -111,30 +100,46 @@
 ;; context (date, application, domain)
 ;; return a map composed of the result (:result) and the set of applicable rules (:rules)
 
-(defn evalRequest [^Map request]
-  (if-not (:resource request)
-    (throw (ex-info "No resource specified" {:status 400})))
-  (if-not (:subject request)
-    (throw (ex-info "No subject specified" {:status 400})))
+(defn evalRequest
+  "Evaluates an authorization request.
+  Optional visited-subjects parameter tracks delegation chain to prevent cycles."
+  ([request] (evalRequest request #{}))
+  ([^Map request visited-subjects]
+   (if-not (:resource request)
+     (throw (ex-info "No resource specified" {:status 400})))
+   (if-not (:subject request)
+     (throw (ex-info "No subject specified" {:status 400})))
 
-  (let [globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
-        policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
-        augreq (passThroughCache request)
-        evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                           (conj res rule)
-                                           res))
-                         [] (:rules globalPolicy))
-        resolve (resolve-conflict globalPolicy evalglob)]
+   (let [subject-id (:id (:subject request))
+         globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
+         policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
+         augreq (passThroughCache request)
+         evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                            (conj res rule)
+                                            res))
+                          [] (:rules globalPolicy))
+         resolve (resolve-conflict globalPolicy evalglob)]
 
-    (if resolve
-      {:result resolve :rules evalglob}
-      (let [deleg (deleg/findDelegation (:subject request))
-            one (some #(let [ev (evalRequest (assoc request :subject (:delegate %)))]
-                         (when ev ev))
-                      deleg)]
-        (if one
-          one
-          {:result false :rules evalglob})))))
+     (if resolve
+       {:result resolve :rules evalglob}
+       (let [deleg (deleg/findDelegation (:subject request))
+             ;; Filter out delegations that would create cycles
+             safe-deleg (filter #(let [delegate-id (:id (:delegate %))]
+                                   (not (contains? visited-subjects delegate-id)))
+                                deleg)
+             new-visited (conj visited-subjects subject-id)
+             one (some #(let [delegate-id (:id (:delegate %))]
+                          ;; Log circular delegation attempts
+                          (when (contains? visited-subjects delegate-id)
+                            (.warn (org.slf4j.LoggerFactory/getLogger "autho.pdp")
+                                   "Circular delegation detected: {} -> {}"
+                                   subject-id delegate-id))
+                          (let [ev (evalRequest (assoc request :subject (:delegate %)) new-visited)]
+                            (when ev ev)))
+                       safe-deleg)]
+         (if one
+           one
+           {:result false :rules evalglob}))))))
 
 (defn isAuthorized [request body]
   (let [subject (get-subject request body)

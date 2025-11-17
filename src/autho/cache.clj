@@ -17,13 +17,20 @@
 
 ;; try to merge the entity and the same entity in the cache
 ;; return the merged entity
+;; Uses atomic swap! to prevent race conditions
 (defn mergeEntityWithCache [ent cache]
-  (let [cacheEntity (cc/lookup cache (:id ent))
-        mergedEntity (mergeEntities ent cacheEntity)]
-      (swap! cache assoc (:id ent) mergedEntity)
-      mergedEntity
-      )
-  )
+  (if-let [ent-id (:id ent)]
+    (let [result (atom nil)]
+      (swap! cache
+             (fn [current-cache]
+               (let [cached-entity (get current-cache ent-id)
+                     merged (mergeEntities ent cached-entity)]
+                 (reset! result merged)
+                 (assoc current-cache ent-id merged))))
+      @result)
+    (do
+      (.warn logger "Entity without ID cannot be cached: {}" ent)
+      ent)))
 
 (defn getCachedSubject [id]
   (get subject-cache id)

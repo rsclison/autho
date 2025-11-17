@@ -16,21 +16,6 @@
 
 (defonce logger (LoggerFactory/getLogger "autho.attfun"))
 
-
-
-
-;;(defn findAndCallPipCache [attName obj]
-;;  (let [compkey (keyword (str (:id obj) "_" attName))]
-;;    (cache/lookup (swap! cache-store cache/through-cache compkey
-;;                         (fn [k]
-;;                           (let [pipdecl (prp/findPip attName)] ;; TODO the PIP is attached only to attribute not to class/attribute
-;;                             (if (nil? pipdecl)
-;;                               nil
-;;                               (try (apply (ns-resolve (symbol "hyauth.attfun") (symbol (:type pipdecl))) [pipdecl attName obj])
-;;                                    (catch Exception e nil))))))
-;;                  compkey)))
-
-
 (defn findAndCallPip [attName obj]
   (let [pipdecl (prp/findPip (:class obj) attName)]
     (if (nil? pipdecl)
@@ -39,24 +24,6 @@
            (catch Exception e
              (.error logger "Error calling pip for {} on {}" attName obj e)
              nil)))))
-
-#_(defn att [attribute obj]
-  ;; the object is a symbol map not a json string
-  (println "IN ATT " attribute " " obj)
-  (let [attseq (str/split (name attribute) #"\.")
-        ;; try to evaluate from map
-        evalfromjson (reduce (fn [mp f]
-                               (println "Reducing " mp "-" f)
-                               (get mp (keyword f)))
-                               obj attseq)]
-
-    (println "evalfromjson = " evalfromjson)
-    (if (nil? evalfromjson)
-      (findAndCallPip attribute obj)
-      evalfromjson
-      )
-    )
-  )
 
 ;; TODO should be modified to return a map with the value and the augmented object
 (defn att [attribute-string obj]
@@ -88,14 +55,7 @@
   )
 
 (defn internalFiller [filler obj]
-  (apply (ns-resolve (symbol "autho.attfun") (symbol(:method filler))) [obj])
-  )
-
-;; (defmacro json-read-extd [st]
-;;  `(let [res# (try (json/read-str ~st :key-fn keyword)
-;;                  (catch NumberFormatException e# (try (#'clojure.instant/read-instant-date ~st) (catch Exception e# nil))))]
-;;     res#
-;;  ))
+  (apply (ns-resolve (symbol "autho.attfun") (symbol(:method filler))) [obj]))
 
 ;; FUNCTIONS
 
