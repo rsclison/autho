@@ -32,10 +32,9 @@
                    (Long/parseLong content-length)
                    (catch NumberFormatException _ 0))]
         (if (> size max-request-size)
-          {:status 413
-           :headers {"Content-Type" "application/json"}
-           :body (json/write-value-as-string
-                  {:error {:message (str "Request body too large. Maximum size is " max-request-size " bytes.")}})}
+          (error-response "REQUEST_TOO_LARGE"
+                          (str "Request body too large. Maximum size is " max-request-size " bytes.")
+                          413)
           (handler request)))
       (handler request))))
 
@@ -55,10 +54,9 @@
               status (or (:status error-data) 500)
               message (if (instance? clojure.lang.ExceptionInfo e)
                         (.getMessage e)
-                        "An unexpected error occurred.")]
-          {:status status
-           :headers {"Content-Type" "application/json"}
-           :body (json/write-value-as-string {:error {:message message}})})))))
+                        "An unexpected error occurred.")
+              error-code (or (:error-code error-data) "INTERNAL_ERROR")]
+          (error-response error-code message status))))))
 
 (defn destroy []
   (.info logger "autho is shutting down"))
@@ -68,10 +66,20 @@
    :headers {"Content-Type" "application/json"}
    :body (json/write-value-as-string data)})
 
+(defn error-response
+  "Creates a standardized error response with code, message, and timestamp."
+  [error-code message status]
+  {:status status
+   :headers {"Content-Type" "application/json"}
+   :body (json/write-value-as-string
+          {:error {:code error-code
+                   :message message
+                   :timestamp (str (java.time.Instant/now))}})})
+
 (defn- rules-not-loaded-response []
-  (json-response
-    {:error {:message "Rule repository is not loaded. Please check server logs."}}
-    503))
+  (error-response "RULES_NOT_LOADED"
+                  "Rule repository is not loaded. Please check server logs."
+                  503))
 
 (defroutes public-routes
            (route/resources "/")
@@ -99,7 +107,12 @@
            (GET "/policy/:resourceClass" [resourceClass]
                 (json-response (prp/getPolicy resourceClass nil)))
            (GET "/whoAuthorized/:resourceClass" [resourceClass]
-                (json-response {:error "Not Implemented"} 501))
+                (cond
+                  (= :failed (prp/get-rules-repository-status))
+                  (rules-not-loaded-response)
+
+                  :else
+                  (json-response (pdp/whoAuthorizedByClass resourceClass))))
 
            (POST "/isAuthorized" request
                  (cond
@@ -107,8 +120,9 @@
                    (rules-not-loaded-response)
 
                    (nil? (:body request))
-                   (json-response
-                    {:error {:message "Request body is empty."}} 400)
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
 
                    :else
                    (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
@@ -120,8 +134,9 @@
                    (rules-not-loaded-response)
 
                    (nil? (:body request))
-                   (json-response
-                    {:error {:message "Request body is empty."}} 400)
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
 
                    :else
                    (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
@@ -133,8 +148,9 @@
                    (rules-not-loaded-response)
 
                    (nil? (:body request))
-                   (json-response
-                    {:error {:message "Request body is empty."}} 400)
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
 
                    :else
                    (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
@@ -145,9 +161,19 @@
                 (json-response (prp/submit-policy (:resourceClass params) (slurp body))))
            (DELETE "/policy/:resourceClass" [resourceClass]
                    (json-response (prp/delete-policy resourceClass)))
-           (GET "/explain" {body :body}
-                (.warn logger "TODO: /explain endpoint not implemented") ;; //TODO
-                (json-response {:error "Not implemented"} 501))
+           (POST "/explain" request
+                 (cond
+                   (= :failed (prp/get-rules-repository-status))
+                   (rules-not-loaded-response)
+
+                   (nil? (:body request))
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
+
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
+                     (json-response (pdp/explain request body)))))
            (context "/admin" []
                     (GET "/listRDB" []
                          (json-response (kpip/list-column-families)))

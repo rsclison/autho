@@ -173,6 +173,34 @@
                      :operation (:operation rule)})
          evrules)))
 
+(defn whoAuthorizedByClass
+  "Returns all authorization rules (allow) for a given resource class.
+  This shows what subject conditions are required to access resources of this class."
+  [resourceClass]
+  (if-not resourceClass
+    (throw (ex-info "No resource class specified" {:status 400 :error-code "MISSING_RESOURCE_CLASS"})))
+
+  (let [globalPolicy (prp/getGlobalPolicy resourceClass)]
+    (if-not globalPolicy
+      (throw (ex-info "No global policy found for this resource class" {:status 404 :error-code "NO_POLICY"})))
+
+    (let [allowRules (filter #(= "allow" (:effect %)) (:rules globalPolicy))
+          denyRules (filter #(= "deny" (:effect %)) (:rules globalPolicy))]
+      {:resourceClass resourceClass
+       :strategy (:strategy globalPolicy)
+       :allowRules (map (fn [rule] {:name (:name rule)
+                                    :operation (:operation rule)
+                                    :subjectCond (rest (:subjectCond rule))
+                                    :resourceCond (rest (:resourceCond rule))
+                                    :priority (:priority rule)})
+                        allowRules)
+       :denyRules (map (fn [rule] {:name (:name rule)
+                                   :operation (:operation rule)
+                                   :subjectCond (rest (:subjectCond rule))
+                                   :resourceCond (rest (:resourceCond rule))
+                                   :priority (:priority rule)})
+                       denyRules)})))
+
 (defn whichAuthorized [request body]
   (let [subject (get-subject request body)
         authz-request {:subject subject :resource (:resource body) :operation (:operation body)}]
@@ -192,9 +220,41 @@
                               :operation (:operation rule)})
                   evrules2)})))
 
-(defn explain [^Map request]  ;; //TODO
+(defn explain
+  "Explains the authorization decision by showing all evaluated rules and their results.
+  Takes the same request body as isAuthorized, returns detailed rule evaluation information."
+  [request body]
+  (let [subject (get-subject request body)
+        authz-request {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}]
+    (if-not (:resource authz-request)
+      (throw (ex-info "No resource specified" {:status 400 :error-code "MISSING_RESOURCE"})))
+    (if-not (:subject authz-request)
+      (throw (ex-info "No subject specified" {:status 400 :error-code "MISSING_SUBJECT"})))
 
-  )
+    (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
+          augreq (passThroughCache authz-request)
+          all-rules (:rules globalPolicy)
+          evaluated-rules (map (fn [rule]
+                                 (let [eval-result (rule/evaluateRule rule augreq)]
+                                   {:name (:name rule)
+                                    :effect (:effect rule)
+                                    :operation (:operation rule)
+                                    :matched (:value eval-result)
+                                    :resourceClass (:resourceClass rule)
+                                    :subjectCond (rest (:subjectCond rule))
+                                    :resourceCond (rest (:resourceCond rule))}))
+                               all-rules)
+          matched-rules (filter :matched evaluated-rules)
+          final-decision (resolve-conflict globalPolicy (filter #(:value (rule/evaluateRule % augreq)) all-rules))]
+
+      (if-not globalPolicy
+        (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
+
+      {:decision final-decision
+       :strategy (:strategy globalPolicy)
+       :totalRules (count all-rules)
+       :matchedRules (count matched-rules)
+       :rules evaluated-rules})))
 
 
 

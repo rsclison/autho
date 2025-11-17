@@ -1,7 +1,10 @@
 (ns autho.core
   (:require [autho.handler :as handler]
             [autho.pdp :as pdp])
+  (:import (org.slf4j LoggerFactory))
   (:gen-class))
+
+(defonce logger (LoggerFactory/getLogger "autho.core"))
 
 (defn -main [& args]
   (pdp/init)
@@ -10,4 +13,4 @@
       (do
         (handler/init)
         @(promise))
-      (println "autho started in embedded mode."))))
+      (.info logger "autho started in embedded mode."))))

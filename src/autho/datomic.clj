@@ -1,7 +1,9 @@
 (ns autho.datomic
    (:require [datomic.api :as d])
-  (:import (java.io File))
-  )
+  (:import (java.io File)
+           (org.slf4j LoggerFactory)))
+
+(defonce logger (LoggerFactory/getLogger "autho.datomic"))
 
 
 (def uri "datomic:free://resources/datomdb")
@@ -9,7 +11,7 @@
 ;; Fonction pour initialiser la base de données si elle n'existe pas
 (defn init-db []
   (when-not (d/create-database uri)
-    (println "La base de données existe déjà.")))
+    (.info logger "La base de données existe déjà.")))
 
 ;; Fonction pour obtenir une connexion à la base de données
 (defn get-connection []
@@ -70,4 +72,4 @@
 (defn -main []
   (let [conn (setup)]
     (write-tuple conn "entite1" :attribut1 "valeur1")
-    (println "Valeur pour ('entite1', :attribut1):" (read-tuple conn "entite1" :attribut1))))
+    (.info logger "Valeur pour ('entite1', :attribut1): {}" (read-tuple conn "entite1" :attribut1))))
