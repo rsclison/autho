@@ -21,15 +21,17 @@
 (defn simulate-kafka-message
   "Helper to populate Kafka PIP with attributes"
   [class-name entity-id attributes]
-  (let [cf-handle (get @kpip/column-families class-name)
+  (let [cf-handles (:cf-handles @kpip/db-state)
+        db-instance (:db-instance @kpip/db-state)
+        cf-handle (get cf-handles class-name)
         key entity-id
-        existing-bytes (.get @kpip/shared-db cf-handle
+        existing-bytes (.get db-instance cf-handle
                              (.getBytes key java.nio.charset.StandardCharsets/UTF_8))
         existing-attrs (when existing-bytes
                          (json/read-value (String. existing-bytes java.nio.charset.StandardCharsets/UTF_8)))
         merged-attrs (merge existing-attrs attributes)
         merged-json (json/write-value-as-string merged-attrs)]
-    (.put @kpip/shared-db cf-handle
+    (.put db-instance cf-handle
           (.getBytes key java.nio.charset.StandardCharsets/UTF_8)
           (.getBytes merged-json java.nio.charset.StandardCharsets/UTF_8))))
 
