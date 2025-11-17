@@ -4,9 +4,19 @@
             [buddy.auth.middleware :as middleware]))
 
 ;; --- Secrets ---
-;; In a real application, these should be loaded from a secure configuration source.
-(def jwt-secret "secret")
-(def api-key "trusted-app-secret")
+;; Secrets are loaded from environment variables for security.
+;; Required environment variables:
+;; - JWT_SECRET: Secret key for JWT token signing/verification
+;; - API_KEY: API key for trusted application authentication
+(def jwt-secret
+  (or (System/getenv "JWT_SECRET")
+      (throw (ex-info "JWT_SECRET environment variable must be set"
+                      {:type ::missing-config}))))
+
+(def api-key
+  (or (System/getenv "API_KEY")
+      (throw (ex-info "API_KEY environment variable must be set"
+                      {:type ::missing-config}))))
 
 ;; --- Authentication Backends ---
 

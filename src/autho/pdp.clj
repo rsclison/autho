@@ -6,6 +6,7 @@
             [autho.cache :as cache]
             [autho.delegation :as deleg]
             [clojure.java.io :as io]
+            [clojure.edn :as edn]
             [clj-http [client]]
             [clojure.data.json :as json]
             [autho.ldap :as ldap]
@@ -198,7 +199,7 @@
   (with-open [^java.io.Reader reader (clojure.java.io/reader file-name)]
     (let [props (java.util.Properties.)]
       (.load props reader)
-      (into {} (for [[k v] props] [(keyword k) (read-string v)])))))
+      (into {} (for [[k v] props] [(keyword k) (edn/read-string v)])))))
 
 
 (defn init []
@@ -210,7 +211,8 @@
         kafka-pip-classes (map :class kafka-pips)]
     (if (getProperty :ldap.server) (ldap/init {:host     (getProperty :ldap.server)
                                                :bind-dn  (getProperty :ldap.connectstring)
-                                               :password (getProperty :ldap.password)
+                                               :password (or (System/getenv "LDAP_PASSWORD")
+                                                            (getProperty :ldap.password))
                                                }))
     (when (and (seq kafka-pips) rocksdb-path)
       (kafka-pip/open-shared-db rocksdb-path kafka-pip-classes)

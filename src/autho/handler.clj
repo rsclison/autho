@@ -15,6 +15,30 @@
 
 (defonce logger (LoggerFactory/getLogger "autho.handler"))
 
+;; Maximum request body size in bytes (default: 1MB)
+;; Can be overridden with MAX_REQUEST_SIZE environment variable
+(def max-request-size
+  (if-let [env-size (System/getenv "MAX_REQUEST_SIZE")]
+    (try
+      (Long/parseLong env-size)
+      (catch NumberFormatException _
+        (* 1024 1024)))
+    (* 1024 1024)))
+
+(defn wrap-request-size-limit [handler]
+  (fn [request]
+    (if-let [content-length (get-in request [:headers "content-length"])]
+      (let [size (try
+                   (Long/parseLong content-length)
+                   (catch NumberFormatException _ 0))]
+        (if (> size max-request-size)
+          {:status 413
+           :headers {"Content-Type" "application/json"}
+           :body (json/write-value-as-string
+                  {:error {:message (str "Request body too large. Maximum size is " max-request-size " bytes.")}})}
+          (handler request)))
+      (handler request))))
+
 (defn wrap-logging [handler]
   (fn [request]
     (let [response (handler request)]
@@ -37,7 +61,7 @@
            :body (json/write-value-as-string {:error {:message message}})})))))
 
 (defn destroy []
-  (println "autho is shutting down"))
+  (.info logger "autho is shutting down"))
 
 (defn json-response [data & [status]]
   {:status (or status 200)
@@ -52,13 +76,13 @@
 (defroutes public-routes
            (route/resources "/")
            (GET "/test" req
-                (do (println "HEAD" (:headers req))
-                    (println "GET /test " (slurp (:body req)))
+                (do (.debug logger "HEAD: {}" (:headers req))
+                    (.debug logger "GET /test body: {}" (slurp (:body req)))
                     (json-response {"coucou" "lala"})))
            (GET "/init" []
                 (pdp/init))
            (POST "/astro" {body :body}
-                 (println (slurp body))
+                 (.debug logger "POST /astro body: {}" (slurp body))
                  (json-response {:signe "poisson" :ascendant "poisson"})))
 
 (defroutes protected-routes
@@ -122,8 +146,8 @@
            (DELETE "/policy/:resourceClass" [resourceClass]
                    (json-response (prp/delete-policy resourceClass)))
            (GET "/explain" {body :body}
-                (println "TODO") ;; //TODO
-                )
+                (.warn logger "TODO: /explain endpoint not implemented") ;; //TODO
+                (json-response {:error "Not implemented"} 501))
            (context "/admin" []
                     (GET "/listRDB" []
                          (json-response (kpip/list-column-families)))
@@ -152,7 +176,8 @@
    (create-server {:port   8080
                    :routes  [{:handler (-> app-routes
                                            wrap-logging
+                                           wrap-request-size-limit
                                            wrap-error-handling)
                               :handler-mode :blocking}]})
    start
-   (on-success (fn [_] (println "Server started listening on port 8080")))))
+   (on-success (fn [_] (.info logger "Server started listening on port 8080")))))
