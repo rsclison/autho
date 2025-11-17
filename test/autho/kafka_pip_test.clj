@@ -30,7 +30,10 @@
     (let [class-names ["user" "resource"]]
       (sut/open-shared-db test-db-path class-names)
       (is (not (nil? (:db-instance @sut/db-state))))
-      (is (= 2 (count (:cf-handles @sut/db-state))))
+      ;; RocksDB creates a "default" column family, so we get 3 total (default + user + resource)
+      (is (= 3 (count (:cf-handles @sut/db-state))))
+      ;; But list-column-families filters out "default" and returns only user-created ones
+      (is (= 2 (count (sut/list-column-families))))
       (sut/close-shared-db))))
 
 (deftest rocksdb-column-family-operations-test
@@ -49,7 +52,7 @@
       ;; Read from RocksDB
       (let [retrieved (.get db-instance cf-handle (.getBytes test-key StandardCharsets/UTF_8))
             retrieved-str (String. retrieved StandardCharsets/UTF_8)
-            retrieved-data (json/read-value retrieved-str)]
+            retrieved-data (json/read-value retrieved-str json/keyword-keys-object-mapper)]
         (is (= "Alice" (get retrieved-data :name)))
         (is (= "manager" (get retrieved-data :role)))))
     (sut/close-shared-db)))
@@ -75,7 +78,7 @@
       ;; Simulate update from Kafka (role changed, new attribute added)
       (let [existing-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
             existing-str (String. existing-bytes StandardCharsets/UTF_8)
-            existing-attrs (json/read-value existing-str)
+            existing-attrs (json/read-value existing-str json/keyword-keys-object-mapper)
 
             new-attrs {:role "senior-developer" :location "Paris"}
             merged-attrs (merge existing-attrs new-attrs)
@@ -89,7 +92,7 @@
         ;; Verify merge
         (let [final-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
               final-str (String. final-bytes StandardCharsets/UTF_8)
-              final-attrs (json/read-value final-str)]
+              final-attrs (json/read-value final-str json/keyword-keys-object-mapper)]
           (is (= "Bob" (get final-attrs :name)))          ;; Preserved
           (is (= "senior-developer" (get final-attrs :role)))  ;; Updated
           (is (= "backend" (get final-attrs :team)))       ;; Preserved
@@ -108,7 +111,7 @@
           existing-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
           merged-attrs (if (nil? existing-bytes)
                          new-attrs
-                         (merge (json/read-value (String. existing-bytes StandardCharsets/UTF_8)) new-attrs))
+                         (merge (json/read-value (String. existing-bytes StandardCharsets/UTF_8) json/keyword-keys-object-mapper) new-attrs))
           merged-json (json/write-value-as-string merged-attrs)]
 
       (.put db-instance cf-handle
@@ -118,7 +121,7 @@
       ;; Verify
       (let [final-bytes (.get db-instance cf-handle (.getBytes key StandardCharsets/UTF_8))
             final-str (String. final-bytes StandardCharsets/UTF_8)
-            final-attrs (json/read-value final-str)]
+            final-attrs (json/read-value final-str json/keyword-keys-object-mapper)]
         (is (= "Charlie" (get final-attrs :name)))
         (is (= "manager" (get final-attrs :role)))))
     (sut/close-shared-db)))
