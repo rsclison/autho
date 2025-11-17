@@ -62,4 +62,84 @@
                                   }
                                  ]
                          }}
+
+ ;; =============================================================================
+ ;; Règles pour les Contrats
+ ;; =============================================================================
+ "Contrat" {:global {
+                     :rules [
+                             ;; Règle CT1: Accès aux contrats selon le département
+                             {:name "CT1"
+                              :resourceClass "Contrat"
+                              :priority 0
+                              :domain "LEGAL"
+                              :operation "lire"
+                              :conditions [[= [Person $s department] [Contrat $r owner-department]]]
+                              :effect "allow"
+                              :startDate "inf"
+                              :endDate "inf"}
+
+                             ;; Règle CT2: DPO peut accéder aux contrats contenant des PII
+                             {:name "CT2"
+                              :resourceClass "Contrat"
+                              :priority 1
+                              :domain "LEGAL"
+                              :operation "lire"
+                              :conditions [[= [Person $s role] "DPO"] [= [Contrat $r contains-pii] true]]
+                              :effect "allow"
+                              :startDate "inf"
+                              :endDate "inf"}
+
+                             ;; Règle CT3: Legal counsel peut accéder à tous les contrats
+                             {:name "CT3"
+                              :resourceClass "Contrat"
+                              :priority 2
+                              :domain "LEGAL"
+                              :operation "lire"
+                              :conditions [[= [Person $s role] "legal-counsel"]]
+                              :effect "allow"
+                              :startDate "inf"
+                              :endDate "inf"}
+                             ]
+                     :strategy :almost_one_allow_no_deny}}
+
+ ;; =============================================================================
+ ;; Règles pour les Engagements Juridiques
+ ;; =============================================================================
+ "EngagementJuridique" {:global {
+                                 :rules [
+                                         ;; Règle EJ1: Accès basé sur le niveau de clearance
+                                         {:name "EJ1"
+                                          :resourceClass "EngagementJuridique"
+                                          :priority 0
+                                          :domain "LEGAL"
+                                          :operation "lire"
+                                          :conditions [[>= [Person $s clearance-level] [EngagementJuridique $r required-clearance-level]]]
+                                          :effect "allow"
+                                          :startDate "inf"
+                                          :endDate "inf"}
+
+                                         ;; Règle EJ2: Département responsable peut toujours accéder
+                                         {:name "EJ2"
+                                          :resourceClass "EngagementJuridique"
+                                          :priority 1
+                                          :domain "LEGAL"
+                                          :operation "lire"
+                                          :conditions [[= [Person $s department] [EngagementJuridique $r responsible-department]]]
+                                          :effect "allow"
+                                          :startDate "inf"
+                                          :endDate "inf"}
+
+                                         ;; Règle EJ3: Legal counsel peut accéder à tous les engagements
+                                         {:name "EJ3"
+                                          :resourceClass "EngagementJuridique"
+                                          :priority 2
+                                          :domain "LEGAL"
+                                          :operation "lire"
+                                          :conditions [[= [Person $s role] "legal-counsel"]]
+                                          :effect "allow"
+                                          :startDate "inf"
+                                          :endDate "inf"}
+                                         ]
+                                 :strategy :almost_one_allow_no_deny}}
  }

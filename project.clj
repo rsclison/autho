@@ -40,5 +40,9 @@
                  [org.rocksdb/rocksdbjni "8.11.4"]]
   :main autho.core
   :target-path "target/%s"
+  :test-selectors {:default (complement :integration)
+                   :integration :integration
+                   :benchmark :benchmark
+                   :all (constantly true)}
   :profiles {:uberjar {:aot :all
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}})

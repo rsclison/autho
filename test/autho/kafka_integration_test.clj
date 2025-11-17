@@ -9,7 +9,7 @@
             [jsonista.core :as json])
   (:import [org.apache.kafka.clients.consumer ConsumerRecord]))
 
-(def test-db-path "/tmp/rocksdb-integration-test")
+(def test-db-path (str (System/getProperty "java.io.tmpdir") "rocksdb-integration-test"))
 
 (defn cleanup-test-db []
   (let [dir (clojure.java.io/file test-db-path)]
@@ -266,9 +266,9 @@
       (is (contains? (set (get result :roles)) "admin"))
 
       (is (map? (get result :permissions)))
-      (is (true? (get-in result ["permissions" "write"])))
+      (is (true? (get-in result [:permissions :write])))
 
-      (is (= "2024-01-01" (get-in result ["metadata" "created"]))))
+      (is (= "2024-01-01" (get-in result [:metadata :created]))))
 
     (kpip/close-shared-db)))
 

@@ -9,7 +9,7 @@
             [autho.jsonrule :as rule]
             [jsonista.core :as json]))
 
-(def test-db-path "/tmp/rocksdb-e2e-test")
+(def test-db-path (str (System/getProperty "java.io.tmpdir") "rocksdb-e2e-test"))
 
 (defn cleanup-test-db []
   (let [dir (clojure.java.io/file test-db-path)]

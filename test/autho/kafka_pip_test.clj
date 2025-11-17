@@ -6,7 +6,7 @@
            [java.nio.charset StandardCharsets]
            [java.util ArrayList]))
 
-(def test-db-path "/tmp/rocksdb-test")
+(def test-db-path (str (System/getProperty "java.io.tmpdir") "rocksdb-test"))
 
 (defn cleanup-test-db []
   (let [dir (clojure.java.io/file test-db-path)]

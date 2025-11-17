@@ -70,7 +70,7 @@
 
 (defmethod callPip :kafka-pip [decl att obj]
   (let [pip-info (:pip decl)
-        class-name (:class pip-info)
+        class-name (:class decl)
         id-key (or (:id-key pip-info) :id)
         obj-id (get obj id-key)]
     (if (and class-name obj-id)
