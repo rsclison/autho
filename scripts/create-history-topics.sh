@@ -13,10 +13,13 @@ echo "Broker: $KAFKA_BROKER"
 echo "Retention: $RETENTION_DAYS days ($RETENTION_MS ms)"
 echo ""
 
-# Function to create a history topic
-create_history_topic() {
+# Function to create a topic
+create_topic() {
     local topic_name=$1
-    echo "Creating topic: $topic_name"
+    local cleanup_policy=$2
+    local retention=$3
+
+    echo "Creating topic: $topic_name (cleanup=$cleanup_policy, retention=$retention)"
 
     docker exec autho-kafka kafka-topics \
         --create \
@@ -25,8 +28,8 @@ create_history_topic() {
         --topic "$topic_name" \
         --partitions 3 \
         --replication-factor 1 \
-        --config cleanup.policy=delete \
-        --config retention.ms=$RETENTION_MS \
+        --config cleanup.policy=$cleanup_policy \
+        --config retention.ms=$retention \
         --config segment.ms=86400000 \
         --config compression.type=lz4
 
@@ -34,19 +37,22 @@ create_history_topic() {
     echo ""
 }
 
-# Create history topics
-create_history_topic "invoices-history"
-create_history_topic "contracts-history"
-create_history_topic "legal-commitments-history"
+# Create compacted topic for current state (unified - all business objects)
+echo "=== Creating Compacted Topic (Current State) ==="
+create_topic "business-objects-compacted" "compact" "-1"
+
+# Create history topic for time-travel (unified - all business objects)
+echo "=== Creating History Topic (Time-Travel) ==="
+create_topic "business-objects-history" "delete" "$RETENTION_MS"
 
 echo "=== Verifying Topics ==="
 docker exec autho-kafka kafka-topics \
     --list \
-    --bootstrap-server localhost:9092 | grep -E "(invoices|contracts|legal-commitments)"
+    --bootstrap-server localhost:9092 | grep "business-objects"
 
 echo ""
 echo "=== Topic Configurations ==="
-for topic in invoices-history contracts-history legal-commitments-history; do
+for topic in business-objects-compacted business-objects-history; do
     echo "--- $topic ---"
     docker exec autho-kafka kafka-topics \
         --describe \

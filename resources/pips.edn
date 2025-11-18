@@ -11,32 +11,26 @@
  ;; {:class :user :attributes [:name :email :city] :pip {:type :csv :path "resources/users.csv"}}
 
  ;; =============================================================================
- ;; Kafka PIPs for Business Objects
+ ;; Unified Kafka PIP for All Business Objects
  ;; =============================================================================
- ;; All Kafka PIPs share a single RocksDB instance configured in pdp-prop.properties
- ;; Business object attributes are streamed from Kafka topics
- ;; User attributes should come from LDAP (not Kafka)
+ ;; SIMPLIFIED ARCHITECTURE: Single topic for all business objects
+ ;; Messages contain a "class" field to route to appropriate RocksDB Column Family
+ ;;
+ ;; Message format:
+ ;; {
+ ;;   "class": "Facture",           // Required: class name for routing
+ ;;   "id": "INV-123",               // Required: object identifier
+ ;;   "amount": 5000,                // Business attributes...
+ ;;   "status": "approved"
+ ;; }
+ ;;
+ ;; Supported classes: Facture, Contrat, EngagementJuridique
+ ;; All share a single RocksDB instance with Column Families
 
- ;; Factures (Invoices)
- {:class "Facture"
-  :pip {:type :kafka-pip
-        :kafka-topic "invoices-compacted"
-        :kafka-bootstrap-servers "localhost:9092"
-        :id-key :invoice-id}}
-
- ;; Contrats (Contracts)
- {:class "Contrat"
-  :pip {:type :kafka-pip
-        :kafka-topic "contracts-compacted"
-        :kafka-bootstrap-servers "localhost:9092"
-        :id-key :contract-id}}
-
- ;; Engagements juridiques (Legal Commitments)
- {:class "EngagementJuridique"
-  :pip {:type :kafka-pip
-        :kafka-topic "legal-commitments-compacted"
-        :kafka-bootstrap-servers "localhost:9092"
-        :id-key :commitment-id}}
+ {:type :kafka-pip-unified
+  :kafka-topic "business-objects-compacted"
+  :kafka-bootstrap-servers "localhost:9092"
+  :classes ["Facture" "Contrat" "EngagementJuridique"]}
 
  ;; Person - LDAP PIP (to be configured when LDAP is set up)
  ;; {:class "Person"
