@@ -5,6 +5,7 @@
             [autho.kafka-pip :as kpip]
             [autho.journal :as jrnl]
             [autho.person :as person]
+            [autho.time-travel :as time-travel]
             [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
             [com.appsflyer.donkey.server :refer [start]]
@@ -278,6 +279,81 @@
                    :else
                    (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
                      (json-response (pdp/explain request body)))))
+
+           ;; Time-Travel Authorization Endpoints
+           (POST "/isAuthorized-at-time" request
+                 (cond
+                   (= :failed (prp/get-rules-repository-status))
+                   (rules-not-loaded-response)
+
+                   (nil? (:body request))
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
+
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
+                         timestamp (:timestamp body)
+                         auth-request (dissoc body :timestamp)]
+                     (if timestamp
+                       (let [config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}
+                             result (time-travel/is-authorized-at-time auth-request timestamp config)]
+                         (json-response result))
+                       (error-response "MISSING_TIMESTAMP"
+                                       "Request body must include a 'timestamp' field in ISO-8601 format."
+                                       400)))))
+
+           (POST "/who-was-authorized-at" request
+                 (cond
+                   (nil? (:body request))
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
+
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
+                         {:keys [resourceClass resourceId action timestamp]} body
+                         config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}]
+                     (if (and resourceClass resourceId action timestamp)
+                       (json-response (time-travel/who-was-authorized-at resourceClass resourceId action timestamp config))
+                       (error-response "MISSING_PARAMETERS"
+                                       "Request must include: resourceClass, resourceId, action, timestamp"
+                                       400)))))
+
+           (POST "/what-could-access-at" request
+                 (cond
+                   (nil? (:body request))
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
+
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
+                         {:keys [subjectId action timestamp]} body
+                         config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}]
+                     (if (and subjectId action timestamp)
+                       (json-response (time-travel/what-could-access-at subjectId action timestamp config))
+                       (error-response "MISSING_PARAMETERS"
+                                       "Request must include: subjectId, action, timestamp"
+                                       400)))))
+
+           (POST "/audit-trail" request
+                 (cond
+                   (nil? (:body request))
+                   (error-response "EMPTY_REQUEST_BODY"
+                                   "Request body is empty."
+                                   400)
+
+                   :else
+                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
+                         {:keys [resourceClass resourceId startTime endTime]} body
+                         config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}]
+                     (if (and resourceClass resourceId startTime endTime)
+                       (json-response (time-travel/audit-trail resourceClass resourceId startTime endTime config))
+                       (error-response "MISSING_PARAMETERS"
+                                       "Request must include: resourceClass, resourceId, startTime, endTime"
+                                       400)))))
+
            (context "/admin" []
                     (GET "/listRDB" []
                          (json-response (kpip/list-column-families)))
