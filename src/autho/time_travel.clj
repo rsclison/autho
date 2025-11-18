@@ -75,28 +75,72 @@
     (log/info "Replay complete. State contains" (count @state) "objects")
     @state))
 
+(defn extract-class-from-message
+  "Extracts class name from enriched history message"
+  [value-map]
+  (let [data (:_data value-map)]
+    (or (:class data) (get data "class"))))
+
+(defn replay-unified-topic-until
+  "Replays the unified history topic, building state snapshot organized by class"
+  [consumer topic target-timestamp]
+  (log/info "Replaying unified topic" topic "until" target-timestamp)
+
+  (let [partitions (.partitionsFor consumer topic)
+        topic-partitions (map #(TopicPartition. topic (.partition %)) partitions)
+        state (atom {})] ;; Will be organized as {class-name {object-id {...}}}
+
+    ;; Assign all partitions
+    (.assign consumer topic-partitions)
+
+    ;; Seek to beginning
+    (.seekToBeginning consumer topic-partitions)
+
+    (let [target-instant (parse-timestamp target-timestamp)]
+      (when target-instant
+        (loop []
+          (let [records (.poll consumer (Duration/ofMillis 1000))]
+            (when-not (.isEmpty records)
+              (doseq [record records]
+                (try
+                  (let [value-str (.value record)
+                        value-map (json/read-value value-str object-mapper)
+                        msg-timestamp (:_timestamp value-map)
+                        msg-instant (parse-timestamp msg-timestamp)]
+
+                    ;; Only process messages before target time
+                    (when (and msg-instant (.isBefore msg-instant target-instant))
+                      (let [data (:_data value-map)
+                            class-name (or (:class data) (get data "class"))
+                            object-id (or (:id data) (get data "id") (.key record))]
+                        (when (and class-name object-id)
+                          (let [clean-data (dissoc data :class "class" :id "id")
+                                existing (get-in @state [class-name object-id] {})
+                                merged (merge existing clean-data)]
+                            (swap! state assoc-in [class-name object-id] merged))))))
+
+                  (catch Exception e
+                    (log/error e "Error processing record from" topic))))
+
+              ;; Continue polling until we reach target time
+              (recur))))))
+
+    (log/info "Replay complete. Classes:" (keys @state)
+              "Total objects:" (reduce + (map count (vals @state))))
+    @state))
+
 (defn build-historical-snapshot
   "Builds a complete snapshot of all business objects at the specified timestamp"
-  [timestamp {:keys [bootstrap-servers] :or {bootstrap-servers "localhost:9092"}}]
+  [timestamp {:keys [bootstrap-servers history-topic]
+              :or {bootstrap-servers "localhost:9092"
+                   history-topic "business-objects-history"}}]
   (log/info "Building historical snapshot for timestamp:" timestamp)
 
-  (let [consumer (create-history-consumer bootstrap-servers)
-        history-topics ["invoices-history" "contracts-history" "legal-commitments-history"]
-        snapshot (atom {})]
-
+  (let [consumer (create-history-consumer bootstrap-servers)]
     (try
-      (doseq [topic history-topics]
-        (let [class-name (case topic
-                          "invoices-history" "Facture"
-                          "contracts-history" "Contrat"
-                          "legal-commitments-history" "EngagementJuridique")
-              topic-state (replay-topic-until consumer topic timestamp)]
-          (swap! snapshot assoc class-name topic-state)))
-
+      (replay-unified-topic-until consumer history-topic timestamp)
       (finally
-        (.close consumer)))
-
-    @snapshot))
+        (.close consumer)))))
 
 (defn query-historical-attributes
   "Retrieves attributes for a specific object at a historical timestamp"
