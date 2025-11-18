@@ -9,12 +9,10 @@
            (java.util Properties)
            (java.time Instant)))
 
-;; Configuration for topic mirroring
+;; Configuration for topic mirroring - SIMPLIFIED to single unified topic
 (def mirror-config
-  "Maps compacted topics to their history equivalents"
-  {"invoices-compacted" "invoices-history"
-   "contracts-compacted" "contracts-history"
-   "legal-commitments-compacted" "legal-commitments-history"})
+  "Maps compacted topic to history equivalent"
+  {"business-objects-compacted" "business-objects-history"})
 
 (defn enrich-with-timestamp
   "Adds processing timestamp to the message for time-travel queries"
