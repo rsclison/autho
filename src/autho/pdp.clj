@@ -266,10 +266,21 @@
       (.load props reader)
       (into {} (for [[k v] props] [(keyword k) (edn/read-string v)])))))
 
+(defn kafka-enabled?
+  "Check if Kafka features are enabled via KAFKA_ENABLED environment variable.
+  Defaults to true for backward compatibility."
+  []
+  (if-let [env-enabled (System/getenv "KAFKA_ENABLED")]
+    (Boolean/parseBoolean env-enabled)
+    true))
 
 (defn init []
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
-  (.addShutdownHook (Runtime/getRuntime) (Thread. #(kafka-pip/stop-all-pips)))
+
+  ;; Only register Kafka shutdown hook if Kafka is enabled
+  (when (kafka-enabled?)
+    (.addShutdownHook (Runtime/getRuntime) (Thread. #(kafka-pip/stop-all-pips))))
+
   (let [ldapprop (filter (fn [propunit] (str/starts-with? (name propunit) "ldap")) @properties)
         kafka-pips (filter #(= :kafka-pip (:type %)) (prp/get-pips))
         rocksdb-path (getProperty :kafka.pip.rocksdb.path)
@@ -279,7 +290,8 @@
                                                :password (or (System/getenv "LDAP_PASSWORD")
                                                             (getProperty :ldap.password))
                                                }))
-    (when (and (seq kafka-pips) rocksdb-path)
+    ;; Only initialize Kafka PIPs if Kafka is enabled
+    (when (and (kafka-enabled?) (seq kafka-pips) rocksdb-path)
       (kafka-pip/open-shared-db rocksdb-path kafka-pip-classes)
       (doseq [pip-config kafka-pips]
         (kafka-pip/init-pip pip-config))))

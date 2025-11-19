@@ -48,6 +48,13 @@
 ;; Structure: {ip-address [timestamp1 timestamp2 ...]}
 (defonce rate-limit-store (atom {}))
 
+;; Kafka feature flag configuration
+;; KAFKA_ENABLED: enable/disable Kafka features including PIPs and time-travel endpoints (default: true)
+(def kafka-enabled
+  (if-let [env-enabled (System/getenv "KAFKA_ENABLED")]
+    (Boolean/parseBoolean env-enabled)
+    true))
+
 (defn json-response [data & [status]]
   {:status (or status 200)
    :headers {"Content-Type" "application/json"}
@@ -186,6 +193,7 @@
                                   :rulesRepository (name rules-status)
                                   :rateLimit {:enabled rate-limit-enabled
                                               :requestsPerMinute rate-limit-requests-per-minute}
+                                  :kafka {:enabled kafka-enabled}
                                   :timestamp (str (java.time.Instant/now))})))
 
            (GET "/test" req
@@ -283,6 +291,11 @@
            ;; Time-Travel Authorization Endpoints
            (POST "/isAuthorized-at-time" request
                  (cond
+                   (not kafka-enabled)
+                   (error-response "KAFKA_DISABLED"
+                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
+                                   503)
+
                    (= :failed (prp/get-rules-repository-status))
                    (rules-not-loaded-response)
 
@@ -305,6 +318,11 @@
 
            (POST "/who-was-authorized-at" request
                  (cond
+                   (not kafka-enabled)
+                   (error-response "KAFKA_DISABLED"
+                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
+                                   503)
+
                    (nil? (:body request))
                    (error-response "EMPTY_REQUEST_BODY"
                                    "Request body is empty."
@@ -322,6 +340,11 @@
 
            (POST "/what-could-access-at" request
                  (cond
+                   (not kafka-enabled)
+                   (error-response "KAFKA_DISABLED"
+                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
+                                   503)
+
                    (nil? (:body request))
                    (error-response "EMPTY_REQUEST_BODY"
                                    "Request body is empty."
@@ -339,6 +362,11 @@
 
            (POST "/audit-trail" request
                  (cond
+                   (not kafka-enabled)
+                   (error-response "KAFKA_DISABLED"
+                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
+                                   503)
+
                    (nil? (:body request))
                    (error-response "EMPTY_REQUEST_BODY"
                                    "Request body is empty."
@@ -356,10 +384,19 @@
 
            (context "/admin" []
                     (GET "/listRDB" []
-                         (json-response (kpip/list-column-families)))
+                         (if kafka-enabled
+                           (json-response (kpip/list-column-families))
+                           (error-response "KAFKA_DISABLED"
+                                           "RocksDB features are disabled. Set KAFKA_ENABLED=true to enable."
+                                           503)))
                     (DELETE "/clearRDB/:class-name" [class-name]
-                            (kpip/clear-column-family class-name)
-                            (json-response {:status "ok" :message (str "Column family " class-name " cleared.")}))
+                            (if kafka-enabled
+                              (do
+                                (kpip/clear-column-family class-name)
+                                (json-response {:status "ok" :message (str "Column family " class-name " cleared.")}))
+                              (error-response "KAFKA_DISABLED"
+                                              "RocksDB features are disabled. Set KAFKA_ENABLED=true to enable."
+                                              503)))
                     (POST "/reinit" []
                           (pdp/init)
                           (json-response {:status "ok" :message "PDP reinitialized."}))

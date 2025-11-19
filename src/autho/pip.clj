@@ -69,13 +69,21 @@
         {:error "pip_exception" :message (.getMessage e)}))))
 
 (defmethod callPip :kafka-pip [decl att obj]
-  (let [pip-info (:pip decl)
-        class-name (:class decl)
-        id-key (or (:id-key pip-info) :id)
-        obj-id (get obj id-key)]
-    (if (and class-name obj-id)
-      (kafka-pip/query-pip class-name (str obj-id))
-      nil)))
+  (let [kafka-enabled (if-let [env-enabled (System/getenv "KAFKA_ENABLED")]
+                        (Boolean/parseBoolean env-enabled)
+                        true)]
+    (if-not kafka-enabled
+      (do
+        (u/log ::kafka-disabled :message "Kafka PIP called but Kafka is disabled via KAFKA_ENABLED=false")
+        (.warn logger "Kafka PIP called but Kafka is disabled. Set KAFKA_ENABLED=true to enable.")
+        nil)
+      (let [pip-info (:pip decl)
+            class-name (:class decl)
+            id-key (or (:id-key pip-info) :id)
+            obj-id (get obj id-key)]
+        (if (and class-name obj-id)
+          (kafka-pip/query-pip class-name (str obj-id))
+          nil)))))
 
 ;; Java PIP implementation
 (defmethod callPip :java [decl att obj]
