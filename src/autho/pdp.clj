@@ -201,7 +201,7 @@
                                    :priority (:priority rule)})
                        denyRules)})))
 
-(defn whichAuthorized [request body]
+(defn whatAuthorized [request body]
   (let [subject (get-subject request body)
         authz-request {:subject subject :resource (:resource body) :operation (:operation body)}]
     (if-not (:subject authz-request)
@@ -209,8 +209,8 @@
 
     (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
           denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
-          evrules1 (keep #(rule/evalRuleWithSubject % authz-request) allowrules)
-          evrules2 (keep #(rule/evalRuleWithSubject % authz-request) denyrules)]
+          evrules1 (filter #(rule/evalRuleWithSubject % authz-request) allowrules)
+          evrules2 (filter #(rule/evalRuleWithSubject % authz-request) denyrules)]
       {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
                                :resourceCond (rest (:resourceCond rule))
                                :operation (:operation rule)})

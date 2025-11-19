@@ -255,7 +255,7 @@
                    (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
                      (json-response (pdp/whoAuthorized request body)))))
 
-           (POST "/whichAuthorized" request
+           (POST "/whatAuthorized" request
                  (cond
                    (= :failed (prp/get-rules-repository-status))
                    (rules-not-loaded-response)
@@ -267,7 +267,7 @@
 
                    :else
                    (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
-                     (json-response (pdp/whichAuthorized request body)))))
+                     (json-response (pdp/whatAuthorized request body)))))
 
            (PUT "/policy/:resourceClass"
                 {params :params body :body}
