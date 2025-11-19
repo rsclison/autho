@@ -76,13 +76,24 @@
       (do
         (u/log ::kafka-disabled :message "Kafka PIP called but Kafka is disabled via KAFKA_ENABLED=false")
         (.warn logger "Kafka PIP called but Kafka is disabled. Set KAFKA_ENABLED=true to enable.")
-        nil)
+        ;; Try fallback if Kafka is disabled
+        (when-let [fallback (:fallback (:pip decl))]
+          (u/log ::kafka-fallback :message "Using fallback PIP because Kafka is disabled")
+          (callPip (assoc decl :pip fallback) att obj)))
       (let [pip-info (:pip decl)
             class-name (:class decl)
             id-key (or (:id-key pip-info) :id)
             obj-id (get obj id-key)]
         (if (and class-name obj-id)
-          (kafka-pip/query-pip class-name (str obj-id))
+          (let [result (kafka-pip/query-pip class-name (str obj-id))]
+            ;; If RocksDB returns nil and fallback is configured, try fallback
+            (if (and (nil? result) (:fallback pip-info))
+              (do
+                (u/log ::kafka-fallback :message "Object not found in RocksDB, trying fallback PIP"
+                       :class class-name :id obj-id)
+                (.debug logger "Object {} not found in RocksDB for class {}, trying fallback" obj-id class-name)
+                (callPip (assoc decl :pip (:fallback pip-info)) att obj))
+              result))
           nil)))))
 
 ;; Java PIP implementation

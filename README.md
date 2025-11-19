@@ -391,6 +391,37 @@ The `autho` server is configured through the `resources/pdp-prop.properties` fil
 *   `delegation.type`: The type of delegation store to use. Currently, only `file` is supported.
 *   `delegation.path`: The path to the file containing the delegation rules.
 
+## Policy Information Points (PIPs)
+
+PIPs (Policy Information Points) are external data sources that provide additional attributes to enrich authorization requests. Autho supports multiple PIP types including REST APIs, Kafka streams, CSV files, LDAP, and custom Java/Clojure implementations.
+
+### Kafka PIPs with Fallback
+
+When using Kafka PIPs, the system maintains a local RocksDB cache populated by Kafka consumers. To handle scenarios where RocksDB is empty (e.g., cold start) or when Kafka is disabled, you can configure **fallback PIPs**.
+
+**Configuration Example:**
+
+```clojure
+{:class "Facture"
+ :pip {:type :kafka-pip
+       :id-key :id
+       :fallback {:type :rest
+                  :url "http://backend-service:8080/api/factures"
+                  :verb "get"}}}
+```
+
+**When is the fallback used?**
+- On first application startup (before Kafka consumers populate RocksDB)
+- When an object is not found in RocksDB
+- When `KAFKA_ENABLED=false`
+
+**Benefits:**
+- ✅ Guarantees high availability even with empty cache
+- ✅ Graceful degradation when Kafka infrastructure is unavailable
+- ✅ Transparent to authorization logic - no rule changes needed
+
+For detailed PIP configuration and best practices, see [docs/PIPS.md](docs/PIPS.md).
+
 ## License
 
 Copyright © 2024
