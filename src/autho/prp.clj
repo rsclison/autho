@@ -126,6 +126,12 @@
           %) @pips)
   )
 
+(defn has-kafka-pip? [class-name]
+  "Checks if a given class has a Kafka PIP configured."
+  (some #(and (= class-name (:class %))
+              (= :kafka-pip (get-in % [:pip :type])))
+        @pips))
+
 (defn insert-policy [resourceClass pol]
   (swap! policiesMap assoc resourceClass pol)
 

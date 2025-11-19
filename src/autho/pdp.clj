@@ -201,8 +201,50 @@
                                    :priority (:priority rule)})
                        denyRules)})))
 
-(defn whatAuthorized [request body]
+(defn- object-matches-resource-cond? [obj resource-clauses]
+  "Checks if an object matches all resource conditions from a rule.
+  Returns true if all conditions are satisfied."
+  (try
+    (let [ctxt (assoc {:resource obj} :class :Resource)]
+      (every? #(rule/evalClause % ctxt :resource) resource-clauses))
+    (catch Exception e
+      false)))
+
+(defn- enrich-with-objects
+  "Enriches a rule result with actual objects from Kafka PIP if available.
+  Supports pagination with page and pageSize parameters."
+  [rule-result {:keys [page pageSize] :or {page 1 pageSize 20}}]
+  (let [resource-class (:resourceClass rule-result)
+        resource-conds (rest (:resourceCond rule-result))]
+    (if (and (kafka-enabled?) (prp/has-kafka-pip? resource-class))
+      (let [offset (* (dec page) pageSize)
+            ;; Get more objects than needed to filter, then paginate
+            ;; This is not optimal but works for now
+            all-objects (kafka-pip/query-all-objects resource-class {})
+            filtered-objects (filter #(object-matches-resource-cond? % resource-conds) all-objects)
+            total (count filtered-objects)
+            paginated-objects (take pageSize (drop offset filtered-objects))
+            has-more (> total (+ offset pageSize))]
+        (assoc rule-result :objects {
+                                     :items (vec paginated-objects)
+                                     :pagination {
+                                                  :page page
+                                                  :pageSize pageSize
+                                                  :total total
+                                                  :hasMore has-more}}))
+      rule-result)))
+
+(defn whatAuthorized
+  "Returns resources that a subject is authorized to access.
+  For classes with Kafka PIPs, also returns the actual matching objects with pagination.
+
+  Optional query parameters in body:
+  - page: Page number (default: 1)
+  - pageSize: Number of objects per page (default: 20)"
+  [request body]
   (let [subject (get-subject request body)
+        page (get body :page 1)
+        pageSize (get body :pageSize 20)
         authz-request {:subject subject :resource (:resource body) :operation (:operation body)}]
     (if-not (:subject authz-request)
       (throw (ex-info "No subject specified" {:status 400})))
@@ -210,15 +252,18 @@
     (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
           denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
           evrules1 (filter #(rule/evalRuleWithSubject % authz-request) allowrules)
-          evrules2 (filter #(rule/evalRuleWithSubject % authz-request) denyrules)]
-      {:allow (map (fn [rule] {:resourceClass (:resourceClass rule)
-                               :resourceCond (rest (:resourceCond rule))
-                               :operation (:operation rule)})
-                   evrules1)
-       :deny (map (fn [rule] {:resourceClass (:resourceClass rule)
-                              :resourceCond (rest (:resourceCond rule))
-                              :operation (:operation rule)})
-                  evrules2)})))
+          evrules2 (filter #(rule/evalRuleWithSubject % authz-request) denyrules)
+          pagination-opts {:page page :pageSize pageSize}]
+      {:allow (map #(enrich-with-objects % pagination-opts)
+                   (map (fn [rule] {:resourceClass (:resourceClass rule)
+                                    :resourceCond (:resourceCond rule)
+                                    :operation (:operation rule)})
+                        evrules1))
+       :deny (map #(enrich-with-objects % pagination-opts)
+                  (map (fn [rule] {:resourceClass (:resourceClass rule)
+                                   :resourceCond (:resourceCond rule)
+                                   :operation (:operation rule)})
+                       evrules2))})))
 
 (defn explain
   "Explains the authorization decision by showing all evaluated rules and their results.

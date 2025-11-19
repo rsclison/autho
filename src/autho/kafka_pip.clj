@@ -141,6 +141,62 @@
       (log/warn "Query for unknown class or uninitialized PIP:" class-name)
       nil)))
 
+(defn query-all-objects
+  "Retrieves all objects for a given class from RocksDB.
+  Returns a vector of maps with :id and object data.
+  Supports optional pagination with :offset and :limit."
+  ([class-name] (query-all-objects class-name {}))
+  ([class-name {:keys [offset limit] :or {offset 0 limit nil}}]
+   (if-let [cf-handle (get-cf-handle class-name)]
+     (if-let [db (:db-instance @db-state)]
+       (let [all-objects (atom [])
+             counter (atom 0)]
+         (with-open [iter (.newIterator db cf-handle)]
+           (.seekToFirst iter)
+           (while (.isValid iter)
+             (when (>= @counter offset)
+               (let [key (String. (.key iter) "UTF-8")
+                     value-str (String. (.value iter) "UTF-8")]
+                 (try
+                   (let [obj-data (json/read-value value-str json/keyword-keys-object-mapper)
+                         obj-with-id (assoc obj-data :id key)]
+                     (swap! all-objects conj obj-with-id)
+                     ;; Break if we've reached the limit
+                     (when (and limit (>= (count @all-objects) limit))
+                       (throw (Exception. "Limit reached"))))
+                   (catch clojure.lang.ExceptionInfo e
+                     (if (= "Limit reached" (.getMessage e))
+                       nil  ; Expected, stop iteration
+                       (log/error e "Failed to parse object" key)))
+                   (catch Exception e
+                     (when-not (= "Limit reached" (.getMessage e))
+                       (log/error e "Failed to parse object" key))))))
+             (swap! counter inc)
+             (when-not (and limit (>= (count @all-objects) limit))
+               (.next iter))))
+         @all-objects)
+       (do
+         (log/error "RocksDB not initialized")
+         []))
+     (do
+       (log/warn "Query all objects for unknown class or uninitialized PIP:" class-name)
+       []))))
+
+(defn count-objects
+  "Counts total number of objects for a given class in RocksDB."
+  [class-name]
+  (if-let [cf-handle (get-cf-handle class-name)]
+    (if-let [db (:db-instance @db-state)]
+      (let [counter (atom 0)]
+        (with-open [iter (.newIterator db cf-handle)]
+          (.seekToFirst iter)
+          (while (.isValid iter)
+            (swap! counter inc)
+            (.next iter)))
+        @counter)
+      0)
+    0))
+
 (defn stop-all-pips []
   (doseq [handle @consumer-handles]
     (when-let [stop-fn (:stop-fn handle)]

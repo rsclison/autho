@@ -232,17 +232,25 @@ The response is a JSON array of conditions that describe the subjects who are au
 
 This endpoint is the inverse of `whoAuthorized`. It retrieves the resources that a subject is authorized to perform a certain action on. This is useful for building user interfaces that show a user all the resources they can access.
 
+**Enhanced with Kafka PIP:** When Kafka is enabled (`KAFKA_ENABLED=true`) and a resource class has a Kafka PIP configured, this endpoint automatically retrieves and filters the actual objects from RocksDB that match the authorization conditions, with pagination support.
+
 **Request Body:**
 
 The request body must be a JSON object with the following keys:
 
 *   `subject`: An object representing the user or service making the request. **Note:** This field is only used when authenticating with an API Key. When using JWT authentication, the subject is derived from the token and this field is ignored.
-*   `action`: A string representing the action being performed.
+*   `resource`: An object with at least `class` to specify the resource type
+*   `operation`: A string representing the action being performed (optional, depending on rules)
+*   `page` (optional): Page number for object pagination (default: 1)
+*   `pageSize` (optional): Number of objects per page (default: 20)
 
 ```json
 {
-  "subject": { "id": "user1", "attributes": { "role": "editor" } },
-  "action": "edit"
+  "subject": { "id": "user1", "role": "accountant" },
+  "resource": { "class": "Facture" },
+  "operation": "edit",
+  "page": 1,
+  "pageSize": 20
 }
 ```
 
@@ -250,18 +258,60 @@ The request body must be a JSON object with the following keys:
 
 The response is a JSON object with two keys, `allow` and `deny`. Each key contains a list of resource conditions.
 
+**For classes without Kafka PIP (criteria only):**
 ```json
 {
   "allow": [
     {
       "resourceClass": "document",
-      "resourceCond": ["=", ["att", "owner"], "user1"],
+      "resourceCond": ["and", ["=", ["att", "owner"], "user1"]],
       "operation": "edit"
     }
   ],
   "deny": []
 }
 ```
+
+**For classes with Kafka PIP (criteria + objects + pagination):**
+```json
+{
+  "allow": [
+    {
+      "resourceClass": "Facture",
+      "resourceCond": ["and", ["=", ["att", "accountant"], "user1"]],
+      "operation": "edit",
+      "objects": {
+        "items": [
+          {
+            "id": "INV-001",
+            "accountant": "user1",
+            "amount": 5000,
+            "status": "pending"
+          },
+          {
+            "id": "INV-002",
+            "accountant": "user1",
+            "amount": 3000,
+            "status": "approved"
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "pageSize": 20,
+          "total": 45,
+          "hasMore": true
+        }
+      }
+    }
+  ],
+  "deny": []
+}
+```
+
+**Note:** Objects are only included when:
+- `KAFKA_ENABLED=true`
+- The resource class has a Kafka PIP configured in `pips.edn`
+- RocksDB contains objects for that class
 
 ### Policy Management Endpoints
 
