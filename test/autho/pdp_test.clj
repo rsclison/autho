@@ -123,8 +123,8 @@
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No resource specified"
                                 (whoAuthorized ring-req {})))))))
 
-(deftest whichAuthorized-test
-  (testing "whichAuthorized function"
+(deftest whatAuthorized-test
+  (testing "whatAuthorized function"
     (let [request {:subject {:id "user1"}}
           ring-req {:identity {:auth-method :api-key}}]
       (testing "when a rule allows the request"
@@ -140,7 +140,7 @@
                            :resourceCond '([:eq "public" true])
                            :operation "read"}]
                   :deny []}
-                 (whichAuthorized ring-req request)))))
+                 (whatAuthorized ring-req request)))))
       (testing "when a rule denies the request"
         (with-redefs [prp/getGlobalPolicy (fn [resource-class]
                                             {:rules [{:name "deny-rule"
@@ -154,7 +154,7 @@
                   :deny [{:resourceClass "doc"
                           :resourceCond '([:eq "private" true])
                           :operation "read"}]}
-                 (whichAuthorized ring-req request)))))
+                 (whatAuthorized ring-req request)))))
       (testing "when both allow and deny rules match"
         (with-redefs [prp/getGlobalPolicy (fn [resource-class]
                                             {:rules [{:name "allow-rule" :effect "allow" :resourceClass "doc" :resourceCond [:and [:eq "public" true]] :operation "read"}
@@ -162,14 +162,14 @@
                       rule/evalRuleWithSubject (fn [rule req] rule)]
           (is (= {:allow [{:resourceClass "doc" :resourceCond '([:eq "public" true]) :operation "read"}]
                   :deny [{:resourceClass "doc" :resourceCond '([:eq "private" true]) :operation "read"}]}
-                 (whichAuthorized ring-req request)))))
+                 (whatAuthorized ring-req request)))))
       (testing "when no rule is applicable"
         (with-redefs [prp/getGlobalPolicy (fn [resource-class] {:rules []})
                       rule/evalRuleWithSubject (fn [rule req] nil)]
-          (is (= {:allow [] :deny []} (whichAuthorized ring-req request)))))
+          (is (= {:allow [] :deny []} (whatAuthorized ring-req request)))))
       (testing "when request has no subject"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No subject specified"
-                                (whichAuthorized ring-req {})))))))
+                                (whatAuthorized ring-req {})))))))
 
 (deftest circular-delegation-test
   (testing "Circular delegation detection"

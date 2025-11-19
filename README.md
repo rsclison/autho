@@ -228,7 +228,7 @@ The response is a JSON array of conditions that describe the subjects who are au
 ]
 ```
 
-#### `POST /whichAuthorized`
+#### `POST /whatAuthorized`
 
 This endpoint is the inverse of `whoAuthorized`. It retrieves the resources that a subject is authorized to perform a certain action on. This is useful for building user interfaces that show a user all the resources they can access.
 

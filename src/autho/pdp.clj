@@ -201,7 +201,7 @@
                                    :priority (:priority rule)})
                        denyRules)})))
 
-(defn whichAuthorized [request body]
+(defn whatAuthorized [request body]
   (let [subject (get-subject request body)
         authz-request {:subject subject :resource (:resource body) :operation (:operation body)}]
     (if-not (:subject authz-request)
