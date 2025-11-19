@@ -93,6 +93,30 @@ For security reasons, sensitive configuration values must be provided as environ
     export MAX_REQUEST_SIZE=2097152  # 2MB
     ```
 
+*   **`KAFKA_ENABLED`**: Enable or disable Kafka-related features (PIPs, time-travel endpoints, RocksDB). Default is `true`.
+    ```bash
+    export KAFKA_ENABLED=false  # Disable Kafka features
+    ```
+    When set to `false`, the following features will be disabled:
+    - Kafka PIPs for business object retrieval
+    - Time-travel authorization endpoints (`/isAuthorized-at-time`, `/who-was-authorized-at`, `/what-could-access-at`, `/audit-trail`)
+    - RocksDB admin endpoints (`/admin/listRDB`, `/admin/clearRDB/:class-name`)
+
+*   **`RATE_LIMIT_ENABLED`**: Enable or disable rate limiting. Default is `true`.
+    ```bash
+    export RATE_LIMIT_ENABLED=false  # Disable rate limiting
+    ```
+
+*   **`RATE_LIMIT_REQUESTS_PER_MINUTE`**: Maximum number of requests allowed per minute per IP address. Default is 100.
+    ```bash
+    export RATE_LIMIT_REQUESTS_PER_MINUTE=200  # Allow 200 requests per minute
+    ```
+
+*   **`KAFKA_BOOTSTRAP_SERVERS`**: Kafka bootstrap servers for time-travel features. Default is `localhost:9092`.
+    ```bash
+    export KAFKA_BOOTSTRAP_SERVERS="kafka1:9092,kafka2:9092"
+    ```
+
 ### Example: Running with Environment Variables
 
 ```bash
