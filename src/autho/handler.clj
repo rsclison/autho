@@ -3,6 +3,7 @@
             [autho.prp :as prp]
             [autho.pip :as pip]
             [autho.kafka-pip :as kpip]
+            [autho.cache :as cache]
             [autho.journal :as jrnl]
             [autho.person :as person]
             [autho.time-travel :as time-travel]
@@ -417,7 +418,30 @@
                               (.error logger "Failed to reload person cache" e)
                               (error-response "PERSON_RELOAD_FAILED"
                                               (str "Failed to reload person cache: " (.getMessage e))
-                                              500))))))
+                                              500)))))
+
+           ;; Cache monitoring and management endpoints
+           (GET "/cache/stats" []
+                (.debug logger "GET /cache/stats")
+                (json-response (cache/get-stats)))
+
+           (POST "/cache/clear" []
+                 (.info logger "POST /cache/clear - clearing all caches")
+                 (cache/clear-all-caches!)
+                 (json-response {:status "ok"
+                                 :message "All caches cleared successfully."}))
+
+           (POST "/cache/clear/:cacheType" [cacheType]
+                 (.info logger "POST /cache/clear/{} - clearing specific cache" cacheType)
+                 (let [cache-type-keyword (keyword cacheType)]
+                   (if (contains? #{:request :pip :resource :subject} cache-type-keyword)
+                     (do
+                       (cache/clear-cache! cache-type-keyword)
+                       (json-response {:status "ok"
+                                       :message (str "Cache '" cacheType "' cleared successfully.")}))
+                     (error-response "INVALID_CACHE_TYPE"
+                                     (str "Invalid cache type: " cacheType ". Valid types are: request, pip, resource, subject")
+                                     400)))))
 
 (def app-routes
   (routes

@@ -149,15 +149,22 @@
     (if-not (:subject authz-request)
       (throw (ex-info "No subject specified" {:status 400})))
 
-    (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
-          augreq (passThroughCache authz-request)
-          evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                             (conj res rule)
-                                             res))
-                           [] (:rules globalPolicy))]
-      (if-not globalPolicy
-        (throw (ex-info "No global policy applicable" {:status 404})))
-      {:results (map #(:name %1) evalglob)})))
+    ;; Check cache first
+    (if-let [cached-result (cache/get-cached-request authz-request)]
+      cached-result
+      ;; Cache miss - compute result
+      (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
+            augreq (passThroughCache authz-request)
+            evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                               (conj res rule)
+                                               res))
+                             [] (:rules globalPolicy))]
+        (if-not globalPolicy
+          (throw (ex-info "No global policy applicable" {:status 404})))
+        (let [result {:results (map #(:name %1) evalglob)}]
+          ;; Cache the result
+          (cache/cache-request! authz-request result)
+          result)))))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
@@ -245,25 +252,36 @@
   (let [subject (get-subject request body)
         page (get body :page 1)
         pageSize (get body :pageSize 20)
-        authz-request {:subject subject :resource (:resource body) :operation (:operation body)}]
+        authz-request {:subject subject
+                       :resource (:resource body)
+                       :operation (:operation body)
+                       :page page
+                       :pageSize pageSize}]
     (if-not (:subject authz-request)
       (throw (ex-info "No subject specified" {:status 400})))
 
-    (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
-          denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
-          evrules1 (filter #(rule/evalRuleWithSubject % authz-request) allowrules)
-          evrules2 (filter #(rule/evalRuleWithSubject % authz-request) denyrules)
-          pagination-opts {:page page :pageSize pageSize}]
-      {:allow (map #(enrich-with-objects % pagination-opts)
-                   (map (fn [rule] {:resourceClass (:resourceClass rule)
-                                    :resourceCond (:resourceCond rule)
-                                    :operation (:operation rule)})
-                        evrules1))
-       :deny (map #(enrich-with-objects % pagination-opts)
-                  (map (fn [rule] {:resourceClass (:resourceClass rule)
-                                   :resourceCond (:resourceCond rule)
-                                   :operation (:operation rule)})
-                       evrules2))})))
+    ;; Check cache first
+    (if-let [cached-result (cache/get-cached-request authz-request)]
+      cached-result
+      ;; Cache miss - compute result
+      (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
+            denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
+            evrules1 (filter #(rule/evalRuleWithSubject % authz-request) allowrules)
+            evrules2 (filter #(rule/evalRuleWithSubject % authz-request) denyrules)
+            pagination-opts {:page page :pageSize pageSize}
+            result {:allow (map #(enrich-with-objects % pagination-opts)
+                                (map (fn [rule] {:resourceClass (:resourceClass rule)
+                                                 :resourceCond (:resourceCond rule)
+                                                 :operation (:operation rule)})
+                                     evrules1))
+                    :deny (map #(enrich-with-objects % pagination-opts)
+                               (map (fn [rule] {:resourceClass (:resourceClass rule)
+                                                :resourceCond (:resourceCond rule)
+                                                :operation (:operation rule)})
+                                    evrules2))}]
+        ;; Cache the result
+        (cache/cache-request! authz-request result)
+        result))))
 
 (defn explain
   "Explains the authorization decision by showing all evaluated rules and their results.

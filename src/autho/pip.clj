@@ -5,7 +5,8 @@
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [com.brunobonacci.mulog :as u]
-            [autho.kafka-pip :as kafka-pip])
+            [autho.kafka-pip :as kafka-pip]
+            [autho.cache :as cache])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.pip"))
@@ -31,6 +32,23 @@
 ;; Multimethod for PIP calls, dispatches on the :type from the :pip map
 (defmulti callPip (fn [decl _ _] (get-in decl [:pip :type])))
 
+;; Helper function to wrap PIP calls with caching
+(defn- call-pip-with-cache [pip-type decl att obj pip-fn]
+  "Wraps a PIP call with cache lookup and storage.
+  pip-fn should be a function that executes the actual PIP call."
+  (let [class-name (:class decl)
+        obj-id (:id obj)
+        att-str (str att)]
+    ;; Check cache first
+    (if-let [cached-result (cache/get-cached-pip pip-type class-name obj-id att-str)]
+      cached-result
+      ;; Cache miss - execute PIP call
+      (let [result (pip-fn)]
+        ;; Only cache non-error results
+        (when (and result (not (:error result)))
+          (cache/cache-pip! pip-type class-name obj-id att-str result))
+        result))))
+
 ;; Default implementation for unknown PIP types
 (defmethod callPip :default [decl att obj]
   (u/log ::unknown-pip-type :decl decl)
@@ -39,34 +57,36 @@
 ;; REST PIP implementation (from urlPip)
 ;; Uses connection pooling for better performance
 (defmethod callPip :rest [decl att obj]
-  (let [pip-info (:pip decl)
-        verb (keyword (or (:verb pip-info) "get")) ; Default to GET
-        url (:url pip-info)
-        obj-id (:id obj)]
-    (try
-      (let [full-url (if (= verb :get) (str url "/" obj-id) url)
-            http-opts {:throw-exceptions false
-                       :content-type :json
-                       :as :json
-                       :coerce :always
-                       :connection-manager http-connection-manager}
-            req-opts (if (= verb :post)
-                       (assoc http-opts :form-params obj)
-                       http-opts)
-            response (case verb
-                       :get (client/get full-url req-opts)
-                       :post (client/post url req-opts))]
-        (if (>= (:status response) 400)
-          (do
-            (u/log ::pip-call-failed :status (:status response) :body (:body response) :pip-info pip-info)
-            (if (= (:status response) 404)
-              {:error "object not found"}
-              {:error "pip_call_failed" :status (:status response)}))
-          (:body response)))
-      (catch Exception e
-        (u/log ::pip-exception :exception e :pip-info pip-info)
-        (.error logger "Exception calling REST PIP: {}" (.getMessage e) e)
-        {:error "pip_exception" :message (.getMessage e)}))))
+  (call-pip-with-cache :rest decl att obj
+    (fn []
+      (let [pip-info (:pip decl)
+            verb (keyword (or (:verb pip-info) "get")) ; Default to GET
+            url (:url pip-info)
+            obj-id (:id obj)]
+        (try
+          (let [full-url (if (= verb :get) (str url "/" obj-id) url)
+                http-opts {:throw-exceptions false
+                           :content-type :json
+                           :as :json
+                           :coerce :always
+                           :connection-manager http-connection-manager}
+                req-opts (if (= verb :post)
+                           (assoc http-opts :form-params obj)
+                           http-opts)
+                response (case verb
+                           :get (client/get full-url req-opts)
+                           :post (client/post url req-opts))]
+            (if (>= (:status response) 400)
+              (do
+                (u/log ::pip-call-failed :status (:status response) :body (:body response) :pip-info pip-info)
+                (if (= (:status response) 404)
+                  {:error "object not found"}
+                  {:error "pip_call_failed" :status (:status response)}))
+              (:body response)))
+          (catch Exception e
+            (u/log ::pip-exception :exception e :pip-info pip-info)
+            (.error logger "Exception calling REST PIP: {}" (.getMessage e) e)
+            {:error "pip_exception" :message (.getMessage e)}))))))
 
 (defmethod callPip :kafka-pip [decl att obj]
   (let [kafka-enabled (if-let [env-enabled (System/getenv "KAFKA_ENABLED")]
@@ -98,45 +118,51 @@
 
 ;; Java PIP implementation
 (defmethod callPip :java [decl att obj]
-  (let [instance (get-in decl [:pip :instance])]
-    (if instance
-      (.resolveAttribute instance att obj)
-      nil)))
+  (call-pip-with-cache :java decl att obj
+    (fn []
+      (let [instance (get-in decl [:pip :instance])]
+        (if instance
+          (.resolveAttribute instance att obj)
+          nil)))))
 
 ;; Internal PIP implementation
 (defmethod callPip :internal [decl att obj]
-  (let [method-name (get-in decl [:pip :method])]
-    (if method-name
-      (try
-        ;; Assuming the internal methods are in attfun for now, as per original logic
-        ((ns-resolve 'autho.attfun (symbol method-name)) obj)
-        (catch Exception e
-          (u/log ::pip-exception :exception e :pip-info (:pip decl))
-          nil))
-      nil)))
+  (call-pip-with-cache :internal decl att obj
+    (fn []
+      (let [method-name (get-in decl [:pip :method])]
+        (if method-name
+          (try
+            ;; Assuming the internal methods are in attfun for now, as per original logic
+            ((ns-resolve 'autho.attfun (symbol method-name)) obj)
+            (catch Exception e
+              (u/log ::pip-exception :exception e :pip-info (:pip decl))
+              nil))
+          nil)))))
 
 ;; CSV PIP implementation
 (defmethod callPip :csv [decl att obj]
-  (let [pip-info (:pip decl)
-        file-path (:path pip-info)
-        id-key (or (:id-key pip-info) :id) ; More idiomatic default
-        obj-id (get obj id-key)]
-    (if (and file-path obj-id)
-      (try
-        (with-open [reader (io/reader file-path)]
-          (let [csv-data (csv/read-csv reader)]
-            (if-let [headers (first csv-data)]
-              (let [headers (map keyword headers)
-                    id-col-name (name id-key)
-                    rows (rest csv-data)
-                    id-index (.indexOf (first csv-data) id-col-name)]
-                (if (>= id-index 0)
-                  (if-let [found-row (first (filter #(= (str (get % id-index)) (str obj-id)) rows))]
-                    (zipmap headers found-row)
-                    nil)
-                  nil))
-              nil)))
-        (catch java.io.FileNotFoundException e
-          (u/log ::pip-exception :exception e :pip-info pip-info)
-          nil))
-      nil)))
+  (call-pip-with-cache :csv decl att obj
+    (fn []
+      (let [pip-info (:pip decl)
+            file-path (:path pip-info)
+            id-key (or (:id-key pip-info) :id) ; More idiomatic default
+            obj-id (get obj id-key)]
+        (if (and file-path obj-id)
+          (try
+            (with-open [reader (io/reader file-path)]
+              (let [csv-data (csv/read-csv reader)]
+                (if-let [headers (first csv-data)]
+                  (let [headers (map keyword headers)
+                        id-col-name (name id-key)
+                        rows (rest csv-data)
+                        id-index (.indexOf (first csv-data) id-col-name)]
+                    (if (>= id-index 0)
+                      (if-let [found-row (first (filter #(= (str (get % id-index)) (str obj-id)) rows))]
+                        (zipmap headers found-row)
+                        nil)
+                      nil))
+                  nil)))
+            (catch java.io.FileNotFoundException e
+              (u/log ::pip-exception :exception e :pip-info pip-info)
+              nil))
+          nil)))))

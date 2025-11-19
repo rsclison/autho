@@ -117,6 +117,66 @@ For security reasons, sensitive configuration values must be provided as environ
     export KAFKA_BOOTSTRAP_SERVERS="kafka1:9092,kafka2:9092"
     ```
 
+#### Cache Configuration
+
+Autho provides multi-level caching for improved performance. All cache features can be configured via environment variables:
+
+*   **`CACHE_ENABLED`**: Enable or disable all caching features. Default is `true`.
+    ```bash
+    export CACHE_ENABLED=false  # Disable all caching
+    ```
+
+*   **`CACHE_REQUEST_ENABLED`**: Enable or disable request result caching (for `/isAuthorized`, `/whatAuthorized`). Default is `true`.
+    ```bash
+    export CACHE_REQUEST_ENABLED=false  # Disable request caching only
+    ```
+
+*   **`CACHE_PIP_ENABLED`**: Enable or disable PIP result caching (for REST, CSV, LDAP PIPs). Default is `true`.
+    ```bash
+    export CACHE_PIP_ENABLED=false  # Disable PIP caching only
+    ```
+
+*   **`CACHE_REQUEST_TTL_MS`**: Time-to-live for request cache entries in milliseconds. Default is 300000 (5 minutes).
+    ```bash
+    export CACHE_REQUEST_TTL_MS=600000  # 10 minutes
+    ```
+
+*   **`CACHE_REQUEST_MAX_SIZE`**: Maximum number of entries in request cache. Default is 10000.
+    ```bash
+    export CACHE_REQUEST_MAX_SIZE=20000  # Larger cache
+    ```
+
+*   **`CACHE_PIP_TTL_MS`**: Time-to-live for PIP cache entries in milliseconds. Default is 600000 (10 minutes).
+    ```bash
+    export CACHE_PIP_TTL_MS=1800000  # 30 minutes
+    ```
+
+*   **`CACHE_PIP_MAX_SIZE`**: Maximum number of entries in PIP cache. Default is 5000.
+    ```bash
+    export CACHE_PIP_MAX_SIZE=10000  # Larger cache
+    ```
+
+*   **`CACHE_RESOURCE_TTL_MS`**: Time-to-live for resource cache entries in milliseconds. Default is 10000 (10 seconds).
+    ```bash
+    export CACHE_RESOURCE_TTL_MS=30000  # 30 seconds
+    ```
+
+*   **`CACHE_SUBJECT_THRESHOLD`**: Maximum number of entries in subject cache (LRU). Default is 100.
+    ```bash
+    export CACHE_SUBJECT_THRESHOLD=200  # Larger cache
+    ```
+
+**Cache Types:**
+- **Request Cache**: Caches complete authorization results to avoid re-evaluating rules
+- **PIP Cache**: Caches results from external data sources (REST APIs, CSV files, LDAP)
+- **Resource Cache**: Caches enriched resource data (TTL-based)
+- **Subject Cache**: Caches enriched subject data (LRU-based)
+
+**Cache Monitoring:**
+- `GET /cache/stats`: View cache statistics (hits, misses, sizes)
+- `POST /cache/clear`: Clear all caches
+- `POST /cache/clear/:type`: Clear specific cache (request, pip, resource, or subject)
+
 ### Example: Running with Environment Variables
 
 ```bash
@@ -404,6 +464,173 @@ A JSON object confirming the deletion.
   "status": "success",
   "message": "Policy 'document' deleted."
 }
+```
+
+### Monitoring and Cache Management Endpoints
+
+These endpoints provide insights into cache performance and allow cache management.
+
+#### **`GET /cache/stats`**
+
+**Description:** Returns statistics for all cache types including hits, misses, sizes, and configuration.
+
+**Authentication:** Required (JWT or API Key)
+
+**Request:** No body required
+
+**Response Example:**
+
+```json
+{
+  "request": {
+    "hits": 1542,
+    "misses": 234,
+    "evictions": 5
+  },
+  "pip": {
+    "hits": 3421,
+    "misses": 567,
+    "evictions": 12
+  },
+  "resource": {
+    "hits": 892,
+    "misses": 123
+  },
+  "subject": {
+    "hits": 1024,
+    "misses": 89
+  },
+  "cache-sizes": {
+    "request": 234,
+    "pip": 567,
+    "resource": 123,
+    "subject": 89
+  },
+  "config": {
+    "enabled": true,
+    "request-enabled": true,
+    "pip-enabled": true,
+    "request-ttl-ms": 300000,
+    "pip-ttl-ms": 600000,
+    "resource-ttl-ms": 10000,
+    "subject-threshold": 100
+  }
+}
+```
+
+**Cache Metrics:**
+- **hits**: Number of cache hits (successful cache lookups)
+- **misses**: Number of cache misses (cache lookups that failed)
+- **evictions**: Number of entries evicted due to size limits
+- **cache-sizes**: Current number of entries in each cache
+
+**Hit Rate Calculation:**
+```
+Hit Rate = hits / (hits + misses) * 100%
+```
+
+A high hit rate (>80%) indicates good cache performance.
+
+#### **`POST /cache/clear`**
+
+**Description:** Clears all caches and resets statistics.
+
+**Authentication:** Required (JWT or API Key)
+
+**Request:** No body required
+
+**Response Example:**
+
+```json
+{
+  "status": "ok",
+  "message": "All caches cleared successfully."
+}
+```
+
+**Use Cases:**
+- After deploying policy changes
+- After updating PIP configurations
+- When troubleshooting authorization issues
+- During maintenance windows
+
+#### **`POST /cache/clear/:cacheType`**
+
+**Description:** Clears a specific cache type.
+
+**Authentication:** Required (JWT or API Key)
+
+**Path Parameters:**
+- `cacheType`: One of `request`, `pip`, `resource`, or `subject`
+
+**Request:** No body required
+
+**Response Example:**
+
+```json
+{
+  "status": "ok",
+  "message": "Cache 'request' cleared successfully."
+}
+```
+
+**Cache Types:**
+- **request**: Authorization result cache (for `/isAuthorized`, `/whatAuthorized`)
+- **pip**: PIP result cache (for REST, CSV, LDAP PIPs)
+- **resource**: Resource enrichment cache
+- **subject**: Subject enrichment cache
+
+**Example Usage:**
+
+```bash
+# View cache statistics
+curl -H "X-API-Key: your-api-key" \
+  https://autho.example.com/cache/stats
+
+# Clear all caches
+curl -X POST \
+  -H "X-API-Key: your-api-key" \
+  https://autho.example.com/cache/clear
+
+# Clear only request cache
+curl -X POST \
+  -H "X-API-Key: your-api-key" \
+  https://autho.example.com/cache/clear/request
+
+# Clear only PIP cache
+curl -X POST \
+  -H "X-API-Key: your-api-key" \
+  https://autho.example.com/cache/clear/pip
+```
+
+**Performance Considerations:**
+
+Caching significantly improves performance by avoiding:
+- Re-evaluation of authorization rules
+- Repeated calls to external PIPs (REST APIs, LDAP)
+- Redundant attribute enrichment
+
+**Recommended Cache Settings:**
+
+For **high-traffic environments** with stable data:
+```bash
+export CACHE_ENABLED=true
+export CACHE_REQUEST_TTL_MS=600000      # 10 minutes
+export CACHE_PIP_TTL_MS=1800000         # 30 minutes
+export CACHE_REQUEST_MAX_SIZE=50000     # Large cache
+```
+
+For **frequently changing data**:
+```bash
+export CACHE_ENABLED=true
+export CACHE_REQUEST_TTL_MS=60000       # 1 minute
+export CACHE_PIP_TTL_MS=120000          # 2 minutes
+export CACHE_REQUEST_MAX_SIZE=5000      # Smaller cache
+```
+
+For **development/testing**:
+```bash
+export CACHE_ENABLED=false              # Disable to see immediate changes
 ```
 
 ## Configuration
