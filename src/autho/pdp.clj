@@ -5,6 +5,7 @@
             [autho.kafka-pip :as kafka-pip]
             [autho.local-cache :as local-cache]
             [autho.metrics :as metrics]
+            [autho.audit :as audit]
             [autho.delegation :as deleg]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
@@ -75,24 +76,58 @@
       )
     (catch Exception e (do (.getMessage e) object))))
 
-(defn- callFillers [request]
+;; Memoized ns-resolve to avoid repeated symbol lookup on every call
+(def ^:private resolve-filler-fn
+  (memoize (fn [type-str]
+             (ns-resolve (symbol "autho.attfun") (symbol type-str)))))
+
+(defn- apply-filler
+  "Applies a filler to the entity and merges with cache.
+  Returns the enriched+merged entity, or the original entity on error."
+  [filler entity cache-type]
+  (if-not filler
+    (local-cache/mergeEntityWithCache entity cache-type)
+    (try
+      (let [filler-fn (resolve-filler-fn (:type filler))
+            enriched  (when filler-fn (filler-fn filler entity))]
+        (local-cache/mergeEntityWithCache (or enriched entity) cache-type))
+      (catch Exception e
+        (.warn (org.slf4j.LoggerFactory/getLogger "autho.pdp")
+               "Filler call failed, falling back to cache-only: {}" (.getMessage e))
+        (local-cache/mergeEntityWithCache entity cache-type)))))
+
+(defn- callFillers
+  "Enriches subject and resource using configured fillers, in parallel.
+  Both enrichments are launched as futures and joined with a 5s timeout.
+  Falls back to cache-only merge on timeout or error."
+  [request]
   (let [subfill  (prp/getSubjectFiller  (:class (:subject request)))
-        ressfill (prp/getResourceFiller (:class (:resource request)))]
-    (let [augs (when subfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type subfill))) [subfill (:subject request)]))
-          augr (when ressfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type ressfill))) [ressfill (:resource request)]))]
-      (local-cache/mergeEntityWithCache augs :subject)
-      (local-cache/mergeEntityWithCache augr :resource)
-      (-> request
-          (assoc :subject augs)
-          (assoc :resource augr)))))
+        ressfill (prp/getResourceFiller (:class (:resource request)))
+        ;; Launch both enrichments in parallel
+        subj-f   (future (apply-filler subfill  (:subject  request) :subject))
+        res-f    (future (apply-filler ressfill (:resource request) :resource))
+        ;; Join with 5s timeout; fall back to cache-only on timeout
+        cs       (deref subj-f 5000 (local-cache/mergeEntityWithCache (:subject  request) :subject))
+        cr       (deref res-f  5000 (local-cache/mergeEntityWithCache (:resource request) :resource))]
+    (assoc request :subject cs :resource cr)))
 
-
-(defn passThroughCache [request]
+(defn passThroughCache
+  "Merges subject and resource with their cache entries (no external PIP calls).
+  Used when no fillers are configured for the request's classes."
+  [request]
   (let [cs (local-cache/mergeEntityWithCache (:subject request) :subject)
         cr (local-cache/mergeEntityWithCache (:resource request) :resource)]
-    (assoc request
-      :subject cs
-      :resource cr)))
+    (assoc request :subject cs :resource cr)))
+
+(defn- enrich-request
+  "Enriches the request with fillers if configured, otherwise uses cache-only merge.
+  This is the main entry point replacing direct passThroughCache calls."
+  [request]
+  (let [has-subject-filler  (prp/getSubjectFiller  (:class (:subject request)))
+        has-resource-filler (prp/getResourceFiller (:class (:resource request)))]
+    (if (or has-subject-filler has-resource-filler)
+      (callFillers request)
+      (passThroughCache request))))
 
 ;; the request is composed of
 ;; subject
@@ -114,7 +149,7 @@
    (let [subject-id (:id (:subject request))
          globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
          policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
-         augreq (passThroughCache request)
+         augreq (enrich-request request)
          evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
                                             (conj res rule)
                                             res))
@@ -124,6 +159,12 @@
      (if resolve
        (do
          (metrics/record-decision! :allow (:class (:resource request)))
+         (audit/log-decision! {:subject-id     (:id (:subject request))
+                               :resource-class (:class (:resource request))
+                               :resource-id    (:id (:resource request))
+                               :operation      (:operation request)
+                               :decision       :allow
+                               :matched-rules  (mapv :name evalglob)})
          {:result resolve :rules evalglob})
        (let [deleg (deleg/findDelegation (:subject request))
              ;; Filter out delegations that would create cycles
@@ -144,6 +185,12 @@
            one
            (do
              (metrics/record-decision! :deny (:class (:resource request)))
+             (audit/log-decision! {:subject-id     (:id (:subject request))
+                                   :resource-class (:class (:resource request))
+                                   :resource-id    (:id (:resource request))
+                                   :operation      (:operation request)
+                                   :decision       :deny
+                                   :matched-rules  (mapv :name evalglob)})
              {:result false :rules evalglob})))))))
 
 (defn isAuthorized [request body]
@@ -157,7 +204,7 @@
     (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))]
       (if-not globalPolicy
         (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
-      (let [augreq   (passThroughCache authz-request)
+      (let [augreq   (enrich-request authz-request)
             evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
                                               (conj res rule)
                                               res))
@@ -296,7 +343,7 @@
       (throw (ex-info "No subject specified" {:status 400 :error-code "MISSING_SUBJECT"})))
 
     (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
-          augreq (passThroughCache authz-request)
+          augreq (enrich-request authz-request)
           all-rules (:rules globalPolicy)
           evaluated-rules (map (fn [rule]
                                  (let [eval-result (rule/evaluateRule rule augreq)]
@@ -333,6 +380,7 @@
 (defn init []
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
   (metrics/init-jvm-metrics!)
+  (audit/init!)
 
   ;; Only register Kafka shutdown hook if Kafka is enabled
   (when (kafka-enabled?)

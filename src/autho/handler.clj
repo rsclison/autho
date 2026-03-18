@@ -6,6 +6,7 @@
             [autho.journal :as jrnl]
             [autho.metrics :as metrics]
             [autho.tracing :as tracing]
+            [autho.audit :as audit]
             [autho.person :as person]
             [autho.time-travel :as time-travel]
             [autho.validation :as validation]
@@ -33,20 +34,28 @@
     (* 1024 1024)))
 
 ;; Rate limiting configuration
-;; RATE_LIMIT_REQUESTS_PER_MINUTE: number of requests allowed per minute per IP (default: 100)
 ;; RATE_LIMIT_ENABLED: enable/disable rate limiting (default: true)
+;; Differentiated limits by identity type (requests per minute):
+;;   RATE_LIMIT_APIKEY_RPM   trusted API key clients  (default: 10000)
+;;   RATE_LIMIT_JWT_RPM      authenticated JWT users  (default: 1000)
+;;   RATE_LIMIT_ANON_RPM     anonymous / unauthenticated (default: 100)
 (def rate-limit-enabled
   (if-let [env-enabled (System/getenv "RATE_LIMIT_ENABLED")]
     (Boolean/parseBoolean env-enabled)
     true))
 
-(def rate-limit-requests-per-minute
-  (if-let [env-limit (System/getenv "RATE_LIMIT_REQUESTS_PER_MINUTE")]
-    (try
-      (Long/parseLong env-limit)
-      (catch NumberFormatException _
-        100))
-    100))
+(defn- parse-long-env [env-key default-val]
+  (if-let [v (System/getenv env-key)]
+    (try (Long/parseLong v) (catch NumberFormatException _ default-val))
+    default-val))
+
+(def rate-limits
+  {:api-key   (parse-long-env "RATE_LIMIT_APIKEY_RPM" 10000)
+   :jwt       (parse-long-env "RATE_LIMIT_JWT_RPM"    1000)
+   :anonymous (parse-long-env "RATE_LIMIT_ANON_RPM"   100)})
+
+;; Keep backward-compat scalar used in /status endpoint
+(def rate-limit-requests-per-minute (:anonymous rate-limits))
 
 ;; Store request timestamps per IP address
 ;; Structure: {ip-address [timestamp1 timestamp2 ...]}
@@ -103,28 +112,56 @@
   (let [one-minute-ago (- (System/currentTimeMillis) 60000)]
     (filter #(> % one-minute-ago) timestamps)))
 
+(defn- identity-type
+  "Derives the identity type from a Ring request for rate-limiting purposes.
+  Reads X-API-Key and Authorization headers without verifying signatures —
+  the goal is bucket selection, not authentication."
+  [request]
+  (cond
+    (get-in request [:headers "x-api-key"])    :api-key
+    (get-in request [:headers "authorization"]) :jwt
+    :else                                        :anonymous))
+
+(defn- rate-limit-key
+  "Returns the bucketing key for rate limiting: identity-specific or IP fallback."
+  [request id-type]
+  (case id-type
+    :api-key   (str "apikey:" (get-in request [:headers "x-api-key"]))
+    :jwt       (str "ip:" (get-client-ip request))  ; IP fallback (JWT not decoded)
+    :anonymous (str "ip:" (get-client-ip request))))
+
 (defn wrap-rate-limit [handler]
   (fn [request]
     (if-not rate-limit-enabled
       (handler request)
-      (let [client-ip (get-client-ip request)
+      (let [id-type      (identity-type request)
+            limit        (get rate-limits id-type (:anonymous rate-limits))
+            bucket-key   (rate-limit-key request id-type)
             current-time (System/currentTimeMillis)
-            ;; Update the store atomically
-            updated-timestamps (swap! rate-limit-store
-                                      (fn [store]
-                                        (let [current-timestamps (get store client-ip [])
-                                              cleaned-timestamps (clean-old-timestamps current-timestamps)
-                                              new-timestamps (conj cleaned-timestamps current-time)]
-                                          (assoc store client-ip new-timestamps))))
-            request-count (count (get updated-timestamps client-ip))]
-
-        (if (> request-count rate-limit-requests-per-minute)
+            updated      (swap! rate-limit-store
+                                (fn [store]
+                                  (let [ts  (get store bucket-key [])
+                                        ts' (conj (clean-old-timestamps ts) current-time)]
+                                    (assoc store bucket-key ts'))))
+            timestamps   (get updated bucket-key)
+            req-count    (count timestamps)
+            oldest-ts    (when (seq timestamps) (apply min timestamps))
+            reset-epoch  (quot (+ (or oldest-ts current-time) 60000) 1000)
+            remaining    (max 0 (- limit req-count))
+            rl-headers   {"X-RateLimit-Limit"     (str limit)
+                          "X-RateLimit-Remaining" (str remaining)
+                          "X-RateLimit-Reset"     (str reset-epoch)}]
+        (if (> req-count limit)
           (do
-            (.warn logger "Rate limit exceeded for IP: {} ({} requests in the last minute)" client-ip request-count)
-            (error-response "RATE_LIMIT_EXCEEDED"
-                            (str "Rate limit exceeded. Maximum " rate-limit-requests-per-minute " requests per minute allowed.")
-                            429))
-          (handler request))))))
+            (.warn logger "Rate limit exceeded for {} {} ({} req/min, limit {})"
+                   (name id-type) bucket-key req-count limit)
+            (-> (error-response "RATE_LIMIT_EXCEEDED"
+                                (str "Rate limit exceeded. Maximum " limit
+                                     " requests per minute for " (name id-type) " clients.")
+                                429)
+                (update :headers merge rl-headers)))
+          (let [response (handler request)]
+            (update response :headers merge rl-headers)))))))
 
 (defn wrap-request-size-limit [handler]
   (fn [request]
@@ -487,7 +524,32 @@
                               (.error logger "Failed to reload person cache" e)
                               (error-response "PERSON_RELOAD_FAILED"
                                               (str "Failed to reload person cache: " (.getMessage e))
-                                              500))))))))
+                                              500))))
+
+                    ;; Audit log endpoints
+                    (GET "/audit/search" request
+                         (let [params (:query-params request)]
+                           (try
+                             (json-response (audit/search
+                                             {:subject-id     (get params "subjectId")
+                                              :resource-class (get params "resourceClass")
+                                              :decision       (when-let [d (get params "decision")] (keyword d))
+                                              :from           (get params "from")
+                                              :to             (get params "to")
+                                              :page           (some-> (get params "page") Long/parseLong)
+                                              :page-size      (some-> (get params "pageSize") Long/parseLong)}))
+                             (catch Exception e
+                               (error-response "AUDIT_SEARCH_FAILED"
+                                               (str "Audit search failed: " (.getMessage e))
+                                               500)))))
+
+                    (GET "/audit/verify" []
+                         (try
+                           (json-response (audit/verify-chain))
+                           (catch Exception e
+                             (error-response "AUDIT_VERIFY_FAILED"
+                                             (str "Audit verification failed: " (.getMessage e))
+                                             500))))))))
 
 (def app-routes
   (routes

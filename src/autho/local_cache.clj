@@ -30,9 +30,19 @@
                             :cache-stats {:hits 0 :misses 0 :evictions 0}}))
 
 (defn get-cache-stats
-  "Get current cache statistics."
+  "Get current cache statistics including current sizes and hit ratio."
   []
-  (:cache-stats @cache-state))
+  (let [state   @cache-state
+        stats   (:cache-stats state)
+        hits    (:hits stats 0)
+        misses  (:misses stats 0)
+        total   (+ hits misses)
+        ratio   (if (pos? total) (double (/ hits total)) 0.0)]
+    (assoc stats
+           :sizes {:subject  (count (:subject-cache state))
+                   :resource (count (:resource-cache state))
+                   :policy   (count (:policy-cache state))}
+           :hit-ratio ratio)))
 
 (defn reset-cache-stats
   "Reset cache statistics to zero."
