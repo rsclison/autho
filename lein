@@ -73,7 +73,7 @@ function download_failed_message {
 	It's possible your HTTP client's certificate store does not have the
 	correct certificate authority needed. This is often caused by an
 	out-of-date version of libssl. It's also possible that you're behind a
-	firewall and haven't set HTTP_PROXY and HTTPS_PROXY.
+	firewall and haven't set HTTP_PROXY and HTTPS_PROXY.)
 	EOS
 }
 

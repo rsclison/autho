@@ -24,7 +24,7 @@
       (swap! cache
              (fn [current-cache]
                (let [cached-entity (get current-cache ent-id)
-                     merged (mergeEntities ent cached-entity)]
+                     merged (mergeEntities cached-entity ent)]
                  (reset! result merged)
                  (assoc current-cache ent-id merged))))
       @result)

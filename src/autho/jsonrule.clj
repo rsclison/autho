@@ -3,7 +3,7 @@
             [autho.jsonpath :as js]
             [autho.pip :as pip]
             [autho.prp :as prp]
-            )
+            [autho.attfun :as attfun])
   (:use clojure.test)
   )
 
@@ -29,11 +29,14 @@
   (if-not (= (subs op 0 1) "$")
     op
     (case (subs op 0 2)
-      "$." (js/at-path op (if (= :subject subjOrRess)
-                            (:subject ctxt)
-                            (:resource ctxt)))
-      "$r" (js/at-path (str "$" (subs op 2)) (:resource ctxt))
-      "$s" (js/at-path (str "$" (subs op 2)) (:subject ctxt)))))
+      "$." (let [value (js/at-path op (if (= :subject subjOrRess)
+                                         (:subject ctxt)
+                                         (:resource ctxt)))]
+             (if (number? value) (str value) value))
+      "$r" (let [value (js/at-path (str "$" (subs op 2)) (:resource ctxt))]
+             (if (number? value) (str value) value))
+      "$s" (let [value (js/at-path (str "$" (subs op 2)) (:subject ctxt))]
+             (if (number? value) (str value) value)))))
 
 #_(defn evalOperand [ops subjOrRess ctxt]
   (let [op (str ops)]
@@ -65,11 +68,10 @@
 (defn evalClause [[operator op1 op2] ctxt subjOrRess]
   (let [opv1 (evalOperand op1 subjOrRess ctxt)
         opv2 (evalOperand op2 subjOrRess ctxt)
-        func (resolve(symbol "autho.attfun" operator))
-        ]
-     (apply func [opv1 opv2])
-    )
-  )
+        func (get (ns-publics 'autho.attfun) (symbol operator))]
+    (if func
+      (apply func [opv1 opv2])
+      (throw (Exception. (str "Unknown operator: " operator))))))
 
 #_(defn evalClause2 [[operator op1 op2] ctxt]
   (let [opv1 (evalOperand2 op1 ctxt)
