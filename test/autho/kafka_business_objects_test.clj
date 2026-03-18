@@ -16,7 +16,7 @@
            [org.apache.kafka.clients.admin AdminClient NewTopic]
            [java.util Properties]))
 
-(def test-db-path (str (System/getProperty "java.io.tmpdir") "rocksdb-business-objects-test"))
+(def test-db-path (str (System/getProperty "java.io.tmpdir") java.io.File/separator "rocksdb-business-objects-test"))
 (def kafka-bootstrap-servers "localhost:9092")
 
 (defn cleanup-test-db []

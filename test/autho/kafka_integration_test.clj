@@ -9,7 +9,7 @@
             [jsonista.core :as json])
   (:import [org.apache.kafka.clients.consumer ConsumerRecord]))
 
-(def test-db-path (str (System/getProperty "java.io.tmpdir") "rocksdb-integration-test"))
+(def test-db-path (str (System/getProperty "java.io.tmpdir") java.io.File/separator "rocksdb-integration-test"))
 
 (defn cleanup-test-db []
   (let [dir (clojure.java.io/file test-db-path)]
