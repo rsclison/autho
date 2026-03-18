@@ -42,7 +42,8 @@
                  [clj-commons/clj-yaml "1.0.27"]
                  [io.micrometer/micrometer-core "1.12.4"]
                  [io.micrometer/micrometer-registry-prometheus "1.12.4"]
-                 [diehard "0.11.4"]]
+                 [diehard "0.11.4"]
+                 [io.opentelemetry/opentelemetry-api "1.51.0"]]
   :main autho.core
   :target-path "target/%s"
   :test-selectors {:default (complement :integration)

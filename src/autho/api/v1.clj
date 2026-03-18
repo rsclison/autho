@@ -27,6 +27,9 @@
     (POST "/explain" request
           (handlers/explain-decision))
 
+    (POST "/simulate" request
+          (handlers/simulate-decision request))
+
     (POST "/batch" request
           (handlers/batch-decisions)))
 
@@ -42,6 +45,20 @@
 
     (POST "/import" request
           (handlers/import-yaml-policies request))
+
+    (GET "/:resource-class/versions" [resource-class]
+         (handlers/list-policy-versions resource-class))
+
+    (GET "/:resource-class/versions/:version" [resource-class version]
+         (handlers/get-policy-version resource-class version))
+
+    (GET "/:resource-class/diff" [resource-class :as request]
+         (handlers/diff-policy-versions resource-class
+                                         (get-in request [:params :from])
+                                         (get-in request [:params :to])))
+
+    (POST "/:resource-class/rollback/:version" [resource-class version :as request]
+          (handlers/rollback-policy resource-class version request))
 
     (GET "/:resource-class" [resource-class]
          (handlers/get-policy resource-class))

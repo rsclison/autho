@@ -3,7 +3,8 @@
   (:require [json-schema.core :as validjs]
             [clojure.data.json :as json]
             [clojure.java.jdbc :as jd]
-            [autho.local-cache :as local-cache])
+            [autho.local-cache :as local-cache]
+            [autho.policy-versions :as pv])
   (:require [clojure.java.io :as io] [clojure.edn :as edn])
   (:require [java-time :as ti])
   (:require [autho.utils :as utl])
@@ -146,10 +147,15 @@
 ;;      (insert-policy resourceClass (json/read-str policy :key-fn keyword))
 ;;  )))
 
-(defn submit-policy [^String resourceClass ^String policy]
-  (when (validjs/validate policySchema policy)
-    (insert-policy resourceClass (json/read-str policy :key-fn keyword))
-    (local-cache/invalidate-decisions-for-class! resourceClass)))
+(defn submit-policy
+  ([^String resourceClass ^String policy]
+   (submit-policy resourceClass policy nil nil))
+  ([^String resourceClass ^String policy author comment]
+   (when (validjs/validate policySchema policy)
+     (let [pol-map (json/read-str policy :key-fn keyword)]
+       (insert-policy resourceClass pol-map)
+       (pv/save-version! resourceClass pol-map author comment)
+       (local-cache/invalidate-decisions-for-class! resourceClass)))))
 
 
 

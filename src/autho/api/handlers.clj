@@ -8,6 +8,7 @@
             [autho.validation :as validation]
             [autho.local-cache :as cache]
             [autho.policy-yaml :as policy-yaml]
+            [autho.policy-versions :as pv]
             [jsonista.core :as json]
             [clojure.tools.logging :as log])
   (:import (org.slf4j LoggerFactory)))
@@ -126,6 +127,25 @@
     (response/error-response "INVALID_REQUEST_BODY"
                             "Request body must be valid JSON"
                             400)))
+
+(defn simulate-decision
+  "Dry-run authorization against a provided or versioned policy.
+   POST /v1/authz/simulate
+   Body: {:subject {...} :resource {...} :operation \"...\"
+          :simulatedPolicy {...}  ; optional
+          :policyVersion  42}     ; optional, uses stored version"
+  [request]
+  (log/debug "Processing simulation request")
+  (if-let [body (require-body request)]
+    (try
+      (let [result (pdp/simulate request body)]
+        (response/success-response result))
+      (catch Exception e
+        (log/error e "Error processing simulate request")
+        (response/error-response "SIMULATE_ERROR"
+                                 (str "Simulation failed: " (.getMessage e))
+                                 500)))
+    (response/error-response "INVALID_REQUEST_BODY" "Request body must be valid JSON" 400)))
 
 (def max-batch-size
   (try (Long/parseLong (or (System/getenv "MAX_BATCH_SIZE") "100"))
@@ -252,10 +272,12 @@
   (log/debug "Processing create policy request")
   (if-let [body (require-body request)]
     (try
-      (let [resource-class (:resourceClass body)]
+      (let [resource-class (:resourceClass body)
+            author         (get-in request [:identity :client-id])
+            comment        (get-in body [:comment])]
         (if resource-class
           (do
-            (prp/submit-policy resource-class (json/write-value-as-string body))
+            (prp/submit-policy resource-class (json/write-value-as-string body) author comment)
             (response/created-response body (str "/v1/policies/" resource-class)))
           (response/error-response "INVALID_POLICY"
                                   "Policy must include 'resourceClass' field"
@@ -277,7 +299,9 @@
   (log/debug "Processing update policy request for" resource-class)
   (if-let [body (require-body request)]
     (try
-      (prp/submit-policy resource-class (json/write-value-as-string body))
+      (let [author  (get-in request [:identity :client-id])
+            comment (get-in body [:comment])]
+        (prp/submit-policy resource-class (json/write-value-as-string body) author comment))
       (response/success-response body)
       (catch Exception e
         (log/error e "Error updating policy")
@@ -301,6 +325,74 @@
       (response/error-response "POLICY_DELETE_ERROR"
                               (str "Failed to delete policy: " (.getMessage e))
                               500))))
+
+;; =============================================================================
+;; Policy Version Handlers
+;; =============================================================================
+
+(defn list-policy-versions
+  "GET /v1/policies/:resource-class/versions"
+  [resource-class]
+  (log/debug "Listing versions for" resource-class)
+  (try
+    (response/success-response (pv/list-versions resource-class))
+    (catch Exception e
+      (log/error e "Error listing policy versions")
+      (response/error-response "VERSIONS_ERROR"
+                               (str "Failed to list versions: " (.getMessage e)) 500))))
+
+(defn get-policy-version
+  "GET /v1/policies/:resource-class/versions/:version"
+  [resource-class version]
+  (log/debug "Getting version" version "for" resource-class)
+  (try
+    (if-let [pol (pv/get-version resource-class (Long/parseLong (str version)))]
+      (response/success-response pol)
+      (response/error-response "VERSION_NOT_FOUND"
+                               (str "Version " version " not found for " resource-class) 404))
+    (catch Exception e
+      (log/error e "Error getting policy version")
+      (response/error-response "VERSION_ERROR"
+                               (str "Failed to get version: " (.getMessage e)) 500))))
+
+(defn diff-policy-versions
+  "GET /v1/policies/:resource-class/diff?from=1&to=2"
+  [resource-class from-v to-v]
+  (log/debug "Diffing versions" from-v "->" to-v "for" resource-class)
+  (try
+    (if-let [d (pv/diff-versions resource-class
+                                  (Long/parseLong (str from-v))
+                                  (Long/parseLong (str to-v)))]
+      (response/success-response d)
+      (response/error-response "DIFF_NOT_FOUND"
+                               (str "One or both versions not found") 404))
+    (catch Exception e
+      (log/error e "Error diffing policy versions")
+      (response/error-response "DIFF_ERROR"
+                               (str "Failed to diff versions: " (.getMessage e)) 500))))
+
+(defn rollback-policy
+  "POST /v1/policies/:resource-class/rollback/:version"
+  [resource-class version request]
+  (log/info "Rolling back" resource-class "to version" version)
+  (try
+    (let [v   (Long/parseLong (str version))
+          pol (pv/get-version resource-class v)]
+      (if-not pol
+        (response/error-response "VERSION_NOT_FOUND"
+                                 (str "Version " v " not found for " resource-class) 404)
+        (let [author (get-in request [:identity :client-id] "rollback")
+              comment (str "Rollback to version " v)
+              pol-str (jsonista.core/write-value-as-string pol)]
+          (prp/submit-policy resource-class pol-str author comment)
+          (response/success-response
+           {:resourceClass resource-class
+            :rolledBackTo  v
+            :newVersion    (pv/latest-version-number resource-class)}))))
+    (catch Exception e
+      (log/error e "Error rolling back policy")
+      (response/error-response "ROLLBACK_ERROR"
+                               (str "Failed to rollback: " (.getMessage e)) 500))))
 
 ;; =============================================================================
 ;; Cache Handlers

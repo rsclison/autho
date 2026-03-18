@@ -7,6 +7,8 @@
             [autho.metrics :as metrics]
             [autho.audit :as audit]
             [autho.policy-yaml :as policy-yaml]
+            [autho.policy-versions :as pv]
+            [autho.otel :as otel]
             [autho.delegation :as deleg]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
@@ -195,31 +197,35 @@
              {:result false :rules evalglob})))))))
 
 (defn isAuthorized [request body]
-  (let [subject        (get-subject request body)
-        authz-request  {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}
-        subject-id     (:id subject)
-        resource-class (:class (:resource body))
-        resource-id    (:id (:resource body))
-        operation      (:operation body)]
-    (if-not (:resource authz-request)
-      (throw (ex-info "No resource specified" {:status 400})))
-    (if-not (:subject authz-request)
-      (throw (ex-info "No subject specified" {:status 400})))
+  (otel/with-span "authz.isAuthorized"
+    {:subject-id     (str (get-in body [:subject :id]))
+     :resource-class (str (get-in body [:resource :class]))
+     :operation      (str (:operation body))}
+    (let [subject        (get-subject request body)
+          authz-request  {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}
+          subject-id     (:id subject)
+          resource-class (:class (:resource body))
+          resource-id    (:id (:resource body))
+          operation      (:operation body)]
+      (if-not (:resource authz-request)
+        (throw (ex-info "No resource specified" {:status 400})))
+      (if-not (:subject authz-request)
+        (throw (ex-info "No subject specified" {:status 400})))
 
-    ;; Decision cache lookup — skip when a context timestamp is present (time-travel)
-    (or (when-not (:timestamp (:context body))
-          (local-cache/get-cached-decision subject-id resource-class resource-id operation))
-        (let [globalPolicy (prp/getGlobalPolicy resource-class)]
-          (if-not globalPolicy
-            (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
-          (let [augreq   (enrich-request authz-request)
-                evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                                  (conj res rule)
-                                                  res))
-                                 [] (:rules globalPolicy))
-                result   {:results (map #(:name %1) evalglob)}]
-            (local-cache/cache-decision! subject-id resource-class resource-id operation result)
-            result)))))
+      ;; Decision cache lookup — skip when a context timestamp is present (time-travel)
+      (or (when-not (:timestamp (:context body))
+            (local-cache/get-cached-decision subject-id resource-class resource-id operation))
+          (let [globalPolicy (prp/getGlobalPolicy resource-class)]
+            (if-not globalPolicy
+              (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
+            (let [augreq   (enrich-request authz-request)
+                  evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                                    (conj res rule)
+                                                    res))
+                                   [] (:rules globalPolicy))
+                  result   {:results (map #(:name %1) evalglob)}]
+              (local-cache/cache-decision! subject-id resource-class resource-id operation result)
+              result))))))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
@@ -377,8 +383,71 @@
        :matchedRules (count matched-rules)
        :rules evaluated-rules})))
 
+(defn simulate
+  "Dry-run: evaluates an authorization request against a supplied (unsaved) policy.
+   body keys:
+     :subject, :resource, :operation — same as isAuthorized
+     :simulatedPolicy — full policy map (resourceClass, strategy, rules)
+                        If absent, uses the currently active policy (like explain).
+     :policyVersion   — integer; if supplied, uses that stored version instead
+   Returns the same shape as explain: decision + per-rule trace.
+   Never writes to cache or audit log."
+  [request body]
+  (otel/with-span "authz.simulate"
+    {:resource-class (str (get-in body [:resource :class]))}
+    (let [subject        (get-subject request body)
+          authz-request  {:subject subject
+                          :resource (:resource body)
+                          :operation (:operation body)
+                          :context (:context body)}
+          resource-class (:class (:resource body))]
+      (if-not (:resource authz-request)
+        (throw (ex-info "No resource specified" {:status 400})))
+      (if-not (:subject authz-request)
+        (throw (ex-info "No subject specified" {:status 400})))
 
+      (let [policy (cond
+                     ;; Explicit policy provided in the request body
+                     (:simulatedPolicy body)
+                     (:simulatedPolicy body)
 
+                     ;; Specific stored version requested
+                     (:policyVersion body)
+                     (pv/get-version resource-class (:policyVersion body))
+
+                     ;; Fallback: current active policy (same as explain)
+                     :else
+                     (prp/getGlobalPolicy resource-class))]
+        (if-not policy
+          (throw (ex-info "No policy available for simulation"
+                          {:status 404 :error-code "NO_POLICY"})))
+
+        (let [augreq    (enrich-request authz-request)
+              all-rules (:rules policy)
+              evaluated (map (fn [rule]
+                               (let [res (rule/evaluateRule rule augreq)]
+                                 {:name         (:name rule)
+                                  :effect       (:effect rule)
+                                  :operation    (:operation rule)
+                                  :matched      (:value res)
+                                  :resourceClass (:resourceClass rule)
+                                  :subjectCond  (rest (:subjectCond rule))
+                                  :resourceCond (rest (:resourceCond rule))}))
+                             all-rules)
+              matched   (filter :matched evaluated)
+              decision  (resolve-conflict policy
+                                          (filter #(:value (rule/evaluateRule % augreq)) all-rules))]
+          {:decision      decision
+           :strategy      (:strategy policy)
+           :simulated     true
+           :policySource  (cond (:simulatedPolicy body) :provided
+                                (:policyVersion body)   :version
+                                :else                   :current)
+           :policyVersion (or (:policyVersion body)
+                              (pv/latest-version-number resource-class))
+           :totalRules    (count all-rules)
+           :matchedRules  (count matched)
+           :rules         evaluated})))))
 
 (defn- load-props
   [file-name]
@@ -391,6 +460,7 @@
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
   (metrics/init-jvm-metrics!)
   (audit/init!)
+  (pv/init!)
 
   ;; Only register Kafka shutdown hook if Kafka is enabled
   (when (kafka-enabled?)
