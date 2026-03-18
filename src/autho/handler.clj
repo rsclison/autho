@@ -7,10 +7,14 @@
             [autho.metrics :as metrics]
             [autho.tracing :as tracing]
             [autho.audit :as audit]
+            [autho.circuit-breaker :as cb]
             [autho.person :as person]
             [autho.time-travel :as time-travel]
             [autho.validation :as validation]
             [autho.api.v1 :as api-v1]
+            [autho.api.admin-ui :as admin-ui]
+            [clojure.java.io :as io]
+            [clj-yaml.core :as yaml]
             [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
             [com.appsflyer.donkey.server :refer [start]]
@@ -299,7 +303,26 @@
                                   :rateLimit {:enabled rate-limit-enabled
                                               :requestsPerMinute rate-limit-requests-per-minute}
                                   :kafka {:enabled kafka-enabled}
+                                  :circuitBreakers (cb/get-all-status)
                                   :timestamp (str (java.time.Instant/now))})))
+
+           (GET "/openapi.yaml" []
+                {:status  200
+                 :headers {"Content-Type" "application/yaml"}
+                 :body    (slurp (io/resource "openapi.yaml"))})
+
+           (GET "/openapi.json" []
+                (try
+                  (let [yaml-str (slurp (io/resource "openapi.yaml"))
+                        yaml-map (yaml/parse-string yaml-str)
+                        json-str (json/write-value-as-string yaml-map)]
+                    {:status  200
+                     :headers {"Content-Type" "application/json"}
+                     :body    json-str})
+                  (catch Exception e
+                    (error-response "OPENAPI_ERROR"
+                                    (str "Failed to serve OpenAPI spec: " (.getMessage e))
+                                    500))))
 
            (GET "/test" req
                 (do (.debug logger "HEAD: {}" (:headers req))
@@ -549,7 +572,17 @@
                            (catch Exception e
                              (error-response "AUDIT_VERIFY_FAILED"
                                              (str "Audit verification failed: " (.getMessage e))
-                                             500))))))))
+                                             500))))
+
+                    ;; Admin UI routes
+                    (GET "/ui" []
+                         (admin-ui/dashboard-page))
+                    (GET "/ui/policies" []
+                         (admin-ui/policies-page))
+                    (GET "/ui/audit" request
+                         (admin-ui/audit-page (:query-params request)))
+                    (GET "/ui/circuit-breakers" []
+                         (admin-ui/circuit-breakers-page (cb/get-all-status)))))))
 
 (def app-routes
   (routes

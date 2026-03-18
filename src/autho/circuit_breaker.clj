@@ -47,6 +47,11 @@
               nil)
             (throw e)))))))
 
+(defn get-all-status
+  "Returns a map of endpoint key -> circuit breaker state (:open, :closed, :half-open)."
+  []
+  (into {} (map (fn [[k cb]] [k (dcb/state cb)]) @breakers)))
+
 (defn reset-all!
   "Reset all circuit breakers (useful for testing or after maintenance)."
   []

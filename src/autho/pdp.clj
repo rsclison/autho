@@ -6,6 +6,7 @@
             [autho.local-cache :as local-cache]
             [autho.metrics :as metrics]
             [autho.audit :as audit]
+            [autho.policy-yaml :as policy-yaml]
             [autho.delegation :as deleg]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
@@ -402,6 +403,10 @@
         (kafka-pip/init-pip pip-config))))
   ;; init the prp
   (prp/initf (getProperty :rules.repository))
+
+  ;; Start YAML policy directory watcher if POLICIES_DIR is configured
+  (when-let [policies-dir (or (System/getenv "POLICIES_DIR") (getProperty :policies.dir))]
+    (policy-yaml/start-directory-watcher! policies-dir))
 
   ;; init delegations
   (prp/initDelegations)

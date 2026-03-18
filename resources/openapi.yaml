@@ -1,0 +1,448 @@
+openapi: "3.0.3"
+info:
+  title: autho Authorization Server
+  description: |
+    XACML-based Authorization Server providing Policy Decision Point (PDP),
+    Policy Administration Point (PAP), and Policy Information Point (PIP) capabilities.
+
+    Key features:
+    - ABAC (Attribute-Based Access Control) evaluation
+    - Delegation chains with cycle detection
+    - Batch authorization evaluation
+    - Policy-as-Code via YAML files with hot reload
+    - Immutable audit log with HMAC chain integrity
+    - Prometheus metrics at /metrics
+  version: "0.1.0"
+  contact:
+    name: autho project
+  license:
+    name: EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0
+
+servers:
+  - url: /v1
+    description: v1 API
+
+tags:
+  - name: authorization
+    description: Authorization decision endpoints
+  - name: policies
+    description: Policy management endpoints
+  - name: cache
+    description: Cache management endpoints
+  - name: subjects
+    description: Subject entity endpoints
+  - name: resources
+    description: Resource entity endpoints
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Subject:
+      type: object
+      required: [id, class]
+      properties:
+        id:
+          type: string
+          example: "user-42"
+        class:
+          type: string
+          example: "Person"
+      additionalProperties: true
+
+    Resource:
+      type: object
+      required: [id, class]
+      properties:
+        id:
+          type: string
+          example: "doc-123"
+        class:
+          type: string
+          example: "Document"
+      additionalProperties: true
+
+    AuthzRequest:
+      type: object
+      required: [subject, resource, operation]
+      properties:
+        subject:
+          $ref: '#/components/schemas/Subject'
+        resource:
+          $ref: '#/components/schemas/Resource'
+        operation:
+          type: string
+          example: "read"
+        context:
+          type: object
+          additionalProperties: true
+
+    AuthzDecision:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: string
+          description: Names of matched rules
+
+    BatchRequest:
+      type: object
+      required: [requests]
+      properties:
+        requests:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/AuthzRequest'
+
+    BatchResult:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              request-id:
+                type: integer
+              decision:
+                $ref: '#/components/schemas/AuthzDecision'
+              error:
+                type: string
+        count:
+          type: integer
+
+    Policy:
+      type: object
+      required: [resourceClass, strategy, rules]
+      properties:
+        resourceClass:
+          type: string
+          example: "Document"
+        strategy:
+          type: string
+          enum: [almost_one_allow_no_deny, default]
+        rules:
+          type: array
+          items:
+            type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+
+paths:
+  /authz/decisions:
+    post:
+      tags: [authorization]
+      summary: Evaluate authorization decision
+      operationId: isAuthorized
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthzRequest'
+      responses:
+        '200':
+          description: Authorization decision
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/AuthzDecision'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+
+  /authz/subjects:
+    post:
+      tags: [authorization]
+      summary: List subjects authorized for a resource
+      operationId: whoAuthorized
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, operation]
+              properties:
+                resource:
+                  $ref: '#/components/schemas/Resource'
+                operation:
+                  type: string
+      responses:
+        '200':
+          description: Subject conditions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /authz/permissions:
+    post:
+      tags: [authorization]
+      summary: List permissions for a subject
+      operationId: whatAuthorized
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, resource]
+              properties:
+                subject:
+                  $ref: '#/components/schemas/Subject'
+                resource:
+                  type: object
+                  properties:
+                    class:
+                      type: string
+      responses:
+        '200':
+          description: Authorized resources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /authz/explain:
+    post:
+      tags: [authorization]
+      summary: Explain authorization decision
+      operationId: explainDecision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthzRequest'
+      responses:
+        '200':
+          description: Decision explanation with rule details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /authz/batch:
+    post:
+      tags: [authorization]
+      summary: Batch authorization evaluation (parallel, max 100)
+      operationId: batchDecisions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchRequest'
+      responses:
+        '200':
+          description: Batch results
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/BatchResult'
+        '400':
+          description: Batch too large or invalid
+
+  /policies:
+    get:
+      tags: [policies]
+      summary: List all policies (paginated)
+      operationId: listPolicies
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per-page
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated policy list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    post:
+      tags: [policies]
+      summary: Create a new policy
+      operationId: createPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Policy'
+      responses:
+        '201':
+          description: Policy created
+        '400':
+          description: Invalid policy
+
+  /policies/import:
+    post:
+      tags: [policies]
+      summary: Import a policy from YAML
+      operationId: importYamlPolicy
+      requestBody:
+        required: true
+        content:
+          text/yaml:
+            schema:
+              type: string
+              example: |
+                resourceClass: Document
+                strategy: almost_one_allow_no_deny
+                rules:
+                  - name: admin-read
+                    priority: 10
+                    operation: read
+                    effect: allow
+      responses:
+        '201':
+          description: Policy imported
+        '400':
+          description: Invalid YAML or missing resourceClass
+
+  /policies/{resourceClass}:
+    get:
+      tags: [policies]
+      summary: Get a specific policy
+      operationId: getPolicy
+      parameters:
+        - in: path
+          name: resourceClass
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy details
+        '404':
+          description: Policy not found
+    put:
+      tags: [policies]
+      summary: Update a policy
+      operationId: updatePolicy
+      parameters:
+        - in: path
+          name: resourceClass
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Policy'
+      responses:
+        '200':
+          description: Policy updated
+    delete:
+      tags: [policies]
+      summary: Delete a policy
+      operationId: deletePolicy
+      parameters:
+        - in: path
+          name: resourceClass
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Policy deleted
+
+  /cache/stats:
+    get:
+      tags: [cache]
+      summary: Get cache statistics
+      operationId: getCacheStats
+      responses:
+        '200':
+          description: Cache statistics including hit ratio and sizes
+
+  /cache:
+    delete:
+      tags: [cache]
+      summary: Clear all caches
+      operationId: clearCache
+      responses:
+        '200':
+          description: Caches cleared
+
+  /cache/{type}/{key}:
+    delete:
+      tags: [cache]
+      summary: Invalidate a specific cache entry
+      operationId: invalidateCacheEntry
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema:
+            type: string
+            enum: [subject, resource, policy]
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cache entry invalidated

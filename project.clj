@@ -39,6 +39,7 @@
                  [org.apache.kafka/kafka-clients "4.1.0"]
                  [org.apache.kafka/kafka-streams "4.1.0"]
                  [org.rocksdb/rocksdbjni "8.11.4"]
+                 [clj-commons/clj-yaml "1.0.27"]
                  [io.micrometer/micrometer-core "1.12.4"]
                  [io.micrometer/micrometer-registry-prometheus "1.12.4"]
                  [diehard "0.11.4"]]
