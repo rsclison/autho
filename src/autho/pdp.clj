@@ -3,7 +3,7 @@
   (:require [autho.prp :as prp]
             [autho.jsonrule :as rule]
             [autho.kafka-pip :as kafka-pip]
-            [autho.cache :as cache]
+            [autho.local-cache :as local-cache]
             [autho.delegation :as deleg]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
@@ -11,7 +11,6 @@
             [clojure.data.json :as json]
             [autho.ldap :as ldap]
             [clojure.string :as str]
-            [autho.unify :as unf]
             [autho.person :as person]
             [java-time :as ti]
  ;;           [taoensso.timbre :as timbre
@@ -27,6 +26,14 @@
 (defn getProperty [prop]
   (get @properties prop)
   )
+
+(defn kafka-enabled?
+  "Check if Kafka features are enabled via KAFKA_ENABLED environment variable.
+  Defaults to true for backward compatibility."
+  []
+  (if-let [env-enabled (System/getenv "KAFKA_ENABLED")]
+    (Boolean/parseBoolean env-enabled)
+    true))
 
 (defn- get-subject [request body]
   (let [identity (:identity request)]
@@ -67,31 +74,24 @@
       )
     (catch Exception e (do (.getMessage e) object))))
 
-(defn- callFillers [request]                                ;; TODO review implementation
-  (let [
-        subfill (prp/getSubjectFiller (:class (:subject request)))
+(defn- callFillers [request]
+  (let [subfill  (prp/getSubjectFiller  (:class (:subject request)))
         ressfill (prp/getResourceFiller (:class (:resource request)))]
-
-    (let [augs (if subfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type subfill))) [subfill (:subject request)]))
-          augr (if ressfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type ressfill))) [ressfill (:resource request)]))]
-      (cache/mergeEntityWithCache augs cache/subject-cache)
-      (cache/mergeEntityWithCache augr cache/resource-cache)
+    (let [augs (when subfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type subfill))) [subfill (:subject request)]))
+          augr (when ressfill (apply (ns-resolve (symbol "autho.attfun") (symbol (:type ressfill))) [ressfill (:resource request)]))]
+      (local-cache/mergeEntityWithCache augs :subject)
+      (local-cache/mergeEntityWithCache augr :resource)
       (-> request
           (assoc :subject augs)
-          (assoc :resource augr)
-      )
-    )
-  )
-  )
+          (assoc :resource augr)))))
 
 
 (defn passThroughCache [request]
-  (let [cs (cache/mergeEntityWithCache (:subject request) cache/subject-cache)
-        cr (cache/mergeEntityWithCache (:resource request) cache/resource-cache)]
+  (let [cs (local-cache/mergeEntityWithCache (:subject request) :subject)
+        cr (local-cache/mergeEntityWithCache (:resource request) :resource)]
     (assoc request
       :subject cs
-      :resource cr))
-  )
+      :resource cr)))
 
 ;; the request is composed of
 ;; subject
@@ -149,15 +149,15 @@
     (if-not (:subject authz-request)
       (throw (ex-info "No subject specified" {:status 400})))
 
-    (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
-          augreq (passThroughCache authz-request)
-          evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                             (conj res rule)
-                                             res))
-                           [] (:rules globalPolicy))]
+    (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))]
       (if-not globalPolicy
-        (throw (ex-info "No global policy applicable" {:status 404})))
-      {:results (map #(:name %1) evalglob)})))
+        (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
+      (let [augreq   (passThroughCache authz-request)
+            evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                              (conj res rule)
+                                              res))
+                             [] (:rules globalPolicy))]
+        {:results (map #(:name %1) evalglob)}))))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
@@ -210,28 +210,38 @@
     (catch Exception e
       false)))
 
+;; Configurable upper bound on the number of objects fetched per query.
+;; Prevents OOM when classes contain millions of objects.
+;; Can be overridden with MAX_OBJECTS_QUERY_LIMIT environment variable.
+(def max-objects-query-limit
+  (Long/parseLong (or (System/getenv "MAX_OBJECTS_QUERY_LIMIT") "10000")))
+
 (defn- enrich-with-objects
   "Enriches a rule result with actual objects from Kafka PIP if available.
-  Supports pagination with page and pageSize parameters."
+  Supports pagination with page and pageSize parameters.
+
+  Uses server-side offset/limit pagination via RocksDB iterator to avoid
+  loading all objects into memory (prevents OOM on large datasets).
+  The total count is an approximation of the pre-filter object count."
   [rule-result {:keys [page pageSize] :or {page 1 pageSize 20}}]
   (let [resource-class (:resourceClass rule-result)
         resource-conds (rest (:resourceCond rule-result))]
     (if (and (kafka-enabled?) (prp/has-kafka-pip? resource-class))
-      (let [offset (* (dec page) pageSize)
-            ;; Get more objects than needed to filter, then paginate
-            ;; This is not optimal but works for now
-            all-objects (kafka-pip/query-all-objects resource-class {})
-            filtered-objects (filter #(object-matches-resource-cond? % resource-conds) all-objects)
-            total (count filtered-objects)
-            paginated-objects (take pageSize (drop offset filtered-objects))
-            has-more (> total (+ offset pageSize))]
-        (assoc rule-result :objects {
-                                     :items (vec paginated-objects)
-                                     :pagination {
-                                                  :page page
+      (let [offset       (* (dec page) pageSize)
+            ;; Overfetch by 10x the page size to absorb filtering losses,
+            ;; but never exceed the configured safety limit.
+            fetch-limit  (min max-objects-query-limit (* pageSize 10))
+            objects      (kafka-pip/query-all-objects resource-class {:offset offset :limit fetch-limit})
+            filtered     (filter #(object-matches-resource-cond? % resource-conds) objects)
+            items        (vec (take pageSize filtered))
+            ;; Total is the pre-filter count (fast RocksDB metadata read).
+            total-approx (kafka-pip/count-objects resource-class)
+            has-more     (> total-approx (+ offset pageSize))]
+        (assoc rule-result :objects {:items      items
+                                     :pagination {:page     page
                                                   :pageSize pageSize
-                                                  :total total
-                                                  :hasMore has-more}}))
+                                                  :total    total-approx
+                                                  :hasMore  has-more}}))
       rule-result)))
 
 (defn whatAuthorized
@@ -256,12 +266,16 @@
           pagination-opts {:page page :pageSize pageSize}]
       {:allow (map #(enrich-with-objects % pagination-opts)
                    (map (fn [rule] {:resourceClass (:resourceClass rule)
-                                    :resourceCond (:resourceCond rule)
+                                    :resourceCond (if (vector? (:resourceCond rule))
+                                                    (rest (:resourceCond rule))
+                                                    (:resourceCond rule))
                                     :operation (:operation rule)})
                         evrules1))
        :deny (map #(enrich-with-objects % pagination-opts)
                   (map (fn [rule] {:resourceClass (:resourceClass rule)
-                                   :resourceCond (:resourceCond rule)
+                                   :resourceCond (if (vector? (:resourceCond rule))
+                                                   (rest (:resourceCond rule))
+                                                   (:resourceCond rule))
                                    :operation (:operation rule)})
                        evrules2))})))
 
@@ -310,14 +324,6 @@
     (let [props (java.util.Properties.)]
       (.load props reader)
       (into {} (for [[k v] props] [(keyword k) (edn/read-string v)])))))
-
-(defn kafka-enabled?
-  "Check if Kafka features are enabled via KAFKA_ENABLED environment variable.
-  Defaults to true for backward compatibility."
-  []
-  (if-let [env-enabled (System/getenv "KAFKA_ENABLED")]
-    (Boolean/parseBoolean env-enabled)
-    true))
 
 (defn init []
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
