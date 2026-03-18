@@ -5,7 +5,9 @@
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [com.brunobonacci.mulog :as u]
-            [autho.kafka-pip :as kafka-pip])
+            [autho.kafka-pip :as kafka-pip]
+            [autho.metrics :as metrics]
+            [autho.circuit-breaker :as cb])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.pip"))
@@ -37,36 +39,44 @@
   nil)
 
 ;; REST PIP implementation (from urlPip)
-;; Uses connection pooling for better performance
+;; Uses connection pooling, circuit breakers, and Prometheus metrics.
 (defmethod callPip :rest [decl att obj]
   (let [pip-info (:pip decl)
-        verb (keyword (or (:verb pip-info) "get")) ; Default to GET
-        url (:url pip-info)
-        obj-id (:id obj)]
-    (try
-      (let [full-url (if (= verb :get) (str url "/" obj-id) url)
-            http-opts {:throw-exceptions false
-                       :content-type :json
-                       :as :json
-                       :coerce :always
-                       :connection-manager http-connection-manager}
-            req-opts (if (= verb :post)
-                       (assoc http-opts :form-params obj)
-                       http-opts)
-            response (case verb
-                       :get (client/get full-url req-opts)
-                       :post (client/post url req-opts))]
-        (if (>= (:status response) 400)
-          (do
-            (u/log ::pip-call-failed :status (:status response) :body (:body response) :pip-info pip-info)
-            (if (= (:status response) 404)
-              {:error "object not found"}
-              {:error "pip_call_failed" :status (:status response)}))
-          (:body response)))
-      (catch Exception e
-        (u/log ::pip-exception :exception e :pip-info pip-info)
-        (.error logger "Exception calling REST PIP: {}" (.getMessage e) e)
-        {:error "pip_exception" :message (.getMessage e)}))))
+        verb     (keyword (or (:verb pip-info) "get"))
+        url      (:url pip-info)
+        obj-id   (:id obj)
+        ;; Per-PIP configurable timeout (ms); falls back to connection-manager default
+        timeout-ms (get pip-info :timeout-ms 10000)]
+    (metrics/time-pip-call! :rest
+      (fn []
+        (cb/call url
+          (fn []
+            (try
+              (let [full-url  (if (= verb :get) (str url "/" obj-id) url)
+                    http-opts {:throw-exceptions     false
+                               :content-type         :json
+                               :as                   :json
+                               :coerce               :always
+                               :socket-timeout       timeout-ms
+                               :conn-timeout         timeout-ms
+                               :connection-manager   http-connection-manager}
+                    req-opts  (if (= verb :post)
+                                (assoc http-opts :form-params obj)
+                                http-opts)
+                    response  (case verb
+                                :get  (client/get full-url req-opts)
+                                :post (client/post url req-opts))]
+                (if (>= (:status response) 400)
+                  (do
+                    (u/log ::pip-call-failed :status (:status response) :body (:body response) :pip-info pip-info)
+                    (if (= (:status response) 404)
+                      {:error "object not found"}
+                      {:error "pip_call_failed" :status (:status response)}))
+                  (:body response)))
+              (catch Exception e
+                (u/log ::pip-exception :exception e :pip-info pip-info)
+                (.error logger "Exception calling REST PIP: {}" (.getMessage e) e)
+                (throw e)))))))))
 
 (defmethod callPip :kafka-pip [decl att obj]
   (let [kafka-enabled (if-let [env-enabled (System/getenv "KAFKA_ENABLED")]
@@ -76,25 +86,25 @@
       (do
         (u/log ::kafka-disabled :message "Kafka PIP called but Kafka is disabled via KAFKA_ENABLED=false")
         (.warn logger "Kafka PIP called but Kafka is disabled. Set KAFKA_ENABLED=true to enable.")
-        ;; Try fallback if Kafka is disabled
         (when-let [fallback (:fallback (:pip decl))]
           (u/log ::kafka-fallback :message "Using fallback PIP because Kafka is disabled")
           (callPip (assoc decl :pip fallback) att obj)))
-      (let [pip-info (:pip decl)
-            class-name (:class decl)
-            id-key (or (:id-key pip-info) :id)
-            obj-id (get obj id-key)]
-        (if (and class-name obj-id)
-          (let [result (kafka-pip/query-pip class-name (str obj-id))]
-            ;; If RocksDB returns nil and fallback is configured, try fallback
-            (if (and (nil? result) (:fallback pip-info))
-              (do
-                (u/log ::kafka-fallback :message "Object not found in RocksDB, trying fallback PIP"
-                       :class class-name :id obj-id)
-                (.debug logger "Object {} not found in RocksDB for class {}, trying fallback" obj-id class-name)
-                (callPip (assoc decl :pip (:fallback pip-info)) att obj))
-              result))
-          nil)))))
+      (metrics/time-pip-call! :kafka-pip
+        (fn []
+          (let [pip-info   (:pip decl)
+                class-name (:class decl)
+                id-key     (or (:id-key pip-info) :id)
+                obj-id     (get obj id-key)]
+            (if (and class-name obj-id)
+              (let [result (kafka-pip/query-pip class-name (str obj-id))]
+                (if (and (nil? result) (:fallback pip-info))
+                  (do
+                    (u/log ::kafka-fallback :message "Object not found in RocksDB, trying fallback PIP"
+                           :class class-name :id obj-id)
+                    (.debug logger "Object {} not found in RocksDB for class {}, trying fallback" obj-id class-name)
+                    (callPip (assoc decl :pip (:fallback pip-info)) att obj))
+                  result))
+              nil)))))))
 
 ;; Java PIP implementation
 (defmethod callPip :java [decl att obj]

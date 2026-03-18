@@ -4,6 +4,8 @@
             [autho.pip :as pip]
             [autho.kafka-pip :as kpip]
             [autho.journal :as jrnl]
+            [autho.metrics :as metrics]
+            [autho.tracing :as tracing]
             [autho.person :as person]
             [autho.time-travel :as time-travel]
             [autho.validation :as validation]
@@ -174,6 +176,13 @@
                           "Admin access requires a trusted API key or an identity with role 'admin'."
                           403))))))
 
+(defn wrap-metrics [handler]
+  (fn [request]
+    (metrics/record-http-request!
+     (name (:request-method request))
+     (:uri request)
+     #(handler request))))
+
 (defn wrap-logging [handler]
   (fn [request]
     (let [response (handler request)]
@@ -209,6 +218,11 @@
            (route/resources "/")
 
            ;; Health and monitoring endpoints
+           (GET "/metrics" []
+                {:status  200
+                 :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
+                 :body    (metrics/scrape)})
+
            (GET "/health" []
                 (json-response {:status "ok"
                                 :service "autho"
@@ -499,6 +513,8 @@
                                            wrap-input-validation
                                            wrap-rate-limit
                                            wrap-request-size-limit
+                                           wrap-metrics
+                                           tracing/wrap-tracing
                                            wrap-error-handling)
                               :handler-mode :blocking}]})
    start

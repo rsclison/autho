@@ -38,7 +38,10 @@
                  [ch.qos.logback/logback-classic "1.5.18"]
                  [org.apache.kafka/kafka-clients "4.1.0"]
                  [org.apache.kafka/kafka-streams "4.1.0"]
-                 [org.rocksdb/rocksdbjni "8.11.4"]]
+                 [org.rocksdb/rocksdbjni "8.11.4"]
+                 [io.micrometer/micrometer-core "1.12.4"]
+                 [io.micrometer/micrometer-registry-prometheus "1.12.4"]
+                 [diehard "0.11.4"]]
   :main autho.core
   :target-path "target/%s"
   :test-selectors {:default (complement :integration)

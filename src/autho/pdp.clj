@@ -4,6 +4,7 @@
             [autho.jsonrule :as rule]
             [autho.kafka-pip :as kafka-pip]
             [autho.local-cache :as local-cache]
+            [autho.metrics :as metrics]
             [autho.delegation :as deleg]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
@@ -121,7 +122,9 @@
          resolve (resolve-conflict globalPolicy evalglob)]
 
      (if resolve
-       {:result resolve :rules evalglob}
+       (do
+         (metrics/record-decision! :allow (:class (:resource request)))
+         {:result resolve :rules evalglob})
        (let [deleg (deleg/findDelegation (:subject request))
              ;; Filter out delegations that would create cycles
              safe-deleg (filter #(let [delegate-id (:id (:delegate %))]
@@ -139,7 +142,9 @@
                        safe-deleg)]
          (if one
            one
-           {:result false :rules evalglob}))))))
+           (do
+             (metrics/record-decision! :deny (:class (:resource request)))
+             {:result false :rules evalglob})))))))
 
 (defn isAuthorized [request body]
   (let [subject (get-subject request body)
@@ -327,6 +332,7 @@
 
 (defn init []
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
+  (metrics/init-jvm-metrics!)
 
   ;; Only register Kafka shutdown hook if Kafka is enabled
   (when (kafka-enabled?)

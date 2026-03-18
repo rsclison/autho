@@ -1,11 +1,13 @@
 (ns autho.journal
-  (:import (org.slf4j LoggerFactory)))
-
-(defonce logger (LoggerFactory/getLogger "autho.journal"))
+  (:require [com.brunobonacci.mulog :as u]))
 
 (defn logRequest [request response]
-  (.info logger "Authorization request: {}" (pr-str request))
-  (.info logger "Authorization response: {}" (pr-str response)))
+  (u/log ::http-request
+         :method      (name (:request-method request))
+         :uri         (:uri request)
+         :status      (:status response)
+         :remote-addr (:remote-addr request)
+         :client-id   (get-in request [:identity :client-id])))
 
 (defn logClient [client]
-  (.info logger "Client initialized: {}" (pr-str client)))
+  (u/log ::client-initialized :client client))
