@@ -1,488 +1,529 @@
-# autho: An Authorization Server
+# Autho — Serveur d'Autorisation XACML/ABAC
 
-`autho` is a flexible and extensible authorization server built in Clojure. It provides a RESTful API to manage access control policies and evaluate authorization requests, making it easy to integrate with other services to secure your applications.
+**Autho** est un serveur d'autorisation haute performance basé sur les modèles XACML et ABAC (Attribute-Based Access Control). Il fournit une décision d'autorisation centralisée, indépendante des applications métier, avec une capacité d'audit, de versionnage et d'observabilité complète.
 
-The core of `autho` is a Policy Decision Point (PDP) that evaluates incoming requests against a set of policies to determine if access should be granted or denied. Policies are defined using a simple JSON-based rule language.
+---
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Geek13)
+## Table des matières
 
-## Concepts
+1. [Architecture](#architecture)
+2. [Démarrage rapide](#démarrage-rapide)
+3. [Fonctionnalités](#fonctionnalités)
+4. [Langage de politique](#langage-de-politique)
+5. [PIPs — Policy Information Points](#pips--policy-information-points)
+6. [Cache et performance](#cache-et-performance)
+7. [Observabilité](#observabilité)
+8. [Configuration](#configuration)
+9. [API Reference](#api-reference)
+10. [Programmes clients](#programmes-clients)
+11. [Structure du projet](#structure-du-projet)
 
-`autho` is built around the XACML (eXtensible Access Control Markup Language) standard, which defines a reference architecture for attribute-based access control (ABAC). The key components in this architecture are:
+---
 
-*   **Policy Decision Point (PDP):** The core of the authorization server. The PDP evaluates authorization requests against a set of policies and returns a decision (Permit, Deny, NotApplicable, or Indeterminate).
-*   **Policy Administration Point (PAP):** The component responsible for managing policies. In `autho`, this is handled by the policy management API endpoints.
-*   **Policy Information Point (PIP):** The component that provides external information to the PDP. This allows the PDP to make decisions based on attributes that are not present in the original request. For example, a PIP could fetch user roles from an LDAP directory or a database.
-*   **Policy Enforcement Point (PEP):** The component that enforces the PDP's decision. The PEP is typically part of the application that is being secured. It sends an authorization request to the PDP and, based on the decision, either grants or denies access to the user. `autho` itself is not a PEP.
+## Architecture
 
-## Features
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Applications métier                       │
+│         (services, APIs, applications web, batch jobs)          │
+└────────────────────────┬────────────────────────────────────────┘
+                         │  HTTP (REST JSON)
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         Autho Server :8080                       │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  Middleware  │  │     PDP      │  │        PAP           │   │
+│  │ ─────────── │  │ ──────────── │  │ ──────────────────── │   │
+│  │ Auth JWT/Key │  │ isAuthorized │  │ CRUD policies        │   │
+│  │ Rate limit  │  │ whoAuthorized│  │ YAML import          │   │
+│  │ Validation  │  │ whatAuthorized│ │ Versioning           │   │
+│  │ Graceful SD │  │ explain      │  │ Rollback             │   │
+│  │ Tracing     │  │ simulate     │  │ Dry-run simulation   │   │
+│  └─────────────┘  └──────┬───────┘  └──────────────────────┘   │
+│                          │                                       │
+│  ┌─────────────┐  ┌──────▼───────┐  ┌──────────────────────┐   │
+│  │    Cache    │  │     PRP      │  │        PIP           │   │
+│  │ ─────────── │  │ ──────────── │  │ ──────────────────── │   │
+│  │ Decisions   │  │ policiesMap  │  │ REST PIP             │   │
+│  │ Subjects    │  │ delegations  │  │ Kafka/RocksDB PIP    │   │
+│  │ Resources   │  │ persons      │  │ Internal PIP         │   │
+│  │ Policies    │  │ fillers      │  │ CSV / Java PIP       │   │
+│  └──────┬──────┘  └──────────────┘  └──────────────────────┘   │
+│         │                                                        │
+│  ┌──────▼──────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │   Kafka     │  │    Audit     │  │      Metrics         │   │
+│  │ Invalidation│  │ Tamper-proof │  │ Prometheus /metrics  │   │
+│  │ Time-Travel │  │ HMAC chain   │  │ OpenTelemetry spans  │   │
+│  └─────────────┘  └──────────────┘  └──────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+         │                                      │
+         ▼                                      ▼
+   Apache Kafka                           H2 Database
+   RocksDB (local)                        Audit + Policy versions
+```
 
-*   **Centralized Authorization:** Manage authorization logic in a single service.
-*   **Policy-Based Access Control:** Define fine-grained access control policies.
-*   **REST API:** Easy to integrate with any application that can make HTTP requests.
-*   **Delegation of Rights:** Users can delegate their access rights to other users.
-*   **Extensible:** Connect to various attribute sources like databases or LDAP to enrich authorization requests.
+### Composants principaux
 
-## Implementation Status
+| Composant | Rôle |
+|-----------|------|
+| **PDP** (Policy Decision Point) | Évalue les demandes d'autorisation contre les politiques |
+| **PRP** (Policy Repository Point) | Stocke et gère les politiques en mémoire |
+| **PAP** (Policy Administration Point) | API CRUD pour administrer les politiques |
+| **PIP** (Policy Information Point) | Enrichit les sujets/ressources avec des attributs externes |
+| **Audit** | Journal immuable signé HMAC-SHA256 en chaîne |
+| **Cache** | LRU+TTL à 4 niveaux : décision, sujet, ressource, politique |
 
-**Note:** The Datomic/Kafka implementation is currently under development and is not yet ready for production use.
+---
 
-## Getting Started
+## Démarrage rapide
 
-### Prerequisites
+### Prérequis
 
-*   Java (version 8 or later)
+- Java 11+
+- Leiningen 2.x
 
-### Running from the JAR
-
-A pre-compiled, standalone JAR is available in the `bin` directory. To run the server, simply execute the following command:
+### Lancement
 
 ```bash
-java -jar bin/autho.jar
+export JWT_SECRET="my-strong-secret-key-32-chars-min"
+export API_KEY="my-api-key"
+
+lein ring server-headless
+# Serveur démarré sur http://localhost:8080
 ```
 
-The server will start on port 8080 by default.
-
-### Building from Source
-
-If you want to build the project from source, you will need to install [Leiningen](https://leiningen.org/) (the Clojure build tool).
-
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd autho
-    ```
-
-2.  **Build the standalone JAR:**
-    ```bash
-    ./lein uberjar
-    ```
-    This will create a file named `autho-0.1.0-SNAPSHOT-standalone.jar` in the `target/uberjar` directory.
-
-3.  **Run the server:**
-    ```bash
-    java -jar target/uberjar/autho-0.1.0-SNAPSHOT-standalone.jar
-    ```
-    The server will start on port 8080 by default.
-
-## Environment Variables
-
-For security reasons, sensitive configuration values must be provided as environment variables. The following environment variables are **required**:
-
-### Required Environment Variables
-
-*   **`JWT_SECRET`**: The secret key used for JWT token signing and verification. This should be a strong, randomly generated string.
-    ```bash
-    export JWT_SECRET="your-very-secure-jwt-secret-here"
-    ```
-
-*   **`API_KEY`**: The API key for trusted application authentication. This should be a strong, randomly generated string.
-    ```bash
-    export API_KEY="your-very-secure-api-key-here"
-    ```
-
-### Optional Environment Variables
-
-*   **`LDAP_PASSWORD`**: The password for the LDAP bind DN. If not set, the password from `pdp-prop.properties` will be used (not recommended for production).
-    ```bash
-    export LDAP_PASSWORD="your-ldap-password"
-    ```
-
-*   **`MAX_REQUEST_SIZE`**: Maximum request body size in bytes. Default is 1048576 (1MB).
-    ```bash
-    export MAX_REQUEST_SIZE=2097152  # 2MB
-    ```
-
-*   **`KAFKA_ENABLED`**: Enable or disable Kafka-related features (PIPs, time-travel endpoints, RocksDB). Default is `true`.
-    ```bash
-    export KAFKA_ENABLED=false  # Disable Kafka features
-    ```
-    When set to `false`, the following features will be disabled:
-    - Kafka PIPs for business object retrieval
-    - Time-travel authorization endpoints (`/isAuthorized-at-time`, `/who-was-authorized-at`, `/what-could-access-at`, `/audit-trail`)
-    - RocksDB admin endpoints (`/admin/listRDB`, `/admin/clearRDB/:class-name`)
-
-*   **`RATE_LIMIT_ENABLED`**: Enable or disable rate limiting. Default is `true`.
-    ```bash
-    export RATE_LIMIT_ENABLED=false  # Disable rate limiting
-    ```
-
-*   **`RATE_LIMIT_REQUESTS_PER_MINUTE`**: Maximum number of requests allowed per minute per IP address. Default is 100.
-    ```bash
-    export RATE_LIMIT_REQUESTS_PER_MINUTE=200  # Allow 200 requests per minute
-    ```
-
-*   **`KAFKA_BOOTSTRAP_SERVERS`**: Kafka bootstrap servers for time-travel features. Default is `localhost:9092`.
-    ```bash
-    export KAFKA_BOOTSTRAP_SERVERS="kafka1:9092,kafka2:9092"
-    ```
-
-### Example: Running with Environment Variables
+### Premier appel
 
 ```bash
-export JWT_SECRET="my-super-secret-jwt-key-change-this-in-production"
-export API_KEY="my-super-secret-api-key-change-this-in-production"
-export LDAP_PASSWORD="ldap-password-if-using-ldap"
-java -jar bin/autho.jar
+# Vérifier que le serveur est prêt
+curl http://localhost:8080/health
+
+# Décision d'autorisation (avec API Key)
+curl -X POST http://localhost:8080/isAuthorized \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: my-api-key" \
+  -d '{
+    "subject":   {"id": "alice", "role": "chef_de_service", "service": "comptabilite"},
+    "resource":  {"class": "Facture", "id": "INV-001", "service": "comptabilite", "montant": 500},
+    "operation": "lire"
+  }'
+# → {"results": ["R1"]}
+
+# Décision refusée
+curl -X POST http://localhost:8080/isAuthorized \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: my-api-key" \
+  -d '{
+    "subject":   {"id": "bob", "role": "stagiaire"},
+    "resource":  {"class": "Facture", "id": "INV-001"},
+    "operation": "lire"
+  }'
+# → {"results": []}
 ```
 
-**Important Security Notes:**
-- Never commit these secrets to version control
-- Use different secrets for development, staging, and production environments
-- Rotate secrets regularly
-- Consider using a secrets management system (e.g., HashiCorp Vault, AWS Secrets Manager) in production
+---
 
-## Authentication
+## Fonctionnalités
 
-Most API endpoints are protected and require authentication. The server supports two methods of authentication, designed for different use cases.
+### Décisions d'autorisation
 
-### 1. JWT Token (OAuth2)
+| Endpoint | Description |
+|----------|-------------|
+| `POST /isAuthorized` | Décision binaire allow/deny pour un triplet sujet-ressource-opération |
+| `POST /whoAuthorized` | Sujets autorisés pour une ressource et une opération |
+| `POST /whatAuthorized` | Ressources accessibles à un sujet (avec pagination et fetch Kafka) |
+| `POST /explain` | Trace détaillée règle par règle de la décision |
+| `POST /v1/authz/simulate` | Simulation dry-run (sans cache ni audit) |
+| `POST /v1/authz/batch` | Évaluation en lot de jusqu'à 100 demandes en parallèle |
 
-This method is intended for end-users or services that have obtained a JSON Web Token (JWT) from an OAuth2 provider. The token must be sent in the `Authorization` header with the `Token` scheme.
+### Gestion des politiques
 
-**Header:**
-`Authorization: Token <your-jwt-here>`
+| Endpoint | Description |
+|----------|-------------|
+| `GET  /policies` | Lister toutes les politiques |
+| `GET  /policy/:rc` | Lire une politique |
+| `PUT  /policy/:rc` | Créer ou mettre à jour une politique |
+| `DELETE /policy/:rc` | Supprimer une politique |
+| `POST /v1/policies/import` | Import depuis YAML |
+| `GET  /v1/policies/:rc/versions` | Historique des versions |
+| `GET  /v1/policies/:rc/versions/:v` | Récupérer la version v |
+| `GET  /v1/policies/:rc/diff?from=1&to=3` | Diff entre deux versions |
+| `POST /v1/policies/:rc/rollback/:v` | Rollback à la version v |
 
-When using this method, the user's identity (the `subject` for the authorization check) is securely derived from the claims inside the validated JWT. Any `subject` provided in the request body will be ignored.
+### Time-Travel (Kafka activé)
 
-### 2. API Key
+| Endpoint | Description |
+|----------|-------------|
+| `POST /isAuthorized-at-time` | Décision au temps T |
+| `POST /who-was-authorized-at` | Qui pouvait accéder au temps T |
+| `POST /what-could-access-at` | Accès du sujet au temps T |
+| `POST /audit-trail` | Historique des changements d'autorisation |
 
-This method is intended for trusted backend applications. The application must send a pre-shared secret key in the `X-API-Key` header.
+### Administration
 
-**Header:**
-`X-API-Key: <your-secret-api-key>`
+| Endpoint | Description |
+|----------|-------------|
+| `GET  /admin/ui` | Dashboard HTML |
+| `GET  /admin/ui/policies` | Gestion des politiques (UI) |
+| `GET  /admin/ui/circuit-breakers` | État des circuit breakers |
+| `GET  /admin/audit/search` | Recherche dans l'audit |
+| `GET  /admin/audit/verify` | Vérification de l'intégrité de la chaîne |
+| `POST /admin/reload_rules` | Rechargement des règles |
+| `GET  /v1/cache/stats` | Statistiques du cache |
+| `DELETE /v1/cache` | Vidage du cache |
 
-When a request is authenticated with a valid API key, the server considers it to be from a trusted source. In this case, the application is allowed to specify the `subject` for the authorization check directly in the request body. This is useful for internal services that need to check permissions on behalf of different users.
+---
 
-## API Documentation
+## Langage de politique
 
-The `autho` server exposes a REST API for managing policies and evaluating authorization requests. All API endpoints accept and return JSON.
+### Structure d'une règle
 
-### Authorization Endpoints
-
-The authorization endpoints are used to ask the PDP for an authorization decision.
-
-#### `POST /isAuthorized`
-
-This is the main endpoint for checking permissions. It takes a subject, a resource, and an action, and returns a boolean decision indicating whether the action is permitted.
-
-**Request Body:**
-
-The request body must be a JSON object with the following keys:
-
-*   `subject`: An object representing the user or service making the request. **Note:** This field is only used when authenticating with an API Key. When using JWT authentication, the subject is derived from the token and this field is ignored.
-*   `resource`: An object representing the resource being accessed.
-*   `action`: A string representing the action being performed.
-
-```json
-{
-  "subject": { "id": "user1", "attributes": { "role": "editor" } },
-  "resource": { "class": "document", "id": "doc123", "attributes": { "owner": "user1" } },
-  "action": "edit"
-}
+```clojure
+{:name          "NomRegle"           ; Identifiant unique
+ :resourceClass "Facture"            ; Classe de ressource ciblée
+ :domain        "GFC"                ; Domaine fonctionnel (optionnel)
+ :operation     "lire"               ; Opération ciblée
+ :priority      0                    ; Priorité (entier, plus grand = prioritaire)
+ :effect        "allow"              ; "allow" ou "deny"
+ :conditions    [clause1 clause2]    ; Toutes doivent être vraies (AND implicite)
+ :startDate     "inf"                ; Date de début (ou "inf")
+ :endDate       "inf"}               ; Date de fin (ou "inf")
 ```
 
-**Response Body:**
+### Syntaxe des clauses
 
-The response body is a JSON object with the following keys:
+Une clause est un vecteur `[opérateur opérande1 opérande2]`.
 
-*   `result`: A boolean value. `true` if the action is permitted, `false` otherwise.
-*   `rules`: A list of the rules that were matched to produce the decision.
+```clojure
+; Attribut sujet = valeur littérale
+[= [Person $s role] "chef_de_service"]
 
-```json
-{
-  "result": true,
-  "rules": ["rule1", "rule2"]
-}
+; Attribut sujet = attribut ressource (jointure)
+[= [Person $s service] [Facture $r service]]
+
+; Comparaison numérique
+[< [Facture $r montant] [Person $s seuil]]
+[>= [Person $s clearance-level] 3]
+
+; Négation
+[diff [Person $s role] "stagiaire"]
 ```
 
-#### `POST /whoAuthorized`
+**Syntaxe JSONPath (alternative) :**
 
-This endpoint is used to find out which subjects are allowed to perform a certain action on a given resource. This is useful for "what-if" scenarios or for building user interfaces that show who has access to what.
-
-**Request Body:**
-
-The request body must be a JSON object with the following keys:
-
-*   `resource`: An object representing the resource being accessed.
-*   `action`: A string representing the action being performed.
-
-```json
-{
-  "resource": { "class": "document", "id": "doc123" },
-  "action": "view"
-}
+```clojure
+["=" "$.role"       "chef_de_service"]   ; attribut du contexte courant
+["=" "$s.service"   "$r.service"]        ; $s = sujet, $r = ressource
+["<" "$r.montant"   "$s.seuil"]
+["in" "$s.role"     "admin,manager"]     ; appartenance CSV
 ```
 
-**Response Body:**
+### Opérateurs
 
-The response is a JSON array of conditions that describe the subjects who are authorized. Each condition is a logical expression that can be evaluated to determine if a subject is authorized.
+| Opérateur | Description | Exemple |
+|-----------|-------------|---------|
+| `=`       | Égalité | `[= [Person $s role] "admin"]` |
+| `diff`    | Différence | `[diff [Person $s status] "disabled"]` |
+| `<`       | Inférieur | `[< [Facture $r montant] 1000]` |
+| `>`       | Supérieur | `[> [Person $s seuil] 500]` |
+| `<=`      | Inf. ou égal | `[<= [Facture $r montant] [Person $s seuil]]` |
+| `>=`      | Sup. ou égal | `[>= [Person $s clearance-level] 3]` |
+| `in`      | Valeur dans ensemble CSV | `["in" "$s.role" "admin,manager,dpo"]` |
+| `notin`   | Valeur hors ensemble | `["notin" "$s.status" "suspended,blocked"]` |
+| `or`      | OU logique | `["or" clause1 clause2]` |
+| `not`     | Négation | `["not" clause]` |
+| `and`     | ET étendu | `["and" clause1 clause2 clause3]` |
 
-```json
-[
-  {
-    "resourceClass": "document",
-    "subjectCond": ["=", ["att", "role"], "viewer"],
-    "operation": "view"
-  }
-]
+### Stratégie de conflit
+
+La stratégie `almost_one_allow_no_deny` (défaut) : **autoriser si et seulement si au moins une règle `allow` s'applique ET qu'aucune règle `deny` de priorité supérieure ne s'applique.**
+
+### Exemple complet
+
+```clojure
+{"Facture" {:global {
+  :strategy :almost_one_allow_no_deny
+  :rules [
+    {:name "R1"
+     :resourceClass "Facture"
+     :operation "lire"
+     :priority 0
+     :conditions [[= [Person $s role]    "chef_de_service"]
+                  [= [Person $s service] [Facture $r service]]
+                  [< [Facture $r montant] [Person $s seuil]]]
+     :effect "allow"}
+
+    {:name "R2"
+     :resourceClass "Facture"
+     :operation "lire"
+     :priority 1
+     :conditions [[= [Facture $r confidentiel] "true"]
+                  [diff [Person $s role] "DPO"]]
+     :effect "deny"}
+  ]}}}
 ```
 
-#### `POST /whatAuthorized`
+### Import YAML
 
-This endpoint is the inverse of `whoAuthorized`. It retrieves the resources that a subject is authorized to perform a certain action on. This is useful for building user interfaces that show a user all the resources they can access.
-
-**Enhanced with Kafka PIP:** When Kafka is enabled (`KAFKA_ENABLED=true`) and a resource class has a Kafka PIP configured, this endpoint automatically retrieves and filters the actual objects from RocksDB that match the authorization conditions, with pagination support.
-
-**Request Body:**
-
-The request body must be a JSON object with the following keys:
-
-*   `subject`: An object representing the user or service making the request. **Note:** This field is only used when authenticating with an API Key. When using JWT authentication, the subject is derived from the token and this field is ignored.
-*   `resource`: An object with at least `class` to specify the resource type
-*   `operation`: A string representing the action being performed (optional, depending on rules)
-*   `page` (optional): Page number for object pagination (default: 1)
-*   `pageSize` (optional): Number of objects per page (default: 20)
-
-```json
-{
-  "subject": { "id": "user1", "role": "accountant" },
-  "resource": { "class": "Facture" },
-  "operation": "edit",
-  "page": 1,
-  "pageSize": 20
-}
+```yaml
+resourceClass: Facture
+strategy: almost_one_allow_no_deny
+rules:
+  - name: R1
+    operation: lire
+    priority: 0
+    effect: allow
+    conditions:
+      - ["=",  "$s.role",    "chef_de_service"]
+      - ["=",  "$s.service", "$r.service"]
+      - ["<",  "$r.montant", "$s.seuil"]
+  - name: R2
+    operation: lire
+    priority: 1
+    effect: deny
+    conditions:
+      - ["=",    "$r.confidentiel", "true"]
+      - ["diff", "$s.role",         "DPO"]
 ```
 
-**Response Body:**
+---
 
-The response is a JSON object with two keys, `allow` and `deny`. Each key contains a list of resource conditions.
+## PIPs — Policy Information Points
 
-**For classes without Kafka PIP (criteria only):**
-```json
-{
-  "allow": [
-    {
-      "resourceClass": "document",
-      "resourceCond": ["and", ["=", ["att", "owner"], "user1"]],
-      "operation": "edit"
-    }
-  ],
-  "deny": []
-}
+Les PIPs enrichissent les sujets et les ressources avec des attributs externes **avant** l'évaluation des règles. Configurés dans `resources/pips.edn`.
+
+### PIP REST
+
+```clojure
+{:class "Person"
+ :attributes [:role :department :seuil]
+ :pip {:type :rest
+       :url "http://user-service:8080/api/persons"
+       :verb "get"         ; GET /{id}  ou  POST avec body
+       :timeout-ms 10000}}
 ```
 
-**For classes with Kafka PIP (criteria + objects + pagination):**
-```json
-{
-  "allow": [
-    {
-      "resourceClass": "Facture",
-      "resourceCond": ["and", ["=", ["att", "accountant"], "user1"]],
-      "operation": "edit",
-      "objects": {
-        "items": [
-          {
-            "id": "INV-001",
-            "accountant": "user1",
-            "amount": 5000,
-            "status": "pending"
-          },
-          {
-            "id": "INV-002",
-            "accountant": "user1",
-            "amount": 3000,
-            "status": "approved"
-          }
-        ],
-        "pagination": {
-          "page": 1,
-          "pageSize": 20,
-          "total": 45,
-          "hasMore": true
-        }
-      }
-    }
-  ],
-  "deny": []
-}
-```
+Circuit breaker : 3 échecs → ouverture, retry après 10 s.
 
-**Note:** Objects are only included when:
-- `KAFKA_ENABLED=true`
-- The resource class has a Kafka PIP configured in `pips.edn`
-- RocksDB contains objects for that class
-
-### Policy Management Endpoints
-
-The policy management endpoints are used to manage the policies that the PDP uses to make decisions.
-
-#### `GET /policies`
-
-Retrieves a list of all loaded policies.
-
-**Response Body:**
-
-A JSON array containing the names of all loaded policies.
-
-```json
-[
-  "document",
-  "user"
-]
-```
-
-#### `GET /policy/:resourceClass`
-
-Retrieves the policy for a specific resource class. The `:resourceClass` is the name of the policy.
-
-**Response Body:**
-
-The response is a JSON object representing the policy.
-
-```json
-{
-  "resourceClass": "document",
-  "rules": [
-    {
-      "id": "rule1",
-      "effect": "allow",
-      "conditions": {
-        "subject": { "role": "editor" },
-        "action": "edit"
-      }
-    }
-  ]
-}
-```
-
-#### `PUT /policy/:resourceClass`
-
-Submits or updates a policy for a specific resource class. The `:resourceClass` is the name of the policy. The policy itself should be in the request body as a JSON object.
-
-**Request Body:**
-
-A JSON object representing the policy.
-
-```json
-{
-  "resourceClass": "document",
-  "rules": [
-    {
-      "id": "rule1",
-      "effect": "allow",
-      "conditions": {
-        "subject": { "role": "editor" },
-        "action": "edit"
-      }
-    }
-  ]
-}
-```
-
-**Response Body:**
-
-A JSON object confirming the submission.
-
-```json
-{
-  "status": "success",
-  "message": "Policy 'document' updated."
-}
-```
-
-#### `DELETE /policy/:resourceClass`
-
-Deletes the policy for a specific resource class. The `:resourceClass` is the name of the policy.
-
-**Response Body:**
-
-A JSON object confirming the deletion.
-
-```json
-{
-  "status": "success",
-  "message": "Policy 'document' deleted."
-}
-```
-
-## Configuration
-
-The `autho` server is configured through the `resources/pdp-prop.properties` file. This file uses a simple key-value format.
-
-### Deployment Mode
-
-*   `autho.mode`: Specifies the deployment mode. Can be one of the following:
-    *   `rest`: (Default) The server will start the REST API.
-    *   `embedded`: The server will not start the REST API. This is useful when using the server as a library in another application.
-
-### Policy and Rule Storage
-
-*   `rules.repository`: The path to the file containing the authorization policies. By default, this is `resources/jrules.edn`.
-
-### LDAP Configuration
-
-`autho` can be configured to fetch user attributes from an LDAP directory. This is useful for integrating with existing user directories.
-
-*   `ldap.server`: The hostname or IP address of the LDAP server.
-*   `ldap.port`: The port number of the LDAP server.
-*   `ldap.basedn`: The base DN for LDAP searches.
-*   `ldap.filter`: The LDAP filter to use when searching for users.
-*   `ldap.attributes`: A comma-separated list of attributes to fetch from the LDAP directory.
-*   `ldap.connectstring`: The DN to use for binding to the LDAP server.
-*   `ldap.password`: The password for the bind DN. **Note:** For production environments, it is strongly recommended to use the `LDAP_PASSWORD` environment variable instead of storing the password in this configuration file.
-
-### Person Source
-
-*   `person.source`: Specifies the source for person data. This can be `ldap`, `refng`, or `grhum`.
-
-### Delegation
-
-*   `delegation.type`: The type of delegation store to use. Currently, only `file` is supported.
-*   `delegation.path`: The path to the file containing the delegation rules.
-
-## Policy Information Points (PIPs)
-
-PIPs (Policy Information Points) are external data sources that provide additional attributes to enrich authorization requests. Autho supports multiple PIP types including REST APIs, Kafka streams, CSV files, LDAP, and custom Java/Clojure implementations.
-
-### Kafka PIPs with Fallback
-
-When using Kafka PIPs, the system maintains a local RocksDB cache populated by Kafka consumers. To handle scenarios where RocksDB is empty (e.g., cold start) or when Kafka is disabled, you can configure **fallback PIPs**.
-
-**Configuration Example:**
+### PIP Kafka/RocksDB
 
 ```clojure
 {:class "Facture"
  :pip {:type :kafka-pip
        :id-key :id
        :fallback {:type :rest
-                  :url "http://backend-service:8080/api/factures"
+                  :url "http://erp:8080/api/factures"
                   :verb "get"}}}
 ```
 
-**When is the fallback used?**
-- On first application startup (before Kafka consumers populate RocksDB)
-- When an object is not found in RocksDB
-- When `KAFKA_ENABLED=false`
+Retour < 1 ms (lecture RocksDB local). Fallback REST si objet absent.
 
-**Benefits:**
-- ✅ Guarantees high availability even with empty cache
-- ✅ Graceful degradation when Kafka infrastructure is unavailable
-- ✅ Transparent to authorization logic - no rule changes needed
+### PIP Kafka unifié (multi-classes)
 
-For detailed PIP configuration and best practices, see [docs/PIPS.md](docs/PIPS.md).
+```clojure
+{:type :kafka-pip-unified
+ :kafka-topic "business-objects-compacted"
+ :kafka-bootstrap-servers "localhost:9092"
+ :classes ["Facture" "Contrat" "EngagementJuridique"]}
+```
 
-## License
+Un seul topic Kafka, une seule instance RocksDB (column families par classe).
 
-Copyright © 2024
+Format message Kafka :
+```json
+{"class": "Facture", "id": "INV-123", "montant": 5000, "service": "compta"}
+```
 
-This program and the accompanying materials are made available under the
-terms of the Eclipse Public License 2.0 which is available at
-http://www.eclipse.org/legal/epl-2.0.
+### PIP CSV
 
-This Source Code may also be made available under the following Secondary
-Licenses when the conditions for such availability set forth in the Eclipse
-Public License, v. 2.0 are satisfied: GNU General Public License as published by
-the Free Software Foundation, either version 2 of the License, or (at your
-option) any later version, with the GNU Classpath Exception which is available
-at https://www.gnu.org/software/classpath/license.html.
+```clojure
+{:class "User"
+ :attributes [:name :email :city]
+ :pip {:type :csv
+       :path "resources/users.csv"
+       :id-key :id}}
+```
+
+### Fillers (`resources/fillers.edn`)
+
+Les fillers pré-remplissent les entités **avant** l'appel aux PIPs (appels parallèles, timeout 5 s) :
+
+```clojure
+{:subject  {"Person"  {:type "urlFiller" :url "http://ldap-proxy/persons"}}
+ :resource {"Facture" {:type "urlFiller" :url "http://erp/factures"}}}
+```
+
+---
+
+## Cache et performance
+
+| Niveau | TTL défaut | Taille max | Rôle |
+|--------|-----------|-----------|------|
+| **Décision** | 60 s | 50 000 | Court-circuite les re-évaluations identiques |
+| **Sujet** | 5 min | 10 000 | Attributs enrichis par les PIPs |
+| **Ressource** | 3 min | 10 000 | Attributs enrichis des ressources |
+| **Politique** | 10 min | 5 000 | Politiques résolues |
+
+**Invalidation distribuée** (multi-instances via Kafka) : chaque invalidation est publiée sur le topic `autho-cache-invalidation` et consommée par toutes les instances.
+
+**Éviction** : à l'accès (lazy TTL) + suppression des 25 % entrées les plus anciennes si dépassement de la taille max.
+
+---
+
+## Observabilité
+
+### Prometheus
+
+```
+GET /metrics
+```
+
+Métriques disponibles :
+- `autho_pdp_decisions_total{decision, resource_class}`
+- `autho_pip_duration_seconds{type}`
+- `autho_cache_events_total{event, type}`
+- `autho_http_requests_seconds{method, uri, status}`
+- Métriques JVM (mémoire, GC, threads, CPU)
+
+### OpenTelemetry
+
+```bash
+java -javaagent:opentelemetry-javaagent.jar \
+     -Dotel.service.name=autho \
+     -Dotel.exporter.otlp.endpoint=http://jaeger:4317 \
+     -jar autho.jar
+```
+
+Spans : `authz.isAuthorized`, `authz.simulate`, `authz.whoAuthorized`, `authz.whatAuthorized`, `authz.explain`.
+
+### Audit immuable
+
+Journal signé HMAC-SHA256 en chaîne. Vérifiable à tout moment :
+```
+GET /admin/audit/verify
+→ {"valid": true}
+→ {"valid": false, "broken-at": 4521, "reason": "HMAC mismatch"}
+```
+
+### Corrélation des requêtes
+
+En-tête `X-Request-Id` propagé dans tous les logs et retourné dans les réponses.
+
+---
+
+## Configuration
+
+### Variables d'environnement
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `JWT_SECRET` | **REQUIS** | Clé de signature JWT |
+| `API_KEY` | **REQUIS** | Clé API pour les clients de confiance |
+| `KAFKA_ENABLED` | `true` | Active les fonctionnalités Kafka |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Cluster Kafka |
+| `KAFKA_INVALIDATION_TOPIC` | `autho-cache-invalidation` | Topic d'invalidation |
+| `KAFKA_INVALIDATION_ENABLED` | `true` | Synchronisation cache multi-instances |
+| `CACHE_ENABLED` | `true` | Active le cache |
+| `DECISION_CACHE_ENABLED` | `true` | Active le cache de décisions |
+| `DECISION_CACHE_TTL_MS` | `60000` | TTL du cache décision (ms) |
+| `DECISION_CACHE_MAX_SIZE` | `50000` | Taille max cache décision |
+| `CACHE_TTL_SUBJECT` | `300000` | TTL cache sujets (ms) |
+| `CACHE_TTL_RESOURCE` | `180000` | TTL cache ressources (ms) |
+| `CACHE_TTL_POLICY` | `600000` | TTL cache politiques (ms) |
+| `RATE_LIMIT_ENABLED` | `true` | Active le rate limiting |
+| `RATE_LIMIT_APIKEY_RPM` | `10000` | Requêtes/min par API Key |
+| `RATE_LIMIT_JWT_RPM` | `1000` | Requêtes/min par JWT |
+| `RATE_LIMIT_ANON_RPM` | `100` | Requêtes/min anonymes |
+| `MAX_REQUEST_SIZE` | `1048576` | Taille max du body (octets) |
+| `MAX_BATCH_SIZE` | `100` | Taille max d'un batch |
+| `MAX_OBJECTS_QUERY_LIMIT` | `10000` | Max objets par whatAuthorized |
+| `AUDIT_HMAC_SECRET` | (voir code) | Clé HMAC de l'audit |
+| `POLICIES_DIR` | *(désactivé)* | Répertoire YAML policies (hot reload) |
+
+### pdp-prop.properties
+
+```properties
+rules.repository = resources/jrules.edn
+person.source = file
+delegation.type = file
+delegation.path = resources/delegations.edn
+kafka.pip.rocksdb.path = /tmp/rocksdb/shared
+```
+
+---
+
+## API Reference
+
+Voir [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) pour la référence complète avec tous les exemples.
+
+L'OpenAPI 3.0 est disponible au runtime :
+```
+GET /openapi.yaml
+GET /openapi.json
+```
+
+---
+
+## Programmes clients
+
+| Langage | Fichier |
+|---------|---------|
+| Clojure | [`clients/clojure/src/autho_client/core.clj`](clients/clojure/src/autho_client/core.clj) |
+| Java    | [`clients/java/src/main/java/autho/client/AuthoClient.java`](clients/java/src/main/java/autho/client/AuthoClient.java) |
+
+---
+
+## Structure du projet
+
+```
+autho/
+├── resources/
+│   ├── jrules.edn              Règles de politique (format EDN)
+│   ├── pips.edn                Configuration des PIPs
+│   ├── fillers.edn             Configuration des fillers
+│   ├── delegations.edn         Délégations
+│   ├── persons.edn             Personnes (mode fichier)
+│   ├── policySchema.json       Schéma JSON de validation des politiques
+│   └── openapi.yaml            Spécification OpenAPI 3.0
+├── src/autho/
+│   ├── handler.clj             Point d'entrée HTTP, middleware, routes
+│   ├── pdp.clj                 Policy Decision Point
+│   ├── prp.clj                 Policy Repository Point
+│   ├── pip.clj                 Policy Information Point
+│   ├── auth.clj                Authentification JWT / API Key
+│   ├── audit.clj               Journal d'audit immuable HMAC
+│   ├── local_cache.clj         Cache LRU+TTL 4 niveaux
+│   ├── circuit_breaker.clj     Circuit breakers (diehard)
+│   ├── kafka_invalidation.clj  Invalidation cache distribuée
+│   ├── metrics.clj             Prometheus/Micrometer
+│   ├── otel.clj                OpenTelemetry spans
+│   ├── tracing.clj             Corrélation X-Request-Id
+│   ├── policy_versions.clj     Versionnage des politiques (H2)
+│   ├── policy_yaml.clj         Import YAML + directory watcher
+│   ├── validation.clj          Validation et protection anti-injection
+│   ├── delegation.clj          Système de délégation
+│   ├── temporal.clj            Opérations sur les dates
+│   ├── set_ops.clj             Opérations ensemblistes
+│   ├── jsonrule.clj            Évaluateur de règles JSON/JSONPath
+│   ├── attfun.clj              Fonctions opérateurs (=, <, in…)
+│   └── api/
+│       ├── v1.clj              Routes API v1 RESTful
+│       ├── handlers.clj        Gestionnaires de requêtes
+│       ├── response.clj        Formatage réponses standardisé
+│       ├── pagination.clj      Pagination
+│       └── admin_ui.clj        Interface admin HTML (Hiccup)
+├── test/autho/                 Tests unitaires et d'intégration
+├── docs/
+│   └── API_REFERENCE.md        Référence complète de l'API
+├── clients/
+│   ├── clojure/                Client Clojure de référence
+│   └── java/                   Client Java de référence
+└── project.clj                 Dépendances et configuration Leiningen
+```
+
+---
+
+## Licence
+
+EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0
