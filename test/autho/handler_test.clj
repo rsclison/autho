@@ -24,16 +24,22 @@
         (is (= 400 (:status response)))
         (is (= "Request body is empty." (get-in response-body [:error :message])))))
 
-    (testing "POST /whichAuthorized with empty body"
-      (let [request (assoc base-request :uri "/whichAuthorized" :body nil)
+    (testing "POST /whatAuthorized with empty body"
+      (let [request (assoc base-request :uri "/whatAuthorized" :body nil)
             response (app request)
             response-body (json/read-value (:body response) json/keyword-keys-object-mapper)]
         (is (= 400 (:status response)))
         (is (= "Request body is empty." (get-in response-body [:error :message])))))))
 
 (deftest admin-routes-test
-  (let [base-request {:request-method :post :headers {"x-api-key" "trusted-app-secret"}}
-        app (auth/wrap-authentication app-routes)]
+  ;; Inject identity directly into the request rather than relying on runtime
+  ;; credential matching.  buddy-auth's wrap-authentication leaves :identity
+  ;; unchanged when no backend matches, so the injected identity persists
+  ;; through the inner auth middleware inside app-routes.
+  (let [base-request {:request-method :post
+                      :headers {}
+                      :identity {:auth-method :api-key :client-id :trusted-internal-app}}
+        app app-routes]
     (testing "POST /admin/reinit"
       (let [init-call-counter (atom 0)]
         (with-redefs [pdp/init (fn [] (swap! init-call-counter inc))]

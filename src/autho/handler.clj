@@ -6,6 +6,8 @@
             [autho.journal :as jrnl]
             [autho.person :as person]
             [autho.time-travel :as time-travel]
+            [autho.validation :as validation]
+            [autho.api.v1 :as api-v1]
             [compojure.core :refer :all]
             [com.appsflyer.donkey.core :refer [create-donkey create-server]]
             [com.appsflyer.donkey.server :refer [start]]
@@ -47,6 +49,21 @@
 ;; Store request timestamps per IP address
 ;; Structure: {ip-address [timestamp1 timestamp2 ...]}
 (defonce rate-limit-store (atom {}))
+
+;; Background cleanup: purge IP entries with no recent timestamps every 5 minutes.
+;; Prevents unbounded growth of rate-limit-store (memory leak) when the server
+;; receives traffic from a large number of distinct IP addresses.
+(defonce rate-limit-cleanup
+  (future
+    (loop []
+      (Thread/sleep (* 5 60 1000))
+      (let [window-ago (- (System/currentTimeMillis) 60000)]
+        (swap! rate-limit-store
+               (fn [store]
+                 (into {} (filter (fn [[_ timestamps]]
+                                    (some #(> % window-ago) timestamps))
+                                  store)))))
+      (recur))))
 
 ;; Kafka feature flag configuration
 ;; KAFKA_ENABLED: enable/disable Kafka features including PIPs and time-travel endpoints (default: true)
@@ -119,6 +136,43 @@
                           413)
           (handler request)))
       (handler request))))
+
+(defn wrap-input-validation [handler]
+  "Validates and sanitizes all authorization request inputs"
+  (fn [request]
+    (try
+      (let [body (get request :body-params)]
+        (when (and (map? body)
+                   (or (contains? body :subject)
+                       (contains? body :resource)
+                       (contains? body :operation)))
+          ;; Validate and sanitize the request
+          (validation/validate-and-sanitize-request body))
+        (handler request))
+      (catch Exception e
+        (let [error-data (ex-data e)]
+          (.warn logger "Input validation failed: {}" (.getMessage e))
+          (if (= :validation-error (:type error-data))
+            (validation/validation-error->response e)
+            (error-response "VALIDATION_ERROR"
+                            (str "Input validation failed: " (.getMessage e))
+                            400)))))))
+
+(defn wrap-admin-auth
+  "Middleware that restricts access to admin routes.
+  Requires either a trusted API key client or a JWT identity with role 'admin'."
+  [handler]
+  (fn [request]
+    (let [identity (:identity request)]
+      (if (and identity
+               (or (= :api-key (:auth-method identity))
+                   (= "admin" (:role identity))))
+        (handler request)
+        (do
+          (.warn logger "Unauthorized admin access attempt from identity: {}" identity)
+          (error-response "FORBIDDEN"
+                          "Admin access requires a trusted API key or an identity with role 'admin'."
+                          403))))))
 
 (defn wrap-logging [handler]
   (fn [request]
@@ -383,6 +437,8 @@
                                        400)))))
 
            (context "/admin" []
+                    (wrap-admin-auth
+                    (routes
                     (GET "/listRDB" []
                          (if kafka-enabled
                            (json-response (kpip/list-column-families))
@@ -417,12 +473,14 @@
                               (.error logger "Failed to reload person cache" e)
                               (error-response "PERSON_RELOAD_FAILED"
                                               (str "Failed to reload person cache: " (.getMessage e))
-                                              500))))))
+                                              500))))))))
 
 (def app-routes
   (routes
    public-routes
    (-> protected-routes
+       (auth/wrap-authentication))
+   (-> api-v1/v1-routes
        (auth/wrap-authentication))
    (route/not-found "Not Found")))
 
@@ -438,6 +496,7 @@
    (create-server {:port   8080
                    :routes  [{:handler (-> app-routes
                                            wrap-logging
+                                           wrap-input-validation
                                            wrap-rate-limit
                                            wrap-request-size-limit
                                            wrap-error-handling)
