@@ -45,9 +45,8 @@
 
 
 (defn role [obj]
-  (.debug logger "Calling ldapRole for object: {}" obj)
-  "Professeur"
-  )
+  (.debug logger "Getting role for object: {}" obj)
+  (:role obj))
 
 
 (defn fillPersonne [subj]
@@ -76,13 +75,22 @@
   (not arg)
   )
 
+(defn- to-set
+  "Converts a value to a set for membership testing.
+  Handles comma-separated strings (e.g. \"admin,user,guest\"),
+  Clojure collections, and scalar values."
+  [value]
+  (cond
+    (set? value)    value
+    (coll? value)   (set value)
+    (string? value) (set (map str/trim (str/split value #",")))
+    :else           #{value}))
+
 (defn in [arg1 list]
-  (contains? list arg1)
-  )
+  (contains? (to-set list) arg1))
 
 (defn notin [arg1 list]
-  (not(in arg1 list))
-  )
+  (not (in arg1 list)))
 
 (defn > [arg1 arg2]
   (clojure.core/> (edn/read-string arg1) (edn/read-string arg2))

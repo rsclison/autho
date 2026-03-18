@@ -53,8 +53,20 @@
   (testing "Test collection operators with boundary cases"
     (is (not (sut/in "a" #{})))
     (is (sut/notin "a" #{}))
-    (is (thrown? Exception (sut/in "a" "not-a-collection")))
-    (is (thrown? Exception (sut/notin "a" "not-a-collection")))))
+    ;; A plain string is treated as a single-element comma-separated list.
+    ;; "a" is not in #{"not-a-collection"} → false, no exception thrown.
+    (is (not (sut/in "a" "not-a-collection")))
+    (is (sut/notin "a" "not-a-collection")))
+
+  (testing "Test collection operators with comma-separated strings"
+    ;; Core use-case: comma-separated string treated as a set of values.
+    (is (sut/in "admin" "admin,user,guest"))
+    (is (sut/in "user"  "admin,user,guest"))
+    (is (not (sut/in "root"  "admin,user,guest")))
+    (is (sut/notin "root"  "admin,user,guest"))
+    ;; Whitespace around commas is trimmed.
+    (is (sut/in "admin" "admin, user, guest"))
+    (is (sut/in "guest" " admin , user , guest "))))
 
 (deftest comparison-operators-test
   (testing "Test for the '>' function"
