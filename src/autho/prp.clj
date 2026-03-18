@@ -91,10 +91,12 @@
 ;; les fillers permettent de pré-remplir des sujets ou des ressources
 
 
-(def subjectFillers (atom {"Person" {:type "internalFiller" :method "fillPerson"}
-                           "Application" {}}))
-
-(def resourceFillers (atom {"Note" {:type "urlFiller" :url "http://localhost:8080/NoteFiller" }}))
+;; Fillers are loaded from resources/fillers.edn.
+;; Format: {:subject {"Person" {:type "internalFiller" :method "fillPerson"}}
+;;          :resource {"Note"   {:type "urlFiller"      :url "http://..."}}}
+(let [fillers-config (or (utl/load-edn "resources/fillers.edn") {})]
+  (def subjectFillers  (atom (or (:subject  fillers-config) {})))
+  (def resourceFillers (atom (or (:resource fillers-config) {}))))
 
 ;; TODO we could have also operationFillers
 ;; an operation could have specific attributes like "criticity" which could be used in rules
@@ -161,8 +163,9 @@
       (swap! policiesMap
              (fn [a] (reduce (fn [hm ke]                      ;; treat a resourceClass rules
                                (let [rls (get rules-map ke)]
-                                 (assoc hm ke {:global {:rules (map #(rule2 %) (:rules (:global rls))) ;; TODO :global and :strategy are hard coded
-                                                        :strategy :almost_one_allow_no_deny}})))
+                                 (assoc hm ke {:global {:rules    (map #(rule2 %) (:rules (:global rls)))
+                                                        :strategy (or (:strategy (:global rls))
+                                                                       :almost_one_allow_no_deny)}})))
                              {}
                              (keys rules-map))))
       (reset! rules-repository-status :loaded))

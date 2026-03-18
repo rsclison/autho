@@ -1,0 +1,14 @@
+;; Filler declarations for subjects and resources.
+;;
+;; Subject fillers pre-populate subject attributes before rule evaluation.
+;; Resource fillers pre-populate resource attributes before rule evaluation.
+;;
+;; Format:
+;;   :subject  {"ClassName" {:type "internalFiller" :method "methodName"}}
+;;             {"ClassName" {:type "urlFiller"      :url    "http://..."}}
+;;   :resource {"ClassName" {:type "urlFiller"      :url    "http://..."}}
+;;
+;; Leave empty ({}) to disable fillers for a type.
+
+{:subject  {}
+ :resource {}}
