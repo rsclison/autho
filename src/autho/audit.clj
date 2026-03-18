@@ -152,6 +152,13 @@
                         " ORDER BY id DESC LIMIT " page-size " OFFSET " offset)]
     (jdbc/query audit-db [sql])))
 
+(defn shutdown!
+  "Flush all pending async audit writes before JVM exits.
+   Waits up to 10 seconds for the audit agent to drain."
+  []
+  (await-for 10000 audit-agent)
+  (.info logger "Audit agent flushed"))
+
 (defn verify-chain
   "Re-reads all audit entries in order and verifies the HMAC chain.
    Returns {:valid true} or {:valid false :broken-at id :reason reason}."

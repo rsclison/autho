@@ -244,8 +244,55 @@
               error-code (or (:error-code error-data) "INTERNAL_ERROR")]
           (error-response error-code message status))))))
 
+;; =============================================================================
+;; Graceful Shutdown
+;; =============================================================================
+
+;; Flag: true while the server is draining (stops accepting new requests)
+(defonce ^:private shutting-down? (atom false))
+
+;; Counter of in-flight requests (AtomicInteger for lock-free increment/decrement)
+(defonce ^:private in-flight (java.util.concurrent.atomic.AtomicInteger. 0))
+
+(defn wrap-graceful-shutdown
+  "Middleware that:
+   - Returns 503 for new requests when shutdown is in progress
+   - Tracks in-flight request count so the shutdown hook can drain them"
+  [handler]
+  (fn [request]
+    (if @shutting-down?
+      (error-response "SERVER_SHUTTING_DOWN"
+                      "Server is shutting down. Please retry against another instance."
+                      503)
+      (do
+        (.incrementAndGet in-flight)
+        (try
+          (handler request)
+          (finally
+            (.decrementAndGet in-flight)))))))
+
+(defn- drain-requests
+  "Wait for in-flight requests to complete, up to timeout-ms."
+  [timeout-ms]
+  (let [deadline (+ (System/currentTimeMillis) timeout-ms)]
+    (loop []
+      (let [n (.get in-flight)]
+        (cond
+          (zero? n)
+          (.info logger "All {} in-flight requests drained" n)
+
+          (> (System/currentTimeMillis) deadline)
+          (.warn logger "Drain timeout: {} request(s) still in flight" n)
+
+          :else
+          (do (Thread/sleep 100) (recur)))))))
+
 (defn destroy []
-  (.info logger "autho is shutting down"))
+  (.info logger "autho shutdown initiated — draining requests...")
+  (reset! shutting-down? true)
+  (drain-requests 30000)          ; wait up to 30 s
+  (audit/shutdown!)               ; flush async audit writes
+  (.info logger "autho shutdown complete"))
 
 (defn- rules-not-loaded-response []
   (error-response "RULES_NOT_LOADED"
@@ -600,6 +647,12 @@
   (.info logger "Rate limiting: {} (max {} requests/minute per IP)"
          (if rate-limit-enabled "enabled" "disabled")
          rate-limit-requests-per-minute)
+  ;; JVM shutdown hook: drain requests before the process exits
+  (.addShutdownHook (Runtime/getRuntime)
+                    (Thread. (fn []
+                               (.info logger "JVM shutdown hook triggered")
+                               (destroy))))
+
   (->
    (create-donkey)
    (create-server {:port   8080
@@ -610,7 +663,8 @@
                                            wrap-request-size-limit
                                            wrap-metrics
                                            tracing/wrap-tracing
-                                           wrap-error-handling)
+                                           wrap-error-handling
+                                           wrap-graceful-shutdown)
                               :handler-mode :blocking}]})
    start
    (on-success (fn [_] (.info logger "Server started listening on port 8080")))))

@@ -27,7 +27,8 @@
                             :subject-cache {}
                             :resource-cache {}
                             :policy-cache {}
-                            :cache-stats {:hits 0 :misses 0 :evictions 0}}))
+                            :decision-cache {}
+                            :cache-stats {:hits 0 :misses 0 :evictions 0 :decision-hits 0 :decision-misses 0}}))
 
 (defn get-cache-stats
   "Get current cache statistics including current sizes and hit ratio."
@@ -37,12 +38,18 @@
         hits    (:hits stats 0)
         misses  (:misses stats 0)
         total   (+ hits misses)
-        ratio   (if (pos? total) (double (/ hits total)) 0.0)]
+        ratio   (if (pos? total) (double (/ hits total)) 0.0)
+        d-hits  (:decision-hits stats 0)
+        d-miss  (:decision-misses stats 0)
+        d-total (+ d-hits d-miss)
+        d-ratio (if (pos? d-total) (double (/ d-hits d-total)) 0.0)]
     (assoc stats
            :sizes {:subject  (count (:subject-cache state))
                    :resource (count (:resource-cache state))
-                   :policy   (count (:policy-cache state))}
-           :hit-ratio ratio)))
+                   :policy   (count (:policy-cache state))
+                   :decision (count (:decision-cache state))}
+           :hit-ratio ratio
+           :decision-hit-ratio d-ratio)))
 
 (defn reset-cache-stats
   "Reset cache statistics to zero."
@@ -86,7 +93,12 @@
          :policy-max-size (Integer/parseInt (get-env-or-default "CACHE_MAX_POLICY_SIZE" "5000"))
 
          ;; Enable/disable cache
-         :cache-enabled (Boolean/parseBoolean (get-env-or-default "CACHE_ENABLED" "true"))}))
+         :cache-enabled (Boolean/parseBoolean (get-env-or-default "CACHE_ENABLED" "true"))
+
+         ;; Decision cache: TTL and max size
+         :decision-cache-enabled (Boolean/parseBoolean (get-env-or-default "DECISION_CACHE_ENABLED" "true"))
+         :decision-ttl   (Long/parseLong    (get-env-or-default "DECISION_CACHE_TTL_MS"   "60000"))
+         :decision-max-size (Integer/parseInt (get-env-or-default "DECISION_CACHE_MAX_SIZE" "50000"))}))
 
 (defn update-cache-config
   "Update cache configuration at runtime."
@@ -125,7 +137,8 @@
          :subject-cache {}
          :resource-cache {}
          :policy-cache {}
-         :cache-stats {:hits 0 :misses 0 :evictions 0})
+         :decision-cache {}
+         :cache-stats {:hits 0 :misses 0 :evictions 0 :decision-hits 0 :decision-misses 0})
 
   ;; Start Kafka invalidation listener if enabled
   (when (:kafka-enabled @cache-config true)
@@ -141,7 +154,8 @@
          :subject-cache {}
          :resource-cache {}
          :policy-cache {}
-         :cache-stats {:hits 0 :misses 0 :evictions 0})
+         :decision-cache {}
+         :cache-stats {:hits 0 :misses 0 :evictions 0 :decision-hits 0 :decision-misses 0})
   (log/info "All caches cleared"))
 
 ;; =============================================================================
@@ -245,6 +259,58 @@
         (log/trace "Removed from cache:" cache-type ":" cache-key)))
     (catch Exception e
       (log/error e "Error handling invalidation message:" invalidation-msg))))
+
+;; =============================================================================
+;; Decision Cache
+;; Short-circuits repeated identical authorization evaluations.
+;; Key: [subject-id resource-class resource-id operation]
+;; Value: {:value <decision-map> :expires-at <epoch-ms>}
+;; =============================================================================
+
+(defn get-cached-decision
+  "Return cached authorization decision or nil (miss / expired)."
+  [subject-id resource-class resource-id operation]
+  (when (:decision-cache-enabled @cache-config)
+    (let [k     [subject-id resource-class resource-id operation]
+          entry (get (:decision-cache @cache-state) k)]
+      (if (nil? entry)
+        (do (swap! cache-state update-in [:cache-stats :decision-misses] inc) nil)
+        (if (> (System/currentTimeMillis) (:expires-at entry))
+          ;; Lazy expiry: remove and report miss
+          (do (swap! cache-state update :decision-cache dissoc k)
+              (swap! cache-state update-in [:cache-stats :decision-misses] inc)
+              nil)
+          (do (swap! cache-state update-in [:cache-stats :decision-hits] inc)
+              (metrics/record-cache-hit! :decision)
+              (:value entry)))))))
+
+(defn cache-decision!
+  "Store an authorization decision with TTL.
+   Evicts oldest entries when the cache exceeds decision-max-size."
+  [subject-id resource-class resource-id operation value]
+  (when (:decision-cache-enabled @cache-config)
+    (let [k        [subject-id resource-class resource-id operation]
+          ttl      (:decision-ttl @cache-config)
+          max-size (:decision-max-size @cache-config)
+          expires  (+ (System/currentTimeMillis) ttl)]
+      (swap! cache-state update :decision-cache
+             (fn [dc]
+               (let [dc' (assoc dc k {:value value :expires-at expires})]
+                 (if (<= (count dc') max-size)
+                   dc'
+                   ;; Evict the quarter of entries that expire soonest
+                   (let [sorted  (sort-by (fn [[_ v]] (:expires-at v)) dc')
+                         keep-n  (int (* max-size 0.75))]
+                     (into {} (take-last keep-n sorted)))))))))
+  value)
+
+(defn invalidate-decisions-for-class!
+  "Remove all cached decisions for a given resource class (called on policy update)."
+  [resource-class]
+  (swap! cache-state update :decision-cache
+         (fn [dc]
+           (into {} (remove (fn [[[_ rc _ _] _]] (= rc resource-class)) dc))))
+  (log/debug "Invalidated all decision cache entries for class:" resource-class))
 
 ;; =============================================================================
 ;; Backward Compatibility API

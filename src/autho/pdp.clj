@@ -195,22 +195,31 @@
              {:result false :rules evalglob})))))))
 
 (defn isAuthorized [request body]
-  (let [subject (get-subject request body)
-        authz-request {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}]
+  (let [subject        (get-subject request body)
+        authz-request  {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}
+        subject-id     (:id subject)
+        resource-class (:class (:resource body))
+        resource-id    (:id (:resource body))
+        operation      (:operation body)]
     (if-not (:resource authz-request)
       (throw (ex-info "No resource specified" {:status 400})))
     (if-not (:subject authz-request)
       (throw (ex-info "No subject specified" {:status 400})))
 
-    (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))]
-      (if-not globalPolicy
-        (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
-      (let [augreq   (enrich-request authz-request)
-            evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                              (conj res rule)
-                                              res))
-                             [] (:rules globalPolicy))]
-        {:results (map #(:name %1) evalglob)}))))
+    ;; Decision cache lookup — skip when a context timestamp is present (time-travel)
+    (or (when-not (:timestamp (:context body))
+          (local-cache/get-cached-decision subject-id resource-class resource-id operation))
+        (let [globalPolicy (prp/getGlobalPolicy resource-class)]
+          (if-not globalPolicy
+            (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
+          (let [augreq   (enrich-request authz-request)
+                evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
+                                                  (conj res rule)
+                                                  res))
+                                 [] (:rules globalPolicy))
+                result   {:results (map #(:name %1) evalglob)}]
+            (local-cache/cache-decision! subject-id resource-class resource-id operation result)
+            result)))))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considère pour simplifier que la condition est un ET de clauses
