@@ -3,27 +3,23 @@ import { MetricCard } from '@/components/dashboard/MetricCard'
 import { DecisionsChart } from '@/components/dashboard/DecisionsChart'
 import { CircuitBreakerList } from '@/components/dashboard/CircuitBreakerList'
 import { useStatus } from '@/api/status'
+import { useCacheStats } from '@/api/cache'
 import { usePolicies } from '@/api/policies'
 import { useAudit } from '@/api/audit'
 import { formatNumber, formatPercent, formatDate, truncate } from '@/lib/utils'
 
 export default function DashboardPage() {
   const { data: status, isLoading: statusLoading } = useStatus()
+  const { data: cache } = useCacheStats()
   const { data: policies } = usePolicies()
   const { data: recentAudit } = useAudit({ page: 1, pageSize: 10 })
 
   const policyCount = policies ? Object.keys(policies).length : 0
-  const cache = status?.cache_stats
-  const decisionHitRate = cache
-    ? (cache['decision-hits'] + cache['decision-misses']) > 0
-      ? cache['decision-hits'] / (cache['decision-hits'] + cache['decision-misses'])
-      : 0
+  const decisionHitRate = cache && (cache['decision-hits'] + cache['decision-misses']) > 0
+    ? cache['decision-hits'] / (cache['decision-hits'] + cache['decision-misses'])
     : 0
   const allowTotal = cache?.['decision-hits'] ?? 0
   const denyTotal  = cache?.['decision-misses'] ?? 0
-  const uptime = status
-    ? `${Math.floor(status.uptime_seconds / 3600)}h ${Math.floor((status.uptime_seconds % 3600) / 60)}m`
-    : '…'
 
   return (
     <div className="space-y-6">
@@ -31,24 +27,24 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Décisions cachées"
-          value={statusLoading ? '…' : formatNumber(cache?.['decision-hits'] ?? 0)}
+          value={!cache ? '…' : formatNumber(cache['decision-hits'])}
           sub="Hits cache décision"
           icon={Activity}
           color="green"
         />
         <MetricCard
           title="Hit Rate cache"
-          value={statusLoading ? '…' : formatPercent(decisionHitRate)}
+          value={!cache ? '…' : formatPercent(decisionHitRate)}
           sub={`${formatNumber(cache?.['decision-size'] ?? 0)} entrées`}
           icon={Database}
           color={decisionHitRate > 0.7 ? 'green' : decisionHitRate > 0.4 ? 'yellow' : 'red'}
         />
         <MetricCard
           title="Uptime"
-          value={statusLoading ? '…' : uptime}
-          sub={status?.rules_status === 'loaded' ? 'Règles chargées' : 'Règles non chargées'}
+          value={statusLoading ? '…' : (status?.uptime?.formatted ?? '—')}
+          sub={status?.rulesRepository === 'loaded' ? 'Règles chargées' : 'Règles non chargées'}
           icon={Clock}
-          color={status?.rules_status === 'loaded' ? 'green' : 'red'}
+          color={status?.rulesRepository === 'loaded' ? 'green' : 'red'}
         />
         <MetricCard
           title="Politiques actives"
@@ -70,8 +66,8 @@ export default function DashboardPage() {
 
         <div className="bg-card border border-border rounded-xl p-5">
           <h2 className="text-sm font-semibold text-foreground mb-4">Circuit Breakers</h2>
-          {status?.circuit_breakers ? (
-            <CircuitBreakerList breakers={status.circuit_breakers} />
+          {status?.circuitBreakers ? (
+            <CircuitBreakerList breakers={status.circuitBreakers} />
           ) : (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <AlertTriangle size={14} />

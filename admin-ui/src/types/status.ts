@@ -13,11 +13,21 @@ export interface CacheStats {
   'policy-misses': number
 }
 
+// Matches actual /status response from handler.clj
 export interface ServerStatus {
-  status: string
+  service: string
   version: string
-  uptime_seconds: number
-  rules_status: string
-  cache_stats: CacheStats
-  circuit_breakers: Record<string, CircuitBreakerState>
+  status: string
+  uptime: {
+    milliseconds: number
+    seconds: number
+    minutes: number
+    hours: number
+    formatted: string
+  }
+  rulesRepository: string
+  rateLimit: { enabled: boolean; requestsPerMinute: number }
+  kafka: { enabled: boolean }
+  circuitBreakers: Record<string, CircuitBreakerState>
+  timestamp: string
 }

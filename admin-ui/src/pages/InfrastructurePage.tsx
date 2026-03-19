@@ -116,8 +116,8 @@ export default function InfrastructurePage() {
       {/* Circuit Breakers */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-semibold text-foreground mb-4">Circuit Breakers</h2>
-        {status?.circuit_breakers ? (
-          <CircuitBreakerList breakers={status.circuit_breakers} />
+        {status?.circuitBreakers ? (
+          <CircuitBreakerList breakers={status.circuitBreakers} />
         ) : (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertTriangle size={14} />
