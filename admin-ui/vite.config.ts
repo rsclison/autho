@@ -23,6 +23,7 @@ export default defineConfig({
       '/metrics':        'http://localhost:8080',
     }
   },
+  base: '/admin/',
   build: {
     outDir: '../resources/public/admin',
     emptyOutDir: true,
