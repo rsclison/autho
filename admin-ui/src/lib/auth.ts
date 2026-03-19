@@ -30,7 +30,7 @@ export function getAuthHeader(): Record<string, string> {
   const token = getToken()
   const type = getTokenType()
   if (!token) return {}
-  if (type === 'api-key') return { 'X-API-Key': token }
+  if (type === 'api-key') return { 'Authorization': `X-API-Key ${token}` }
   return { 'Authorization': `Token ${token}` }
 }
 
