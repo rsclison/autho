@@ -102,7 +102,7 @@ curl http://localhost:8080/health
 # Décision d'autorisation (avec API Key)
 curl -X POST http://localhost:8080/isAuthorized \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: my-api-key" \
+  -H "Authorization: X-API-Key my-api-key" \
   -d '{
     "subject":   {"id": "alice", "role": "chef_de_service", "service": "comptabilite"},
     "resource":  {"class": "Facture", "id": "INV-001", "service": "comptabilite", "montant": 500},
@@ -113,7 +113,7 @@ curl -X POST http://localhost:8080/isAuthorized \
 # Décision refusée
 curl -X POST http://localhost:8080/isAuthorized \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: my-api-key" \
+  -H "Authorization: X-API-Key my-api-key" \
   -d '{
     "subject":   {"id": "bob", "role": "stagiaire"},
     "resource":  {"class": "Facture", "id": "INV-001"},
@@ -142,9 +142,9 @@ curl -X POST http://localhost:8080/isAuthorized \
 | Endpoint | Description |
 |----------|-------------|
 | `GET  /policies` | Lister toutes les politiques |
-| `GET  /policy/:rc` | Lire une politique |
-| `PUT  /policy/:rc` | Créer ou mettre à jour une politique |
-| `DELETE /policy/:rc` | Supprimer une politique |
+| `GET  /policies/:rc` | Lire une politique |
+| `PUT  /policies/:rc` | Créer ou mettre à jour une politique |
+| `DELETE /policies/:rc` | Supprimer une politique |
 | `POST /v1/policies/import` | Import depuis YAML |
 | `GET  /v1/policies/:rc/versions` | Historique des versions |
 | `GET  /v1/policies/:rc/versions/:v` | Récupérer la version v |

@@ -13,7 +13,7 @@ Tous les endpoints (sauf `/health`, `/readiness`, `/status`, `/metrics`) requiè
 ### API Key (clients de confiance)
 
 ```
-X-API-Key: <votre-api-key>
+Authorization: X-API-Key <votre-api-key>
 ```
 
 Le sujet est lu depuis le corps de la requête. L'identité est `: {auth-method: api-key, client-id: trusted-internal-app}`.
@@ -420,7 +420,7 @@ En cas d'erreur sur un élément du batch :
 Liste toutes les politiques chargées.
 
 ```bash
-curl -H "X-API-Key: key" http://localhost:8080/policies
+curl -H "Authorization: X-API-Key key" http://localhost:8080/policies
 ```
 
 ```json
@@ -435,20 +435,20 @@ curl -H "X-API-Key: key" http://localhost:8080/policies
 }
 ```
 
-### GET /policy/:resourceClass
+### GET /policies/:resourceClass
 
 ```bash
-curl -H "X-API-Key: key" http://localhost:8080/policy/Facture
+curl -H "Authorization: X-API-Key key" http://localhost:8080/policies/Facture
 ```
 
-### PUT /policy/:resourceClass
+### PUT /policies/:resourceClass
 
 Crée ou met à jour une politique. Valide contre `policySchema.json`, sauvegarde une version.
 
 ```bash
-curl -X PUT http://localhost:8080/policy/Facture \
+curl -X PUT http://localhost:8080/policies/Facture \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: key" \
+  -H "Authorization: X-API-Key key" \
   -d '{
     "resourceClass": "Facture",
     "strategy": "almost_one_allow_no_deny",
@@ -464,10 +464,10 @@ curl -X PUT http://localhost:8080/policy/Facture \
   }'
 ```
 
-### DELETE /policy/:resourceClass
+### DELETE /policies/:resourceClass
 
 ```bash
-curl -X DELETE -H "X-API-Key: key" http://localhost:8080/policy/Facture
+curl -X DELETE -H "Authorization: X-API-Key key" http://localhost:8080/policies/Facture
 ```
 
 ### POST /v1/policies/import
@@ -477,7 +477,7 @@ Import depuis YAML.
 ```bash
 curl -X POST http://localhost:8080/v1/policies/import \
   -H "Content-Type: text/yaml" \
-  -H "X-API-Key: key" \
+  -H "Authorization: X-API-Key key" \
   --data-binary @ma-politique.yaml
 ```
 
@@ -494,7 +494,7 @@ curl -X POST http://localhost:8080/v1/policies/import \
 ### GET /v1/policies/:rc/versions
 
 ```bash
-curl -H "X-API-Key: key" \
+curl -H "Authorization: X-API-Key key" \
   http://localhost:8080/v1/policies/Facture/versions
 ```
 
@@ -508,7 +508,7 @@ curl -H "X-API-Key: key" \
 ### GET /v1/policies/:rc/versions/:v
 
 ```bash
-curl -H "X-API-Key: key" \
+curl -H "Authorization: X-API-Key key" \
   http://localhost:8080/v1/policies/Facture/versions/3
 ```
 
@@ -517,7 +517,7 @@ Retourne le corps complet de la politique à la version 3.
 ### GET /v1/policies/:rc/diff?from=3&to=5
 
 ```bash
-curl -H "X-API-Key: key" \
+curl -H "Authorization: X-API-Key key" \
   "http://localhost:8080/v1/policies/Facture/diff?from=3&to=5"
 ```
 
@@ -532,7 +532,7 @@ curl -H "X-API-Key: key" \
 ### POST /v1/policies/:rc/rollback/:v
 
 ```bash
-curl -X POST -H "X-API-Key: key" \
+curl -X POST -H "Authorization: X-API-Key key" \
   http://localhost:8080/v1/policies/Facture/rollback/3
 ```
 
@@ -551,7 +551,7 @@ curl -X POST -H "X-API-Key: key" \
 ### GET /v1/cache/stats
 
 ```bash
-curl -H "X-API-Key: key" http://localhost:8080/v1/cache/stats
+curl -H "Authorization: X-API-Key key" http://localhost:8080/v1/cache/stats
 ```
 
 ```json
@@ -576,7 +576,7 @@ curl -H "X-API-Key: key" http://localhost:8080/v1/cache/stats
 Vide tous les caches.
 
 ```bash
-curl -X DELETE -H "X-API-Key: key" http://localhost:8080/v1/cache
+curl -X DELETE -H "Authorization: X-API-Key key" http://localhost:8080/v1/cache
 ```
 
 ```json
@@ -588,7 +588,7 @@ curl -X DELETE -H "X-API-Key: key" http://localhost:8080/v1/cache
 Invalide une entrée précise.
 
 ```bash
-curl -X DELETE -H "X-API-Key: key" \
+curl -X DELETE -H "Authorization: X-API-Key key" \
   http://localhost:8080/v1/cache/subject/alice
 ```
 
@@ -649,7 +649,7 @@ Tous les endpoints `/admin/*` requièrent un rôle `admin` dans le JWT ou une au
 Réinitialise entièrement le PDP (recharge règles, personnes, délégations).
 
 ```bash
-curl -X POST -H "X-API-Key: key" http://localhost:8080/admin/reinit
+curl -X POST -H "Authorization: X-API-Key key" http://localhost:8080/admin/reinit
 ```
 
 ### POST /admin/reload_rules
