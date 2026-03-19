@@ -13,7 +13,7 @@ export function usePolicies() {
 export function usePolicy(resourceClass: string | null) {
   return useQuery({
     queryKey: ['policy', resourceClass],
-    queryFn: () => api.get<{ global: Policy }>(`/policy/${resourceClass}`),
+    queryFn: () => api.get<{ global: Policy }>(`/policies/${resourceClass}`),
     enabled: !!resourceClass,
   })
 }
@@ -22,7 +22,7 @@ export function useSubmitPolicy() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ resourceClass, policy }: { resourceClass: string; policy: unknown }) =>
-      api.put<unknown>(`/policy/${resourceClass}`, policy),
+      api.put<unknown>(`/policies/${resourceClass}`, policy),
     onSuccess: (_, { resourceClass }) => {
       void qc.invalidateQueries({ queryKey: ['policies'] })
       void qc.invalidateQueries({ queryKey: ['policy', resourceClass] })
@@ -36,7 +36,7 @@ export function useDeletePolicy() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (resourceClass: string) =>
-      api.delete<unknown>(`/policy/${resourceClass}`),
+      api.delete<unknown>(`/policies/${resourceClass}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['policies'] })
       toast.success('Politique supprimée')

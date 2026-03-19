@@ -407,7 +407,7 @@
                                         rest-pips)]
                   (json-response test-results)))
            (GET "/policy/:resourceClass" [resourceClass]
-                (json-response (prp/getPolicy resourceClass nil)))
+                (json-response (get (prp/get-policies) resourceClass)))
            (GET "/whoAuthorized/:resourceClass" [resourceClass]
                 (cond
                   (= :failed (prp/get-rules-repository-status))

@@ -253,7 +253,7 @@
   [resource-class]
   (log/debug "Processing get policy request for" resource-class)
   (try
-    (if-let [policy (prp/getPolicy resource-class nil)]
+    (if-let [policy (get (prp/get-policies) resource-class)]
       (response/success-response policy)
       (response/error-response "POLICY_NOT_FOUND"
                               (str "Policy not found for resource class: " resource-class)
