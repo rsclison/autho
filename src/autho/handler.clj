@@ -635,7 +635,7 @@
                                              (str "Audit verification failed: " (.getMessage e))
                                              500))))
 
-                    )))
+                    ))))
 
 (def app-routes
   (routes
