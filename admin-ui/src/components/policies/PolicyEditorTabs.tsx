@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Editor from '@monaco-editor/react'
 import { LayoutGrid, Code2, ChevronDown, Filter } from 'lucide-react'
 import { RuleList } from './RuleList'
@@ -7,6 +7,26 @@ import { getDarkMode } from '@/lib/auth'
 import type { Rule } from '@/types/policy'
 
 type Tab = 'visual' | 'json'
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractRules(data: unknown): Rule[] {
+  if (!data) return []
+  const d = data as Record<string, unknown>
+  const global = d['global'] as Record<string, unknown> | undefined
+  return ((global?.['rules'] ?? d['rules'] ?? []) as Rule[])
+}
+
+function serializeBack(data: unknown, rules: Rule[]): string {
+  if (!data) return JSON.stringify({ rules }, null, 2)
+  const d = data as Record<string, unknown>
+  const hasGlobal = 'global' in d
+  if (hasGlobal) {
+    const global = (d['global'] as Record<string, unknown>) ?? {}
+    return JSON.stringify({ ...d, global: { ...global, rules } }, null, 2)
+  }
+  return JSON.stringify({ ...d, rules }, null, 2)
+}
 
 // ─── Filtre opération ─────────────────────────────────────────────────────────
 
@@ -92,21 +112,56 @@ export function PolicyEditorTabs({ resourceClass, jsonValue, onJsonChange }: Pro
   const { data } = usePolicy(resourceClass)
   const theme = getDarkMode() ? 'vs-dark' : 'light'
 
-  // Extraire les règles depuis la réponse API
+  // Parse raw server data once to know shape for re-serialization
+  const serverData = useMemo(() => data ?? null, [data])
+
+  // Parse rules from the live JSON value (reflects edits from JSON tab)
   const rules: Rule[] = useMemo(() => {
-    if (!data) return []
-    const d = data as Record<string, unknown>
-    // Format : { global: { rules: [...] } } ou { rules: [...] }
-    const global = d['global'] as Record<string, unknown> | undefined
-    const raw = (global?.['rules'] ?? d['rules'] ?? []) as Rule[]
-    return raw
-  }, [data])
+    try {
+      const parsed = JSON.parse(jsonValue)
+      return extractRules(parsed)
+    } catch {
+      return extractRules(serverData)
+    }
+  }, [jsonValue, serverData])
+
+  // Keep json in sync when server data first loads (before any edit)
+  useEffect(() => {
+    if (serverData && !jsonValue) {
+      onJsonChange(JSON.stringify(serverData, null, 2))
+    }
+  }, [serverData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opérations distinctes pour le filtre
   const operations = useMemo(() => {
     const ops = [...new Set(rules.map((r) => r.operation).filter(Boolean) as string[])]
     return ops.sort()
   }, [rules])
+
+  // ── Mutation helpers ────────────────────────────────────────────────────────
+
+  function updateRules(next: Rule[]) {
+    try {
+      const parsed = JSON.parse(jsonValue)
+      onJsonChange(serializeBack(parsed, next))
+    } catch {
+      onJsonChange(serializeBack(serverData, next))
+    }
+  }
+
+  function handleEdit(index: number, updated: Rule) {
+    const next = [...rules]
+    next[index] = updated
+    updateRules(next)
+  }
+
+  function handleDelete(index: number) {
+    updateRules(rules.filter((_, i) => i !== index))
+  }
+
+  function handleAdd(rule: Rule) {
+    updateRules([...rules, rule])
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -151,7 +206,14 @@ export function PolicyEditorTabs({ resourceClass, jsonValue, onJsonChange }: Pro
       <div className="flex-1 min-h-0 overflow-auto">
         {tab === 'visual' ? (
           <div className="p-4">
-            <RuleList rules={rules} operation={opFilter} />
+            <RuleList
+              rules={rules}
+              operation={opFilter}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onAdd={handleAdd}
+              onReorder={updateRules}
+            />
           </div>
         ) : (
           <Editor

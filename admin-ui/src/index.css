@@ -58,3 +58,11 @@
 ::-webkit-scrollbar-track { @apply bg-muted; }
 ::-webkit-scrollbar-thumb { @apply bg-muted-foreground/40 rounded-full; }
 ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/60; }
+
+@layer components {
+  .input-sm {
+    @apply w-full text-xs px-2 py-1 rounded border border-input bg-background
+           text-foreground placeholder:text-muted-foreground
+           focus:outline-none focus:ring-1 focus:ring-ring transition-colors;
+  }
+}

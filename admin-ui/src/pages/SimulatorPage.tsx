@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Play, Zap, HelpCircle, CheckCircle2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useIsAuthorized, useExplain } from '@/api/decisions'
+import { usePolicies } from '@/api/policies'
 import type { AuthRequest, ExplainResult } from '@/types/decision'
+import type { Rule } from '@/types/policy'
 
 // ─── Request form ─────────────────────────────────────────────────────────────
 
 const DEFAULT_REQUEST: AuthRequest = {
   subject: { id: '', role: '' },
   resource: { class: '', id: '' },
-  operation: 'read',
+  operation: '',
   context: {},
 }
 
@@ -19,31 +21,65 @@ function RequestForm({
   value: AuthRequest
   onChange: (v: AuthRequest) => void
 }) {
+  const { data: policies } = usePolicies()
+
+  const resourceClasses = useMemo(
+    () => (policies ? Object.keys(policies).sort() : []),
+    [policies],
+  )
+
+  // Extract known operations for the currently selected resource class
+  const operations = useMemo(() => {
+    const rc = (value.resource.class as string) ?? ''
+    if (!policies || !rc || !policies[rc]) return []
+    const policy = policies[rc] as Record<string, unknown>
+    const global = policy['global'] as Record<string, unknown> | undefined
+    const rules = (global?.['rules'] ?? []) as Rule[]
+    const ops = [...new Set(rules.map((r) => r.operation).filter(Boolean) as string[])]
+    return ops.sort()
+  }, [policies, value.resource.class])
+
+  const inputCls = 'w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring'
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div className="space-y-2">
         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sujet</label>
         <input value={(value.subject.id as string) ?? ''} onChange={(e) => onChange({ ...value, subject: { ...value.subject, id: e.target.value } })}
           placeholder="Identifiant (ex: alice)"
-          className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+          className={inputCls} />
         <input value={(value.subject.role as string) ?? ''} onChange={(e) => onChange({ ...value, subject: { ...value.subject, role: e.target.value || undefined } })}
           placeholder="Rôle (optionnel)"
-          className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+          className={inputCls} />
       </div>
       <div className="space-y-2">
         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ressource</label>
-        <input value={(value.resource.class as string) ?? ''} onChange={(e) => onChange({ ...value, resource: { ...value.resource, class: e.target.value } })}
-          placeholder="Classe (ex: Document)"
-          className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        <input
+          list="sim-resource-classes"
+          value={(value.resource.class as string) ?? ''}
+          onChange={(e) => onChange({ ...value, resource: { ...value.resource, class: e.target.value }, operation: '' })}
+          placeholder="Classe (ex: Facture)"
+          className={inputCls}
+        />
+        <datalist id="sim-resource-classes">
+          {resourceClasses.map((rc) => <option key={rc} value={rc} />)}
+        </datalist>
         <input value={(value.resource.id as string) ?? ''} onChange={(e) => onChange({ ...value, resource: { ...value.resource, id: e.target.value || undefined } })}
           placeholder="ID ressource (optionnel)"
-          className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+          className={inputCls} />
       </div>
       <div className="sm:col-span-2">
         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Opération</label>
-        <input value={value.operation} onChange={(e) => onChange({ ...value, operation: e.target.value })}
-          placeholder="ex: read, write, delete"
-          className="mt-1 w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+        <input
+          list="sim-operations"
+          value={value.operation}
+          onChange={(e) => onChange({ ...value, operation: e.target.value })}
+          placeholder="ex: lire, executer"
+          className={`mt-1 ${inputCls}`}
+        />
+        <datalist id="sim-operations">
+          {operations.map((op) => <option key={op} value={op} />)}
+        </datalist>
       </div>
     </div>
   )

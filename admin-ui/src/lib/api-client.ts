@@ -61,7 +61,13 @@ async function request<T>(
   }
 
   const text = await response.text()
-  return (text ? JSON.parse(text) : undefined) as T
+  if (!text) return undefined as T
+  const json = JSON.parse(text)
+  // Désencapsule l'enveloppe standard v1 : { status: "success", data: ... }
+  if (json && typeof json === 'object' && json.status === 'success' && 'data' in json) {
+    return json.data as T
+  }
+  return json as T
 }
 
 export const api = {

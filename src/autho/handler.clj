@@ -192,13 +192,12 @@
           (validation/validate-and-sanitize-request body))
         (handler request))
       (catch Exception e
-        (let [error-data (ex-data e)]
-          (.warn logger "Input validation failed: {}" (.getMessage e))
-          (if (= :validation-error (:type error-data))
-            (validation/validation-error->response e)
-            (error-response "VALIDATION_ERROR"
-                            (str "Input validation failed: " (.getMessage e))
-                            400)))))))
+        (let [error-data (ex-data e)
+              error-type (:type error-data)]
+          (if (#{:validation-error :security-error} error-type)
+            (do (.warn logger "Input validation failed: {}" (.getMessage e))
+                (validation/validation-error->response e))
+            (throw e)))))))
 
 (defn wrap-admin-auth
   "Middleware that restricts access to admin routes.
@@ -626,6 +625,45 @@
                                (error-response "AUDIT_SEARCH_FAILED"
                                                (str "Audit search failed: " (.getMessage e))
                                                500)))))
+
+                    ;; PIP schema: entity class → declared attributes (for UI autocomplete)
+                    (GET "/pips/schema" []
+                         (let [pips (prp/get-pips)
+                               ;; Standard PIPs with :class and optional :attributes
+                               declared (reduce (fn [acc pip]
+                                                  (if-let [cls (:class pip)]
+                                                    (let [attrs (map name (or (:attributes pip) []))]
+                                                      (update acc (name cls) (fnil into []) attrs))
+                                                    acc))
+                                                {}
+                                                pips)
+                               ;; Unified Kafka PIPs list classes without attribute declarations
+                               unified-classes (mapcat #(get % :classes [])
+                                                       (filter #(= :kafka-pip-unified (:type %)) pips))
+                               ;; Merge: add unified classes not already present
+                               schema (reduce (fn [acc cls]
+                                               (if (contains? acc cls) acc (assoc acc cls [])))
+                                             declared
+                                             unified-classes)
+                               ;; Mine attributes from existing rules' conditions
+                               policies (prp/get-policies)
+                               rules (mapcat (fn [[_ policy]]
+                                               (or (get-in policy [:global :rules])
+                                                   (:rules policy)
+                                                   []))
+                                             policies)
+                               conditions (mapcat #(or (:conditions %) []) rules)
+                               mined (reduce (fn [acc [_ left right]]
+                                               (reduce (fn [a member]
+                                                         (if (and (vector? member) (= 3 (count member)))
+                                                           (let [[entity _ attr] member]
+                                                             (update a (name entity) (fnil #(if (some #{attr} %) % (conj % attr)) [])))
+                                                           a))
+                                                       acc
+                                                       [left right]))
+                                             schema
+                                             conditions)]
+                           (json-response mined)))
 
                     (GET "/audit/verify" []
                          (try

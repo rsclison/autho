@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Calendar, Hash } from 'lucide-react'
+import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Calendar, Hash, Pencil, Trash2 } from 'lucide-react'
+import { RuleForm } from './RuleForm'
 import type { Rule, Condition, ConditionMember } from '@/types/policy'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -60,13 +61,35 @@ function ConditionRow({ cond }: { cond: Condition }) {
 
 // ─── RuleCard ─────────────────────────────────────────────────────────────────
 
-export function RuleCard({ rule, index }: { rule: Rule; index: number }) {
+interface Props {
+  rule: Rule
+  index: number
+  onEdit?: (updated: Rule) => void
+  onDelete?: () => void
+}
+
+export function RuleCard({ rule, index, onEdit, onDelete }: Props) {
   const [open, setOpen] = useState(true)
+  const [editing, setEditing] = useState(false)
   const isAllow = rule.effect === 'allow'
 
   const hasDateRange =
     rule.startDate && rule.endDate &&
     !(rule.startDate === '1961-01-01' && rule.endDate === '3000-12-31')
+
+  if (editing && onEdit) {
+    return (
+      <div className={`rounded-lg border p-3 ${
+        isAllow ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'
+      }`}>
+        <RuleForm
+          initial={rule}
+          onSave={(updated) => { onEdit(updated); setEditing(false) }}
+          onCancel={() => setEditing(false)}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className={`rounded-lg border transition-colors ${
@@ -75,48 +98,72 @@ export function RuleCard({ rule, index }: { rule: Rule; index: number }) {
         : 'border-red-200 dark:border-red-900'
     }`}>
       {/* Header */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors rounded-lg"
-      >
-        <span className="text-muted-foreground">
-          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        </span>
-
-        {/* Numéro */}
-        <span className="text-xs text-muted-foreground w-5 text-right shrink-0">
-          {index + 1}
-        </span>
-
-        {/* Nom */}
-        <span className="text-sm font-semibold text-foreground flex-1 truncate">
-          {rule.name || <span className="italic text-muted-foreground">Sans nom</span>}
-        </span>
-
-        {/* Opération */}
-        {rule.operation && (
-          <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
-            {rule.operation}
+      <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-3 flex-1 text-left hover:bg-muted/40 transition-colors rounded min-w-0"
+        >
+          <span className="text-muted-foreground shrink-0">
+            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </span>
-        )}
 
-        {/* Priorité */}
-        {rule.priority !== undefined && rule.priority !== 0 && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Hash size={10} /> {rule.priority}
+          {/* Numéro */}
+          <span className="text-xs text-muted-foreground w-5 text-right shrink-0">
+            {index + 1}
           </span>
-        )}
 
-        {/* Effet */}
-        <span className={`flex items-center gap-1 text-xs font-semibold ${
-          isAllow ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-        }`}>
-          {isAllow
-            ? <CheckCircle2 size={13} />
-            : <XCircle size={13} />}
-          {isAllow ? 'allow' : 'deny'}
-        </span>
-      </button>
+          {/* Nom */}
+          <span className="text-sm font-semibold text-foreground flex-1 truncate">
+            {rule.name || <span className="italic text-muted-foreground">Sans nom</span>}
+          </span>
+
+          {/* Opération */}
+          {rule.operation && (
+            <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
+              {rule.operation}
+            </span>
+          )}
+
+          {/* Priorité */}
+          {rule.priority !== undefined && rule.priority !== 0 && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+              <Hash size={10} /> {rule.priority}
+            </span>
+          )}
+
+          {/* Effet */}
+          <span className={`flex items-center gap-1 text-xs font-semibold shrink-0 ${
+            isAllow ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+          }`}>
+            {isAllow ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+            {isAllow ? 'allow' : 'deny'}
+          </span>
+        </button>
+
+        {/* Edit / Delete actions */}
+        {(onEdit || onDelete) && (
+          <div className="flex items-center gap-1 shrink-0">
+            {onEdit && (
+              <button
+                onClick={() => setEditing(true)}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors rounded"
+                title="Modifier"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded"
+                title="Supprimer"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Body */}
       {open && (
