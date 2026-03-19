@@ -3,6 +3,7 @@ import Editor, { DiffEditor } from '@monaco-editor/react'
 import {
   Plus, Trash2, Upload, History, GitCompare, RotateCcw, Save, X, ChevronDown,
 } from 'lucide-react'
+import { PolicyEditorTabs } from '@/components/policies/PolicyEditorTabs'
 import {
   usePolicies, usePolicy, useSubmitPolicy, useDeletePolicy,
   useImportYaml, useVersions, useVersion, useDiffVersions, useRollback,
@@ -280,13 +281,12 @@ function StrategySelector({ resourceClass }: { resourceClass: string }) {
   )
 }
 
-// ─── JSON editor panel ────────────────────────────────────────────────────────
+// ─── Editor panel (toolbar + tabs) ───────────────────────────────────────────
 
 function PolicyEditor({ resourceClass }: { resourceClass: string }) {
   const { data } = usePolicy(resourceClass)
   const submit = useSubmitPolicy()
   const deletePolicy = useDeletePolicy()
-  const theme = useEditorTheme()
   const [editorValue, setEditorValue] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [diffParams, setDiffParams] = useState<{ from: number; to: number } | null>(null)
@@ -310,6 +310,7 @@ function PolicyEditor({ resourceClass }: { resourceClass: string }) {
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Toolbar */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-foreground">{resourceClass}</span>
@@ -330,11 +331,17 @@ function PolicyEditor({ resourceClass }: { resourceClass: string }) {
             </button>
           </div>
         </div>
+
+        {/* Onglets Visuel / JSON */}
         <div className="flex-1 min-h-0">
-          <Editor height="100%" language="json" value={current} onChange={(v) => setEditorValue(v ?? '')} theme={theme}
-            options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: 'on', wordWrap: 'on', formatOnPaste: true, formatOnType: true, scrollBeyondLastLine: false }} />
+          <PolicyEditorTabs
+            resourceClass={resourceClass}
+            jsonValue={current}
+            onJsonChange={setEditorValue}
+          />
         </div>
       </div>
+
       {showHistory && (
         <div className="w-72 flex-shrink-0">
           <VersionHistory resourceClass={resourceClass} onDiff={(f, t) => setDiffParams({ from: f, to: t })} onClose={() => setShowHistory(false)} />
