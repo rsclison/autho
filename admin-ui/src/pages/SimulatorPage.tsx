@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Play, Zap, HelpCircle, CheckCircle2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
-import { useIsAuthorized, useExplain } from '@/api/decisions'
+import { useExplain } from '@/api/decisions'
 import { usePolicies } from '@/api/policies'
 import type { AuthRequest, ExplainResult } from '@/types/decision'
 import type { Rule } from '@/types/policy'
@@ -164,10 +164,13 @@ function ExplainTree({ result }: { result: ExplainResult }) {
 
 export default function SimulatorPage() {
   const [request, setRequest] = useState<AuthRequest>(DEFAULT_REQUEST)
-  const isAuth = useIsAuthorized()
   const explain = useExplain()
 
   const isReady = !!request.subject.id && !!request.resource.class && !!request.operation
+
+  const decision = explain.data
+    ? String((explain.data as unknown as Record<string, unknown>)['decision'] ?? '')
+    : null
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -176,11 +179,11 @@ export default function SimulatorPage() {
         <RequestForm value={request} onChange={setRequest} />
         <div className="flex items-center gap-3 mt-4 pt-4 border-t border-border">
           <button
-            onClick={() => isAuth.mutate(request)}
-            disabled={isAuth.isPending || !isReady}
+            onClick={() => explain.mutate(request)}
+            disabled={explain.isPending || !isReady}
             className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-md bg-autho-dark text-white hover:bg-autho-dark/90 transition-colors disabled:opacity-50"
           >
-            <Play size={13} /> {isAuth.isPending ? 'En cours…' : 'Tester'}
+            <Play size={13} /> {explain.isPending ? 'En cours…' : 'Tester'}
           </button>
           <button
             onClick={() => explain.mutate(request)}
@@ -190,7 +193,7 @@ export default function SimulatorPage() {
             <HelpCircle size={13} /> {explain.isPending ? 'Analyse…' : 'Expliquer'}
           </button>
           <button
-            onClick={() => { isAuth.reset(); explain.reset() }}
+            onClick={() => explain.reset()}
             className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-md border border-input hover:bg-muted transition-colors text-muted-foreground ml-auto"
           >
             <Zap size={12} /> Réinitialiser
@@ -198,18 +201,16 @@ export default function SimulatorPage() {
         </div>
       </div>
 
-      {/* Decision result */}
-      {isAuth.data && (
-        <DecisionBadge decision={((isAuth.data as unknown as Record<string, unknown>)['decision'] as string | undefined) ?? (isAuth.data.results?.[0] ?? 'unknown')} />
-      )}
+      {/* Decision badge */}
+      {decision && <DecisionBadge decision={decision} />}
 
-      {/* Explain result */}
+      {/* Explain tree */}
       {explain.data && <ExplainTree result={explain.data} />}
 
       {/* Errors */}
-      {(isAuth.isError || explain.isError) && (
+      {explain.isError && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {(isAuth.error as Error | null)?.message ?? (explain.error as Error | null)?.message}
+          {(explain.error as Error | null)?.message}
         </div>
       )}
     </div>
