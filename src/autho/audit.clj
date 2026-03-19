@@ -135,9 +135,28 @@
               (.error logger "Failed to write audit entry: {}" (.getMessage e) e)))))
   nil)
 
+(defn- normalize-row
+  "Convert JDBC row to a JSON-safe map:
+   - java.sql.Timestamp → ISO-8601 string
+   - matched_rules string → vector of rule names"
+  [row]
+  (-> row
+      (update :ts #(when % (.toString ^java.sql.Timestamp %)))
+      (update :matched_rules
+              (fn [v]
+                (when v
+                  (try (json/read-str (str v))
+                       (catch Exception _
+                         ;; Clojure repr like [R1 R2] — split on whitespace/brackets
+                         (-> (str v)
+                             (str/replace #"[\[\]\"]" "")
+                             (str/split #"\s+")
+                             (->> (remove str/blank?)
+                                  vec)))))))))
+
 (defn search
   "Query the audit log with optional filters.
-   Params map keys: :subject-id :resource-class :decision :from (Instant) :to (Instant) :page :page-size"
+   Returns {:items [...] :total N :page N :pageSize N}."
   [{:keys [subject-id resource-class decision from to page page-size]
     :or   {page 1 page-size 20}}]
   (let [conditions (cond-> ["1=1"]
@@ -148,9 +167,15 @@
                      to             (conj (str "ts <= '" to "'")))
         where      (str/join " AND " conditions)
         offset     (* (dec page) page-size)
-        sql        (str "SELECT * FROM AUDIT_LOG WHERE " where
-                        " ORDER BY id DESC LIMIT " page-size " OFFSET " offset)]
-    (jdbc/query audit-db [sql])))
+        count-sql  (str "SELECT COUNT(*) AS n FROM AUDIT_LOG WHERE " where)
+        data-sql   (str "SELECT * FROM AUDIT_LOG WHERE " where
+                        " ORDER BY id DESC LIMIT " page-size " OFFSET " offset)
+        total      (or (:n (first (jdbc/query audit-db [count-sql]))) 0)
+        rows       (map normalize-row (jdbc/query audit-db [data-sql]))]
+    {:items    (vec rows)
+     :total    total
+     :page     page
+     :pageSize page-size}))
 
 (defn shutdown!
   "Flush all pending async audit writes before JVM exits.
