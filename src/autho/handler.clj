@@ -12,7 +12,6 @@
             [autho.time-travel :as time-travel]
             [autho.validation :as validation]
             [autho.api.v1 :as api-v1]
-            [autho.api.admin-ui :as admin-ui]
             [clojure.java.io :as io]
             [clj-yaml.core :as yaml]
             [compojure.core :refer :all]
@@ -302,7 +301,22 @@
 ;; Server start time for uptime calculation
 (defonce server-start-time (atom nil))
 
+(defn- serve-spa-page []
+  (if-let [res (io/resource "public/admin/index.html")]
+    {:status  200
+     :headers {"Content-Type"  "text/html; charset=utf-8"
+               "Cache-Control" "no-cache, no-store, must-revalidate"}
+     :body    (slurp res)}
+    {:status 404
+     :headers {"Content-Type" "text/plain"}
+     :body    "Admin UI not built. Run: cd admin-ui && npm run build"}))
+
 (defroutes public-routes
+           ;; Admin SPA — serve index.html without auth so the login page is reachable.
+           ;; The SPA itself enforces auth via sessionStorage token; API endpoints are protected.
+           (GET "/admin/ui"    [] (serve-spa-page))
+           (GET "/admin/ui/*"  [] (serve-spa-page))
+
            (route/resources "/")
 
            ;; Health and monitoring endpoints
@@ -621,15 +635,7 @@
                                              (str "Audit verification failed: " (.getMessage e))
                                              500))))
 
-                    ;; Admin UI routes
-                    (GET "/ui" []
-                         (admin-ui/dashboard-page))
-                    (GET "/ui/policies" []
-                         (admin-ui/policies-page))
-                    (GET "/ui/audit" request
-                         (admin-ui/audit-page (:query-params request)))
-                    (GET "/ui/circuit-breakers" []
-                         (admin-ui/circuit-breakers-page (cb/get-all-status)))))))
+                    )))
 
 (def app-routes
   (routes
