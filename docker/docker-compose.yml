@@ -5,28 +5,30 @@ services:
   # ═══════════════════════════════════════════════════════════════
 
   kafka:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:3.7.0
     container_name: autho-kafka
     ports:
       - "9092:9092"       # Accès depuis le host (Autho)
     environment:
-      # KRaft mode
-      - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_PROCESS_ROLES=controller,broker
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       # Deux listeners : EXTERNAL pour le host, INTERNAL pour les containers
-      - KAFKA_CFG_LISTENERS=EXTERNAL://:9092,INTERNAL://:29092,CONTROLLER://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=EXTERNAL://localhost:9092,INTERNAL://kafka:29092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=false
-      - KAFKA_CFG_LOG_RETENTION_HOURS=168
-      - KAFKA_CFG_LOG_SEGMENT_BYTES=104857600
+      KAFKA_LISTENERS: EXTERNAL://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
     volumes:
-      - kafka_data:/bitnami/kafka
+      - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
       interval: 10s
       timeout: 10s
       retries: 15
@@ -34,7 +36,7 @@ services:
 
   # Crée les topics compactés au démarrage
   kafka-init:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:3.7.0
     container_name: autho-kafka-init
     depends_on:
       kafka:
@@ -45,7 +47,7 @@ services:
         echo "=== Création des topics Kafka ==="
 
         # Topic compacté unifié — objets métier (Facture, Contrat, EngagementJuridique)
-        kafka-topics.sh --create --if-not-exists \
+        /opt/kafka/bin/kafka-topics.sh --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic business-objects-compacted \
           --partitions 3 \
@@ -57,7 +59,7 @@ services:
         echo "✓ business-objects-compacted"
 
         # Topic compacté pour attributs utilisateur (PIP individuel)
-        kafka-topics.sh --create --if-not-exists \
+        /opt/kafka/bin/kafka-topics.sh --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic user-attributes-compacted \
           --partitions 3 \
@@ -69,7 +71,7 @@ services:
         echo "✓ user-attributes-compacted"
 
         # Topic d'invalidation de cache
-        kafka-topics.sh --create --if-not-exists \
+        /opt/kafka/bin/kafka-topics.sh --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic autho-cache-invalidation \
           --partitions 1 \
@@ -78,7 +80,7 @@ services:
 
         echo ""
         echo "=== Topics disponibles ==="
-        kafka-topics.sh --list --bootstrap-server kafka:29092
+        /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:29092
     restart: "no"
 
   # Interface web Kafka
