@@ -6,6 +6,7 @@
             [clojure.java.io :as io]
             [com.brunobonacci.mulog :as u]
             [autho.kafka-pip :as kafka-pip]
+            [autho.kafka-pip-unified :as kafka-pip-unified]
             [autho.metrics :as metrics]
             [autho.circuit-breaker :as cb])
   (:import (org.slf4j LoggerFactory)))
@@ -31,7 +32,8 @@
                               (conn-mgr/shutdown-manager http-connection-manager))))
 
 ;; Multimethod for PIP calls, dispatches on the :type from the :pip map
-(defmulti callPip (fn [decl _ _] (get-in decl [:pip :type])))
+;; or on :type at the root level (unified PIP format)
+(defmulti callPip (fn [decl _ _] (or (get-in decl [:pip :type]) (:type decl))))
 
 ;; Default implementation for unknown PIP types
 (defmethod callPip :default [decl att obj]
@@ -105,6 +107,14 @@
                     (callPip (assoc decl :pip (:fallback pip-info)) att obj))
                   result))
               nil)))))))
+
+;; Unified Kafka PIP — single topic for all business object classes
+(defmethod callPip :kafka-pip-unified [decl att obj]
+  (let [class-name (:class obj)
+        obj-id     (str (or (:id obj) (get obj :id)))]
+    (when (and class-name obj-id)
+      (when-let [result (kafka-pip-unified/query-pip class-name obj-id)]
+        (get result (keyword att))))))
 
 ;; Java PIP implementation
 (defmethod callPip :java [decl att obj]

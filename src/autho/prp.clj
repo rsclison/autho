@@ -124,15 +124,26 @@
   )
 
 (defn findPip [class attribute]
-  (some #(if (and (= class (:class %))
-                  (or (nil? (:attributes %))(some (fn [v] (= v (keyword attribute))) (:attributes %))))
-          %) @pips)
-  )
+  (some (fn [pip]
+          (cond
+            ;; Unified Kafka PIP: matches any class in :classes list
+            (and (= :kafka-pip-unified (:type pip))
+                 (some #(= class %) (:classes pip)))
+            pip
+            ;; Standard PIP: matches by :class and optional :attributes filter
+            (and (= class (:class pip))
+                 (or (nil? (:attributes pip))
+                     (some #(= % (keyword attribute)) (:attributes pip))))
+            pip))
+        @pips))
 
 (defn has-kafka-pip? [class-name]
-  "Checks if a given class has a Kafka PIP configured."
-  (some #(and (= class-name (:class %))
-              (= :kafka-pip (get-in % [:pip :type])))
+  "Checks if a given class has a Kafka PIP configured (individual or unified)."
+  (some (fn [pip]
+          (or (and (= :kafka-pip-unified (:type pip))
+                   (some #(= class-name %) (:classes pip)))
+              (and (= class-name (:class pip))
+                   (= :kafka-pip (get-in pip [:pip :type])))))
         @pips))
 
 (defn insert-policy [resourceClass pol]

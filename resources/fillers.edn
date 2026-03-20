@@ -10,5 +10,5 @@
 ;;
 ;; Leave empty ({}) to disable fillers for a type.
 
-{:subject  {}
+{:subject  {"Person" {:type "internalFiller" :method "fillPerson"}}
  :resource {}}

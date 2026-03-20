@@ -8,10 +8,10 @@
 (def ldap-server (atom nil))
 
 (defn init [props]
-  (let [conn (ldap/connect {:host (:ldap.server props)
-                            :port (:ldap.port props)
-                            :bind-dn (:ldap.connectstring props)
-                            :password (:ldap.password props)})]
+  (let [conn (ldap/connect {:host     (or (:host props) (:ldap.server props))
+                            :port     (or (:port props) (:ldap.port props) 389)
+                            :bind-dn  (or (:bind-dn props) (:ldap.connectstring props))
+                            :password (or (:password props) (:ldap.password props))})]
     (reset! ldap-server conn)))
 
 (defn search [base-dn opts]

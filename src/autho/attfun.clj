@@ -50,8 +50,16 @@
 
 
 (defn fillPersonne [subj]
-  (assoc subj :mood "excellent")
-  )
+  (assoc subj :mood "excellent"))
+
+(defn fillPerson
+  "Enrichit un sujet Person avec ses attributs depuis le personSingleton LDAP."
+  [subj]
+  (let [persons @prp/personSingleton
+        person  (first (filter #(= (str (:id %)) (str (:id subj))) persons))]
+    (if person
+      (merge subj person)
+      subj)))
 
 (defn internalFiller [filler obj]
   (apply (ns-resolve (symbol "autho.attfun") (symbol(:method filler))) [obj]))
