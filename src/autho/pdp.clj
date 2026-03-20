@@ -3,6 +3,7 @@
   (:require [autho.prp :as prp]
             [autho.jsonrule :as rule]
             [autho.kafka-pip :as kafka-pip]
+            [autho.kafka-pip-unified :as kafka-pip-unified]
             [autho.local-cache :as local-cache]
             [autho.metrics :as metrics]
             [autho.audit :as audit]
@@ -139,6 +140,15 @@
 ;; context (date, application, domain)
 ;; return a map composed of the result (:result) and the set of applicable rules (:rules)
 
+(defn- applicable-rules
+  "Filtre les règles d'une politique selon l'opération demandée.
+   Une règle sans :operation s'applique à toutes les opérations."
+  [rules operation]
+  (filter (fn [rule]
+            (let [rule-op (:operation rule)]
+              (or (nil? rule-op) (= rule-op operation))))
+          rules))
+
 (defn evalRequest
   "Evaluates an authorization request.
   Optional visited-subjects parameter tracks delegation chain to prevent cycles."
@@ -156,7 +166,7 @@
          evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
                                             (conj res rule)
                                             res))
-                          [] (:rules globalPolicy))
+                          [] (applicable-rules (:rules globalPolicy) (:operation request)))
          resolve (resolve-conflict globalPolicy evalglob)]
 
      (if resolve
@@ -222,7 +232,7 @@
                   evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
                                                     (conj res rule)
                                                     res))
-                                   [] (:rules globalPolicy))
+                                   [] (applicable-rules (:rules globalPolicy) operation))
                   result   {:results (map #(:name %1) evalglob)}]
               (local-cache/cache-decision! subject-id resource-class resource-id operation result)
               result))))))
@@ -234,8 +244,10 @@
   (if-not (:resource body)
     (throw (ex-info "No resource specified" {:status 400})))
 
-  (let [candrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource body)))))
-        evrules (filter #(rule/evalRuleWithResource % body) candrules)]
+  (let [op        (:operation body)
+        all-rules (:rules (prp/getGlobalPolicy (:class (:resource body))))
+        candrules (filter #(= "allow" (:effect %)) (applicable-rules all-rules op))
+        evrules   (filter #(rule/evalRuleWithResource % body) candrules)]
     (map (fn [rule] {:resourceClass (:resourceClass rule)
                      :subjectCond (rest (:subjectCond rule))
                      :operation (:operation rule)})
@@ -327,8 +339,11 @@
     (if-not (:subject authz-request)
       (throw (ex-info "No subject specified" {:status 400})))
 
-    (let [allowrules (filter #(= "allow" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
-          denyrules (filter #(= "deny" (:effect %)) (:rules (prp/getGlobalPolicy (:class (:resource authz-request)))))
+    (let [op        (:operation authz-request)
+          all-rules (:rules (prp/getGlobalPolicy (:class (:resource authz-request))))
+          op-rules  (applicable-rules all-rules op)
+          allowrules (filter #(= "allow" (:effect %)) op-rules)
+          denyrules  (filter #(= "deny"  (:effect %)) op-rules)
           evrules1 (filter #(rule/evalRuleWithSubject % authz-request) allowrules)
           evrules2 (filter #(rule/evalRuleWithSubject % authz-request) denyrules)
           pagination-opts {:page page :pageSize pageSize}]
@@ -361,8 +376,13 @@
     (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
           augreq (enrich-request authz-request)
           all-rules (:rules globalPolicy)
+          op (:operation authz-request)
           evaluated-rules (map (fn [rule]
-                                 (let [eval-result (rule/evaluateRule rule augreq)]
+                                 (let [op-match    (let [rule-op (:operation rule)]
+                                                     (or (nil? rule-op) (= rule-op op)))
+                                       eval-result (if op-match
+                                                     (rule/evaluateRule rule augreq)
+                                                     {:value false})]
                                    {:name (:name rule)
                                     :effect (:effect rule)
                                     :operation (:operation rule)
@@ -372,7 +392,9 @@
                                     :resourceCond (rest (:resourceCond rule))}))
                                all-rules)
           matched-rules (filter :matched evaluated-rules)
-          final-decision (resolve-conflict globalPolicy (filter #(:value (rule/evaluateRule % augreq)) all-rules))]
+          final-decision (resolve-conflict globalPolicy
+                                           (filter #(:value (rule/evaluateRule % augreq))
+                                                   (applicable-rules all-rules op)))]
 
       (if-not globalPolicy
         (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
@@ -424,8 +446,13 @@
 
         (let [augreq    (enrich-request authz-request)
               all-rules (:rules policy)
+              op        (:operation authz-request)
               evaluated (map (fn [rule]
-                               (let [res (rule/evaluateRule rule augreq)]
+                               (let [op-match (let [rule-op (:operation rule)]
+                                                (or (nil? rule-op) (= rule-op op)))
+                                     res      (if op-match
+                                                (rule/evaluateRule rule augreq)
+                                                {:value false})]
                                  {:name         (:name rule)
                                   :effect       (:effect rule)
                                   :operation    (:operation rule)
@@ -436,7 +463,8 @@
                              all-rules)
               matched   (filter :matched evaluated)
               decision  (resolve-conflict policy
-                                          (filter #(:value (rule/evaluateRule % augreq)) all-rules))]
+                                          (filter #(:value (rule/evaluateRule % augreq))
+                                                  (applicable-rules all-rules op)))]
           {:decision      decision
            :strategy      (:strategy policy)
            :simulated     true
@@ -467,19 +495,27 @@
     (.addShutdownHook (Runtime/getRuntime) (Thread. #(kafka-pip/stop-all-pips))))
 
   (let [ldapprop (filter (fn [propunit] (str/starts-with? (name propunit) "ldap")) @properties)
-        kafka-pips (filter #(= :kafka-pip (:type %)) (prp/get-pips))
-        rocksdb-path (getProperty :kafka.pip.rocksdb.path)
-        kafka-pip-classes (map :class kafka-pips)]
+        all-pips       (prp/get-pips)
+        kafka-pips     (filter #(= :kafka-pip     (:type %)) all-pips)
+        unified-pips   (filter #(= :kafka-pip-unified (:type %)) all-pips)
+        rocksdb-path   (getProperty :kafka.pip.rocksdb.path)
+        kafka-pip-classes (map :class kafka-pips)
+        unified-classes   (mapcat :classes unified-pips)]
     (if (getProperty :ldap.server) (ldap/init {:host     (getProperty :ldap.server)
                                                :bind-dn  (getProperty :ldap.connectstring)
                                                :password (or (System/getenv "LDAP_PASSWORD")
                                                             (getProperty :ldap.password))
                                                }))
-    ;; Only initialize Kafka PIPs if Kafka is enabled
+    ;; Initialise les PIPs Kafka individuels
     (when (and (kafka-enabled?) (seq kafka-pips) rocksdb-path)
       (kafka-pip/open-shared-db rocksdb-path kafka-pip-classes)
       (doseq [pip-config kafka-pips]
-        (kafka-pip/init-pip pip-config))))
+        (kafka-pip/init-pip pip-config)))
+    ;; Initialise le PIP Kafka unifié
+    (when (and (kafka-enabled?) (seq unified-pips) rocksdb-path)
+      (kafka-pip-unified/open-shared-db rocksdb-path unified-classes)
+      (doseq [pip-config unified-pips]
+        (kafka-pip-unified/init-unified-pip pip-config))))
   ;; init the prp
   (prp/initf (getProperty :rules.repository))
 

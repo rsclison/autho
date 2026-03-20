@@ -4,7 +4,7 @@
                                          :resourceClass "Facture"
                                          :domain        "GFC"
                                          :operation     "lire"
-                                         :conditions       [[= [Person $s role] "chef_de_service"] [= [Person $s service] [Person $r service]] [< [Facture $r montant] [Person $s seuil]]]
+                                         :conditions       [[= [Person $s role] "chef_de_service"] [= [Person $s service] [Facture $r service]] [< [Facture $r montant] [Person $s seuil]]]
                                          :effect        "allow"
                                          :startDate     "inf"
                                          :endDate       "inf"}
