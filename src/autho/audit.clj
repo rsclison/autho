@@ -157,9 +157,10 @@
 (defn search
   "Query the audit log with optional filters.
    Returns {:items [...] :total N :page N :pageSize N}."
-  [{:keys [subject-id resource-class decision from to page page-size]
-    :or   {page 1 page-size 20}}]
-  (let [conditions (cond-> ["1=1"]
+  [{:keys [subject-id resource-class decision from to page page-size]}]
+  (let [page      (or page 1)
+        page-size (or page-size 20)
+        conditions (cond-> ["1=1"]
                      subject-id     (conj (str "subject_id = '" subject-id "'"))
                      resource-class (conj (str "resource_class = '" resource-class "'"))
                      decision       (conj (str "decision = '" (name decision) "'"))

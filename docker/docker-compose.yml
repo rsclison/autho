@@ -1,0 +1,153 @@
+services:
+
+  # ═══════════════════════════════════════════════════════════════
+  # KAFKA (KRaft — sans Zookeeper)
+  # ═══════════════════════════════════════════════════════════════
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: autho-kafka
+    ports:
+      - "9092:9092"       # Accès depuis le host (Autho)
+    environment:
+      # KRaft mode
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      # Deux listeners : EXTERNAL pour le host, INTERNAL pour les containers
+      - KAFKA_CFG_LISTENERS=EXTERNAL://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=EXTERNAL://localhost:9092,INTERNAL://kafka:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=false
+      - KAFKA_CFG_LOG_RETENTION_HOURS=168
+      - KAFKA_CFG_LOG_SEGMENT_BYTES=104857600
+    volumes:
+      - kafka_data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+
+  # Crée les topics compactés au démarrage
+  kafka-init:
+    image: bitnami/kafka:3.7
+    container_name: autho-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "=== Création des topics Kafka ==="
+
+        # Topic compacté unifié — objets métier (Facture, Contrat, EngagementJuridique)
+        kafka-topics.sh --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic business-objects-compacted \
+          --partitions 3 \
+          --replication-factor 1 \
+          --config cleanup.policy=compact \
+          --config min.cleanable.dirty.ratio=0.01 \
+          --config segment.ms=100 \
+          --config delete.retention.ms=100
+        echo "✓ business-objects-compacted"
+
+        # Topic compacté pour attributs utilisateur (PIP individuel)
+        kafka-topics.sh --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic user-attributes-compacted \
+          --partitions 3 \
+          --replication-factor 1 \
+          --config cleanup.policy=compact \
+          --config min.cleanable.dirty.ratio=0.01 \
+          --config segment.ms=100 \
+          --config delete.retention.ms=100
+        echo "✓ user-attributes-compacted"
+
+        # Topic d'invalidation de cache
+        kafka-topics.sh --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic autho-cache-invalidation \
+          --partitions 1 \
+          --replication-factor 1
+        echo "✓ autho-cache-invalidation"
+
+        echo ""
+        echo "=== Topics disponibles ==="
+        kafka-topics.sh --list --bootstrap-server kafka:29092
+    restart: "no"
+
+  # Interface web Kafka
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: autho-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: autho-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ═══════════════════════════════════════════════════════════════
+  # LDAP (OpenLDAP)
+  # ═══════════════════════════════════════════════════════════════
+
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: autho-ldap
+    ports:
+      - "389:389"
+    environment:
+      LDAP_ORGANISATION: "Autho Dev"
+      LDAP_DOMAIN: "example.com"
+      LDAP_ADMIN_PASSWORD: "admin"
+      LDAP_CONFIG_PASSWORD: "config"
+      LDAP_READONLY_USER: "false"
+      LDAP_TLS: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+      # Schema custom chargé au premier démarrage
+      - ./ldap/00-schema.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/00-autho-schema.ldif:ro
+      # Données initiales
+      - ./ldap/50-bootstrap.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/50-autho-bootstrap.ldif:ro
+    command: ["--copy-service", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost",
+             "-b", "dc=example,dc=com",
+             "-D", "cn=admin,dc=example,dc=com",
+             "-w", "admin",
+             "(objectClass=organizationalUnit)"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  # Interface web LDAP
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: autho-ldap-ui
+    ports:
+      - "8091:80"
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: openldap
+      PHPLDAPADMIN_HTTPS: "false"
+    depends_on:
+      openldap:
+        condition: service_healthy
+
+volumes:
+  kafka_data:
+  ldap_data:
+  ldap_config:
+
+networks:
+  default:
+    name: autho-dev

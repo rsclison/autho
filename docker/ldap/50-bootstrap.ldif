@@ -1,0 +1,126 @@
+# Données initiales — structure et personnes de test
+# Alignées avec les règles dans resources/jrules.edn
+
+# ─── Structure organisationnelle ────────────────────────────────────────────
+
+dn: ou=people,dc=example,dc=com
+objectClass: organizationalUnit
+ou: people
+description: Annuaire des personnes
+
+dn: ou=groups,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+description: Groupes
+
+# ─── Personnes ───────────────────────────────────────────────────────────────
+# Règle R1 (Facture) : chef_de_service peut lire si [Person service == Facture service] ET [Facture montant < seuil]
+# Règle CT1 (Contrat) : accès si [Person department == Contrat owner-department]
+# Règle CT2 (Contrat) : DPO peut lire contrats avec PII
+# Règle CT3 (Contrat) / EJ3 (EJ) : legal-counsel accède à tout
+# Règle EJ1 (EJ) : accès si [Person clearance-level >= EJ required-clearance-level]
+
+dn: uid=001,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 001
+cn: Paul Martin
+sn: Martin
+mail: paul.martin@example.com
+role: chef_de_service
+service: service1
+seuil: 50000
+department: dept1
+clearance-level: 2
+
+dn: uid=002,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 002
+cn: John Dupont
+sn: Dupont
+mail: john.dupont@example.com
+role: agent
+service: service2
+seuil: 0
+department: dept2
+clearance-level: 1
+
+dn: uid=003,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 003
+cn: Alice Bernard
+sn: Bernard
+mail: alice.bernard@example.com
+role: chef_de_service
+service: service2
+seuil: 100000
+department: dept2
+clearance-level: 3
+
+dn: uid=004,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 004
+cn: Sophie Laurent
+sn: Laurent
+mail: sophie.laurent@example.com
+role: DPO
+service: service1
+seuil: 0
+department: dept3
+clearance-level: 4
+
+dn: uid=005,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 005
+cn: Marc Leclerc
+sn: Leclerc
+mail: marc.leclerc@example.com
+role: legal-counsel
+service: service3
+seuil: 0
+department: dept1
+clearance-level: 5
+
+dn: uid=006,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 006
+cn: Emma Rousseau
+sn: Rousseau
+mail: emma.rousseau@example.com
+role: comptable
+service: service1
+seuil: 0
+department: dept1
+clearance-level: 2
+
+dn: uid=007,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 007
+cn: Pierre Moreau
+sn: Moreau
+mail: pierre.moreau@example.com
+role: professeur
+service: service4
+seuil: 0
+department: dept4
+clearance-level: 1
+
+dn: uid=008,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: authoPerson
+uid: 008
+cn: Clara Simon
+sn: Simon
+mail: clara.simon@example.com
+role: gestionnaire RH
+service: service5
+seuil: 0
+department: dept5
+clearance-level: 2
+code: CODE-GRH

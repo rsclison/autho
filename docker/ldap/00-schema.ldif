@@ -1,0 +1,62 @@
+# Schéma custom Autho — attributs des personnes utilisés dans les règles d'autorisation
+# Chargé via cn=config au premier démarrage d'OpenLDAP
+#
+# Attributs définis :
+#   role            — rôle métier (chef_de_service, agent, DPO, legal-counsel, professeur…)
+#   service         — unité de service
+#   seuil           — seuil budgétaire (entier)
+#   department      — département
+#   code            — code métier (ex : codegestion)
+#   clearance-level — niveau d'habilitation (entier)
+#
+# OID privé : 1.3.6.1.4.1.99999.x (arc réservé aux environnements de dev/test)
+
+dn: cn=autho,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: autho
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1
+  NAME 'role'
+  DESC 'Role metier de la personne'
+  EQUALITY caseIgnoreMatch
+  SUBSTR caseIgnoreSubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.2
+  NAME 'service'
+  DESC 'Unite de service'
+  EQUALITY caseIgnoreMatch
+  SUBSTR caseIgnoreSubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.3
+  NAME 'seuil'
+  DESC 'Seuil budgetaire (entier)'
+  EQUALITY integerMatch
+  ORDERING integerOrderingMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.4
+  NAME 'department'
+  DESC 'Departement'
+  EQUALITY caseIgnoreMatch
+  SUBSTR caseIgnoreSubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.5
+  NAME 'code'
+  DESC 'Code metier'
+  EQUALITY caseIgnoreMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.6
+  NAME 'clearance-level'
+  DESC 'Niveau d habilitation (entier)'
+  EQUALITY integerMatch
+  ORDERING integerOrderingMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+olcObjectClasses: ( 1.3.6.1.4.1.99999.2.1
+  NAME 'authoPerson'
+  DESC 'Attributs Autho supplementaires pour les personnes'
+  SUP top AUXILIARY
+  MAY ( role $ service $ seuil $ department $ code $ clearance-level ) )

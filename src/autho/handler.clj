@@ -622,6 +622,7 @@
                                               :page           (some-> (get params "page") Long/parseLong)
                                               :page-size      (some-> (get params "pageSize") Long/parseLong)}))
                              (catch Exception e
+                               (.error logger "Audit search failed" e)
                                (error-response "AUDIT_SEARCH_FAILED"
                                                (str "Audit search failed: " (.getMessage e))
                                                500)))))
@@ -680,7 +681,7 @@
    public-routes
    (-> protected-routes
        (auth/wrap-authentication))
-   (-> api-v1/v1-routes
+   (-> (context "/v1" [] api-v1/v1-routes)
        (auth/wrap-authentication))
    (route/not-found "Not Found")))
 
