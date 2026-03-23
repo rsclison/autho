@@ -1,59 +1,59 @@
-# Autho — Guide utilisateur de l'interface d'administration
+# Autho — Administration UI User Guide
 
-## Accès
+## Access
 
-L'interface d'administration est une application web accessible à l'adresse :
+The administration interface is a web application available at:
 
 ```
-http://<serveur>:8080/admin/ui
+http://<server>:8080/admin/ui
 ```
 
-Elle nécessite une authentification par JWT ou API Key. Un formulaire de connexion est affiché au premier accès (ou après expiration de la session).
+It requires authentication via JWT or API Key. A login form is shown on first access or after session expiry.
 
 ---
 
 ## Navigation
 
-L'interface est organisée en six sections accessibles depuis le menu latéral :
+The interface is organised into six sections accessible from the side menu:
 
-| Section | Icône | Usage |
-|---------|-------|-------|
-| **Dashboard** | Activité | Vue temps réel des métriques |
-| **Politiques** | Bouclier | Création et gestion des politiques |
-| **Simulateur** | Éclair | Test interactif des décisions |
-| **Audit** | Horloge | Journal des décisions |
-| **Infrastructure** | Base de données | Cache, circuit breakers, actions admin |
-| **Paramètres** | Engrenage | Thème, session |
+| Section | Icon | Purpose |
+|---------|------|---------|
+| **Dashboard** | Activity | Real-time metrics overview |
+| **Policies** | Shield | Create and manage access policies |
+| **Simulator** | Lightning | Interactive decision testing |
+| **Audit** | Clock | Decision log |
+| **Infrastructure** | Database | Cache, circuit breakers, admin actions |
+| **Settings** | Gear | Theme, session |
 
 ---
 
 ## Dashboard
 
-Le tableau de bord affiche en temps réel :
+The dashboard displays in real time:
 
-- **Décisions cachées** — nombre de décisions servies depuis le cache local
-- **Politiques actives** — nombre de classes de ressources avec une politique définie
-- **Taux de cache** — ratio hits/misses sur le cache de décisions
-- **Statut du serveur** — version, statut du dépôt de règles, uptime
-- **Graphique d'activité** — répartition allow/deny sur les dernières décisions
-- **Circuit breakers** — état des PIPs REST (fermé / ouvert / semi-ouvert)
-- **Décisions récentes** — dernières entrées du journal d'audit
+- **Cached decisions** — number of decisions served from the local cache
+- **Active policies** — number of resource classes with a defined policy
+- **Cache hit rate** — hits/misses ratio on the decision cache
+- **Server status** — version, rules repository status, uptime
+- **Activity chart** — allow/deny breakdown over recent decisions
+- **Circuit breakers** — state of REST PIPs (closed / open / half-open)
+- **Recent decisions** — latest entries from the audit log
 
 ---
 
-## Politiques
+## Policies
 
-### Vue d'ensemble
+### Overview
 
-Le panneau gauche liste toutes les politiques par classe de ressource. Cliquer sur une classe ouvre son éditeur.
+The left panel lists all policies by resource class. Clicking on a class opens its editor.
 
-### Créer une politique
+### Creating a Policy
 
-1. Cliquer sur le bouton **+** en haut du panneau gauche
-2. Saisir le nom de la classe de ressource (ex. `Facture`, `DossierMedical`)
-3. L'éditeur s'ouvre avec un squelette JSON à compléter
+1. Click the **+** button at the top of the left panel
+2. Enter the resource class name (e.g. `Invoice`, `MedicalRecord`)
+3. The editor opens with a JSON skeleton to fill in
 
-### Format d'une politique
+### Policy Format
 
 ```json
 {
@@ -62,193 +62,193 @@ Le panneau gauche liste toutes les politiques par classe de ressource. Cliquer s
     {
       "name": "R-ALLOW",
       "priority": 0,
-      "operation": "lire",
+      "operation": "read",
       "effect": "allow",
       "conditions": [
-        ["=", ["Person", "$s", "service"], ["Facture", "$r", "service"]]
+        ["=", ["Person", "$s", "service"], ["Invoice", "$r", "service"]]
       ]
     }
   ]
 }
 ```
 
-**Champs d'une règle :**
+**Rule fields:**
 
-| Champ | Type | Description |
+| Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Identifiant unique de la règle |
-| `priority` | entier | Priorité pour la résolution de conflits (plus grand = priorité plus haute) |
-| `operation` | string | Opération ciblée (`"lire"`, `"modifier"`, etc.) — absent = toutes les opérations |
-| `effect` | `"allow"` \| `"deny"` | Effet de la règle si ses conditions sont vérifiées |
-| `conditions` | tableau | Liste de conditions (toutes doivent être vraies) |
+| `name` | string | Unique rule identifier |
+| `priority` | integer | Conflict resolution priority (higher value = higher priority) |
+| `operation` | string | Target operation (`"read"`, `"write"`, etc.) — omit to match all operations |
+| `effect` | `"allow"` \| `"deny"` | Effect applied when all conditions are met |
+| `conditions` | array | List of conditions (all must be true) |
 
-**Stratégie `almost_one_allow_no_deny` :**
-La décision est **allow** si au moins une règle `allow` est vérifiée et que sa priorité est supérieure ou égale à celle de la règle `deny` la plus prioritaire. Un `deny` de priorité supérieure à tous les `allow` matche l'emporte.
+**Strategy `almost_one_allow_no_deny`:**
+The decision is **allow** if at least one `allow` rule matches and its priority is greater than or equal to the highest-priority matching `deny` rule. A `deny` rule with higher priority than all matching `allow` rules wins.
 
-**Format d'une condition :**
+**Condition format:**
 ```json
-["opérateur", "opérande1", "opérande2"]
+["operator", "operand1", "operand2"]
 ```
 
-Un opérande est soit une chaîne littérale, soit une référence à un attribut :
+An operand is either a string literal or an attribute reference:
 ```json
-["NomClasse", "$s", "nom-attribut"]   // $s = sujet
-["NomClasse", "$r", "nom-attribut"]   // $r = ressource
+["ClassName", "$s", "attribute-name"]   // $s = subject
+["ClassName", "$r", "attribute-name"]   // $r = resource
 ```
 
-**Opérateurs disponibles :**
+**Available operators:**
 
-| Opérateur | Exemple | Description |
-|-----------|---------|-------------|
-| `=` | `["=", ["Person", "$s", "service"], ["Facture", "$r", "service"]]` | Égalité |
-| `diff` | `["diff", ["Person", "$s", "statut"], "suspendu"]` | Différence |
-| `<`, `>`, `<=`, `>=` | `[">=", ["Person", "$s", "clearance"], ["Facture", "$r", "niveau"]]` | Comparaison numérique |
-| `in` | `["in", ["Person", "$s", "role"], "DPO,chef_de_service"]` | Appartenance à une liste |
-| `notin` | `["notin", ["Person", "$s", "role"], "stagiaire,externe"]` | Non-appartenance |
-| `date>` | `["date>", ["Person", "$s", "date-fin"], "2026-01-01"]` | Comparaison de dates ISO |
+| Operator | Example | Description |
+|----------|---------|-------------|
+| `=` | `["=", ["Person", "$s", "service"], ["Invoice", "$r", "service"]]` | Equality |
+| `diff` | `["diff", ["Person", "$s", "status"], "suspended"]` | Inequality |
+| `<`, `>`, `<=`, `>=` | `[">=", ["Person", "$s", "clearance"], ["Invoice", "$r", "level"]]` | Numeric comparison |
+| `in` | `["in", ["Person", "$s", "role"], "DPO,manager,legal-counsel"]` | Set membership |
+| `notin` | `["notin", ["Person", "$s", "role"], "intern,contractor"]` | Non-membership |
+| `date>` | `["date>", ["Person", "$s", "end-date"], "2026-01-01"]` | ISO date comparison |
 
-### Enregistrer une politique
+### Saving a Policy
 
-Cliquer sur **Enregistrer** (icône disquette). Si la politique est invalide (JSON malformé, schéma non respecté), un message d'erreur s'affiche.
+Click **Save** (floppy disk icon). If the policy is invalid (malformed JSON or schema violation), an error message is shown.
 
-Chaque enregistrement crée automatiquement une nouvelle version dans l'historique.
+Every save automatically creates a new entry in the version history.
 
-### Supprimer une politique
+### Deleting a Policy
 
-Cliquer sur l'icône **Corbeille** en haut de l'éditeur, puis confirmer.
+Click the **Trash** icon at the top of the editor, then confirm.
 
-### Import YAML
+### YAML Import
 
-L'icône **Upload** permet d'importer une politique depuis un fichier YAML. Le format YAML est équivalent au JSON mais peut être plus lisible pour de grandes politiques.
+The **Upload** icon allows importing a policy from a YAML file. The YAML format is equivalent to JSON but may be more readable for large policies.
 
-### Historique des versions
+### Version History
 
-L'icône **Horloge** ouvre le panneau d'historique. Il liste toutes les versions enregistrées avec leur auteur, commentaire et horodatage.
+The **Clock** icon opens the history panel, listing all saved versions with their author, comment, and timestamp.
 
-Actions disponibles par version :
-- **Voir** — affiche le contenu JSON de cette version
-- **Comparer** — ouvre un diff côte-à-côte entre deux versions (icône GitCompare)
-- **Restaurer** — rétablit cette version comme version active (rollback)
+Actions available per version:
+- **View** — displays the JSON content of that version
+- **Compare** — opens a side-by-side diff between two versions (GitCompare icon)
+- **Restore** — reinstates that version as the active policy (rollback)
 
 ---
 
-## Simulateur
+## Simulator
 
-Le simulateur permet de tester une décision d'autorisation sans impact sur l'audit ni le cache.
+The simulator lets you test an authorisation decision with no impact on the audit log or the cache.
 
-### Formulaire de requête
+### Request Form
 
-| Champ | Description |
+| Field | Description |
 |-------|-------------|
-| **Sujet — id** | Identifiant du sujet (ex. `001`) |
-| **Sujet — attributs** | Attributs supplémentaires en JSON (optionnel) |
-| **Ressource — classe** | Classe de la ressource (liste déroulante des politiques existantes) |
-| **Ressource — id** | Identifiant de la ressource |
-| **Opération** | Liste déroulante des opérations définies dans la politique sélectionnée |
-| **Contexte** | Attributs contextuels en JSON (date, application, etc.) — optionnel |
+| **Subject — id** | Subject identifier (e.g. `001`) |
+| **Subject — attributes** | Additional attributes as JSON (optional) |
+| **Resource — class** | Resource class (dropdown populated from existing policies) |
+| **Resource — id** | Resource identifier |
+| **Operation** | Dropdown of operations defined in the selected policy |
+| **Context** | Contextual attributes as JSON (date, application, etc.) — optional |
 
-### Résultat
+### Result
 
-Après exécution (bouton **Simuler**), l'interface affiche :
+After clicking **Simulate**, the interface displays:
 
-- La **décision** (ALLOW en vert / DENY en rouge) avec un badge visuel
-- La **liste des règles évaluées** avec pour chacune :
-  - son nom et effet
-  - son résultat (match / no-match)
-  - ses conditions détaillées
+- The **decision** (ALLOW in green / DENY in red) with a visual badge
+- The **list of evaluated rules**, each showing:
+  - its name and effect
+  - its result (match / no-match)
+  - its detailed conditions
 
-Le simulateur appelle `POST /explain` en interne — il retourne exactement la même décision que le moteur en production pour la même requête.
+The simulator calls `POST /explain` internally — it returns exactly the same decision as the production engine for the same request.
 
 ---
 
 ## Audit
 
-### Recherche
+### Search
 
-Le formulaire de recherche accepte les filtres suivants :
+The search form accepts the following filters:
 
-| Filtre | Description |
+| Filter | Description |
 |--------|-------------|
-| **Sujet** | Id du sujet (recherche exacte) |
-| **Classe ressource** | Classe de la ressource (ex. `Facture`) |
-| **Décision** | `allow`, `deny` ou tous |
-| **De / À** | Plage de dates (format `YYYY-MM-DD`) |
+| **Subject** | Subject id (exact match) |
+| **Resource class** | Resource class (e.g. `Invoice`) |
+| **Decision** | `allow`, `deny`, or all |
+| **From / To** | Date range (format `YYYY-MM-DD`) |
 
-Cliquer **Rechercher** lance la requête paginée.
+Click **Search** to run the paginated query.
 
-### Tableau des résultats
+### Results Table
 
-Colonnes affichées : horodatage, sujet, classe ressource, id ressource, opération, décision, règles matchées.
+Columns: timestamp, subject, resource class, resource id, operation, decision, matched rules.
 
-- Cliquer sur un en-tête de colonne pour trier
-- Navigation par pages avec les flèches en bas du tableau
+- Click a column header to sort
+- Navigate pages with the arrows at the bottom of the table
 
-### Export CSV
+### CSV Export
 
-Le bouton **Export CSV** télécharge toutes les entrées correspondant au filtre courant au format CSV.
+The **Export CSV** button downloads all entries matching the current filter as a CSV file.
 
-### Vérification d'intégrité
+### Integrity Verification
 
-Le bouton **Vérifier la chaîne** lance une vérification cryptographique de la chaîne d'audit (hash SHA-256 chaîné). Un message de succès ou d'erreur indique si des entrées ont été modifiées ou supprimées.
+The **Verify chain** button runs a cryptographic check of the audit chain (chained SHA-256 hashes). A success or error message indicates whether any entries have been tampered with or deleted.
 
 ---
 
 ## Infrastructure
 
-### Métriques de cache
+### Cache Metrics
 
-Trois barres de progression affichent le taux de hits/misses pour :
-- le cache de **décisions**
-- le cache de **sujets**
-- le cache de **ressources**
+Three progress bars show the hit/miss rate for:
+- the **decision** cache
+- the **subject** cache
+- the **resource** cache
 
-### Circuit breakers
+### Circuit Breakers
 
-Liste des PIPs REST avec leur état :
-- **Fermé** (vert) — fonctionnement normal
-- **Ouvert** (rouge) — PIP en erreur, requêtes bloquées temporairement
-- **Semi-ouvert** (orange) — phase de rétablissement
+List of REST PIPs with their current state:
+- **Closed** (green) — normal operation
+- **Open** (red) — PIP in error, requests temporarily blocked
+- **Half-open** (orange) — recovery phase
 
-### Actions administrateur
+### Admin Actions
 
-| Action | Effet |
-|--------|-------|
-| **Vider le cache** | Supprime toutes les entrées du cache (décisions, sujets, ressources) |
-| **Invalider une entrée** | Supprime l'entrée de cache pour un sujet ou une ressource spécifique |
-| **Recharger les règles** | Relit `resources/jrules.edn` et met à jour les politiques en mémoire |
-| **Recharger les personnes** | Relit l'annuaire LDAP et met à jour `personSingleton` |
-| **Réinitialiser** | Réinitialise complètement le PDP (règles + PIPs + cache) |
+| Action | Effect |
+|--------|--------|
+| **Clear cache** | Removes all cache entries (decisions, subjects, resources) |
+| **Invalidate entry** | Removes the cache entry for a specific subject or resource |
+| **Reload rules** | Re-reads `resources/jrules.edn` and updates in-memory policies |
+| **Reload persons** | Re-reads the LDAP directory and updates `personSingleton` |
+| **Reinitialise** | Full PDP reset (rules + PIPs + cache) |
 
-> Ces actions sont immédiates et sans confirmation. Vider le cache entraîne une baisse temporaire des performances le temps de le repeupler.
+> These actions are immediate and require no confirmation. Clearing the cache causes a temporary performance drop while it repopulates.
 
 ---
 
-## Paramètres
+## Settings
 
-### Apparence
+### Appearance
 
-Bascule entre le mode **clair** et le mode **sombre**. La préférence est sauvegardée dans le navigateur (localStorage).
+Toggle between **light** and **dark** mode. The preference is saved in the browser (localStorage).
 
 ### Session
 
-Affiche le token JWT courant (masqué). Le bouton **Se déconnecter** supprime le token et redirige vers la page de connexion.
+Displays the current JWT token (masked). The **Log out** button removes the token and redirects to the login page.
 
 ---
 
-## Raccourcis clavier
+## Keyboard Shortcuts
 
-| Raccourci | Action |
-|-----------|--------|
-| `Ctrl+S` (dans l'éditeur de politique) | Enregistrer la politique |
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` (inside the policy editor) | Save the policy |
 
 ---
 
-## Résolution de problèmes courants
+## Troubleshooting
 
-| Symptôme | Cause probable | Action |
-|----------|---------------|--------|
-| Décision inattendue | Cache périmé | Infrastructure → Invalider l'entrée |
-| Politique non prise en compte | Règles non rechargées | Infrastructure → Recharger les règles |
-| Attributs sujet manquants | personSingleton obsolète | Infrastructure → Recharger les personnes |
-| Circuit breaker ouvert | PIP REST indisponible | Vérifier le service PIP externe |
-| `POLICY_NOT_FOUND` | Classe de ressource sans politique | Politiques → Créer une politique pour cette classe |
+| Symptom | Likely cause | Action |
+|---------|-------------|--------|
+| Unexpected decision | Stale cache | Infrastructure → Invalidate the entry |
+| Policy change not taking effect | Rules not reloaded | Infrastructure → Reload rules |
+| Missing subject attributes | Stale `personSingleton` | Infrastructure → Reload persons |
+| Circuit breaker open | REST PIP unavailable | Check the external PIP service |
+| `POLICY_NOT_FOUND` error | No policy for that resource class | Policies → Create a policy for that class |

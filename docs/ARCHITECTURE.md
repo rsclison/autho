@@ -1,19 +1,19 @@
-# Autho — Architecture technique
+# Autho — Technical Architecture
 
-## Vue d'ensemble
+## Overview
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                       Applications clientes                           │
-│              (services REST, batch, applications web)                │
+│                          Client Applications                          │
+│               (REST services, batch jobs, web applications)          │
 └──────────────────────────────┬───────────────────────────────────────┘
                                │  HTTP/JSON
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        Autho  :8080                                   │
+│                          Autho  :8080                                 │
 │                                                                       │
 │  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │                    Middleware Stack                               │ │
+│  │                      Middleware Stack                             │ │
 │  │  auth · rate-limit · request-size · validation · metrics ·      │ │
 │  │  tracing · error-handling · graceful-shutdown                    │ │
 │  └────────────────────────────┬────────────────────────────────────┘ │
@@ -23,8 +23,8 @@
 │  ┌──▼──────────┐   ┌─────────▼──────────┐   ┌──────────▼────────┐  │
 │  │    PDP      │   │       PAP           │   │    Admin API      │  │
 │  │ ─────────── │   │  ────────────────── │   │  ───────────────  │  │
-│  │ evalRequest │   │  CRUD politiques    │   │  cache mgmt       │  │
-│  │ isAuthorized│   │  import YAML        │   │  reinit/reload    │  │
+│  │ evalRequest │   │  policy CRUD        │   │  cache mgmt       │  │
+│  │ isAuthorized│   │  YAML import        │   │  reinit/reload    │  │
 │  │ explain     │   │  versions/rollback  │   │  audit search     │  │
 │  │ whoAuthorized│  │  diff               │   │  PIP schema       │  │
 │  │ whatAuthorized  └────────┬───────────┘   └───────────────────┘  │
@@ -40,7 +40,7 @@
 │         │                                                             │
 │         ▼  enrich-request (fillers + cache)                          │
 │  ┌──────────────────────────────────────────────────────────────┐    │
-│  │                    PIP Layer                                   │    │
+│  │                       PIP Layer                               │    │
 │  │  fillPerson (LDAP singleton)  │  Kafka unified  │  REST PIP  │    │
 │  │  CSV PIP   │  Internal PIP   │  Java PIP       │  Cache L2  │    │
 │  └──────┬─────────────┬──────────────────┬─────────────────────┘    │
@@ -48,165 +48,165 @@
 └─────────┼─────────────┼──────────────────┼────────────────────────────┘
           │             │                  │
           ▼             ▼                  ▼
-      LDAP :389     Kafka :9092        Services REST
-                    RocksDB            externes
+      LDAP :389     Kafka :9092        External REST
+                    RocksDB            services
 ```
 
 ---
 
-## Composants internes
+## Internal Components
 
 ### `autho.pdp` — Policy Decision Point
 
-Cœur du moteur d'évaluation. Reçoit une requête enrichie et retourne une décision.
+The core evaluation engine. Receives an enriched request and returns a decision.
 
-**Flux d'évaluation :**
-1. Récupère la politique pour la classe de ressource (`prp/getGlobalPolicy`)
-2. Enrichit le sujet et la ressource via `enrich-request` (fillers + cache)
-3. Filtre les règles applicables à l'opération demandée (`applicable-rules`)
-4. Évalue chaque règle (`rule/evaluateRule`)
-5. Résout les conflits entre règles allow/deny (`resolve-conflict`)
-6. En cas de deny, tente la délégation (si configurée)
-7. Enregistre la décision dans l'audit
+**Evaluation flow:**
+1. Retrieve the policy for the resource class (`prp/getGlobalPolicy`)
+2. Enrich subject and resource via `enrich-request` (fillers + cache)
+3. Filter rules applicable to the requested operation (`applicable-rules`)
+4. Evaluate each rule (`rule/evaluateRule`)
+5. Resolve conflicts between allow/deny rules (`resolve-conflict`)
+6. On deny, attempt delegation (if configured)
+7. Record the decision in the audit log
 
-**Fonctions exposées :**
+**Exposed functions:**
 
-| Fonction | Description |
+| Function | Description |
 |----------|-------------|
-| `evalRequest` | Évaluation principale, retourne `{:result bool :rules [...]}` |
-| `isAuthorized` | Wrapper HTTP avec cache de décision |
-| `explain` | Comme `isAuthorized` mais retourne les règles matchées |
-| `simulate` | Simulation sans enregistrement audit ni mise en cache |
-| `whoAuthorized` | Sujets pouvant effectuer une opération |
-| `whatAuthorized` | Ressources accessibles à un sujet |
+| `evalRequest` | Core evaluation, returns `{:result bool :rules [...]}` |
+| `isAuthorized` | HTTP wrapper with decision cache |
+| `explain` | Like `isAuthorized` but returns matched rules |
+| `simulate` | Evaluation with no audit recording and no caching |
+| `whoAuthorized` | Subjects able to perform an operation |
+| `whatAuthorized` | Resources accessible to a subject |
 
 ### `autho.prp` — Policy Repository Point
 
-Stocke en mémoire (atoms Clojure) l'ensemble des politiques, PIPs et fillers.
+Holds all policies, PIP declarations, and fillers in memory (Clojure atoms).
 
-**Atoms principaux :**
+**Main atoms:**
 
-| Atom | Contenu |
-|------|---------|
+| Atom | Contents |
+|------|----------|
 | `policiesMap` | `{"Facture" {:global {:rules [...] :strategy ...}}, ...}` |
-| `pips` | Liste des déclarations PIP (chargée depuis `resources/pips.edn`) |
-| `subjectFillers` | Map classe → filler sujet (chargée depuis `resources/fillers.edn`) |
-| `resourceFillers` | Map classe → filler ressource |
-| `personSingleton` | Liste des personnes chargées depuis LDAP |
+| `pips` | List of PIP declarations (loaded from `resources/pips.edn`) |
+| `subjectFillers` | Class → subject filler map (loaded from `resources/fillers.edn`) |
+| `resourceFillers` | Class → resource filler map |
+| `personSingleton` | List of persons loaded from LDAP |
 
-### `autho.jsonrule` — Évaluation des règles
+### `autho.jsonrule` — Rule Evaluation
 
-Évalue les règles au format `:conditions`.
+Evaluates rules in the `:conditions` format.
 
-**Format d'une condition :**
+**Condition format:**
 ```clojure
-[opérateur  [NomClasse $s|$r attribut]  opérande2]
+[operator  [ClassName $s|$r attribute]  operand2]
 ```
 
-Exemples :
+Examples:
 ```clojure
-[=   [Person $s service]        [Facture $r service]]
-[>=  [Person $s clearance-level] [Facture $r niveau-requis]]
-[in  [Person $s role]           "DPO,chef_de_service,legal-counsel"]
-[=   [Facture $r statut]        "archive"]
+[=   [Person $s service]         [Facture $r service]]
+[>=  [Person $s clearance-level] [Facture $r required-level]]
+[in  [Person $s role]            "DPO,manager,legal-counsel"]
+[=   [Facture $r status]         "archive"]
 ```
 
-**Résolution d'un opérande `[NomClasse $var attribut]` :**
-1. Cherche l'attribut directement dans l'objet (après enrichissement par les fillers)
-2. Si absent, appelle `attfun/findAndCallPip` → `prp/findPip` → `pip/callPip`
-3. Si le PIP retourne une map (ex. REST PIP), extrait l'attribut ciblé
-4. Convertit les nombres en string pour la comparaison (`coerce-str`)
+**Resolving an operand `[ClassName $var attribute]`:**
+1. Look up the attribute directly in the object (after filler enrichment)
+2. If absent, call `attfun/findAndCallPip` → `prp/findPip` → `pip/callPip`
+3. If the PIP returns a map (e.g. REST PIP), extract the target attribute from it
+4. Coerce numbers to strings for comparison (`coerce-str`)
 
-### `autho.pip` — Appel des PIPs
+### `autho.pip` — PIP Dispatch
 
-Multiméthode Clojure dispatching sur `:type`.
+Clojure multimethod dispatching on `:type`.
 
-| Type | Implémentation |
-|------|---------------|
-| `:rest` | `GET {url}/{id}` ou `POST {url}`, retourne `(:body response)` (map JSON parsée) |
+| Type | Implementation |
+|------|----------------|
+| `:rest` | `GET {url}/{id}` or `POST {url}`, returns `(:body response)` (parsed JSON map) |
 | `:kafka-pip-unified` | `kpu/query-pip class id` → `(get result (keyword att))` |
-| `:kafka-pip` | `kafka-pip/query-pip class id` avec fallback optionnel |
-| `:csv` | Lecture fichier CSV, recherche par colonne id |
-| `:internal` | Appel d'une fonction Clojure dans `autho.attfun` |
-| `:java` | Appel de `resolveAttribute` sur une instance Java |
+| `:kafka-pip` | `kafka-pip/query-pip class id` with optional fallback |
+| `:csv` | CSV file read, search by id column |
+| `:internal` | Calls a Clojure function in `autho.attfun` by name |
+| `:java` | Calls `resolveAttribute` on a Java instance |
 
-### `autho.kafka-pip-unified` — PIP Kafka unifié
+### `autho.kafka-pip-unified` — Unified Kafka PIP
 
-Consomme un topic Kafka unique (`business-objects-compacted`). Les messages contiennent un champ `class` pour le routage.
+Consumes a single Kafka topic (`business-objects-compacted`). Messages carry a `class` field for routing to the appropriate Column Family.
 
-**Flux de données :**
+**Data flow:**
 ```
-Kafka topic  →  consommateur dédié  →  RocksDB (Column Families par classe)
-                                              ↑
-                                     query-pip(class, id)
+Kafka topic  →  dedicated consumer thread  →  RocksDB (one Column Family per class)
+                                                        ↑
+                                              query-pip(class, id)
 ```
 
-**Format des messages :**
+**Message format:**
 ```json
-{ "class": "Facture", "id": "FAC-123", "montant": 4500, "service": "service1" }
+{ "class": "Facture", "id": "FAC-123", "amount": 4500, "service": "service1" }
 ```
 
-Les champs `class` et `id` sont retirés avant stockage. Les mises à jour sont fusionnées (merge-on-read).
+`class` and `id` fields are removed before storage. Updates are merged (merge-on-read).
 
-**State management :**
-- `db-state` — atom contenant l'instance RocksDB et les handles des Column Families
-- `consumer-handle` — atom contenant le thread consommateur et la fonction d'arrêt
+**State management:**
+- `db-state` — atom holding the RocksDB instance and Column Family handles
+- `consumer-handle` — atom holding the consumer thread and its stop function
 
-### `autho.attfun` — Fonctions d'attributs et opérateurs
+### `autho.attfun` — Attribute Functions and Operators
 
-Contient les opérateurs de comparaison et les fillers internes.
+Contains the comparison operators used in rule evaluation and the internal fillers.
 
-**Opérateurs :**
+**Operators:**
 
-| Opérateur | Signature | Comportement |
-|-----------|-----------|-------------|
-| `=` | `(= a b)` | Égalité (délègue à `clojure.core/=`) |
-| `diff` | `(diff a b)` | Différence |
-| `<`, `>`, `<=`, `>=` | `(op a b)` | Comparaison numérique via `edn/read-string` |
-| `in` | `(in val set)` | Appartenance ; `set` peut être une chaîne `"a,b,c"` |
-| `notin` | `(notin val set)` | Non-appartenance |
-| `date>` | `(date> d1 d2)` | Comparaison de dates ISO (`yyyy-MM-dd`) |
+| Operator | Signature | Behaviour |
+|----------|-----------|-----------|
+| `=` | `(= a b)` | Equality (delegates to `clojure.core/=`) |
+| `diff` | `(diff a b)` | Inequality |
+| `<`, `>`, `<=`, `>=` | `(op a b)` | Numeric comparison via `edn/read-string` |
+| `in` | `(in val set)` | Membership; `set` may be a comma-separated string `"a,b,c"` |
+| `notin` | `(notin val set)` | Non-membership |
+| `date>` | `(date> d1 d2)` | ISO date comparison (`yyyy-MM-dd`) |
 
-**Fillers internes :**
-- `fillPerson` — fusionne le sujet avec les données LDAP depuis `prp/personSingleton`
-- `internalFiller` — dispatcher vers une fonction filler par son nom
+**Internal fillers:**
+- `fillPerson` — merges the subject with LDAP person data from `prp/personSingleton`
+- `internalFiller` — dispatches to a named filler function
 
-### `autho.local-cache` — Cache multi-niveaux
+### `autho.local-cache` — Multi-Level Cache
 
-Cache en mémoire à deux couches :
+In-memory cache with three independent stores:
 
-| Cache | Clé | Contenu |
-|-------|-----|---------|
-| Décisions | `(subject-id, resource-class, resource-id, operation)` | Résultat de la décision |
-| Sujets | `subject-id` | Attributs enrichis du sujet |
-| Ressources | `(resource-class, resource-id)` | Attributs enrichis de la ressource |
+| Cache | Key | Contents |
+|-------|-----|----------|
+| Decisions | `(subject-id, resource-class, resource-id, operation)` | Decision result |
+| Subjects | `subject-id` | Enriched subject attributes |
+| Resources | `(resource-class, resource-id)` | Enriched resource attributes |
 
-Invalidation possible en totalité ou par entrée depuis l'API admin.
+Can be fully cleared or invalidated per entry via the admin API.
 
-### `autho.audit` — Journal des décisions
+### `autho.audit` — Decision Log
 
-Chaque décision est enregistrée dans une base H2 embarquée avec :
-- sujet, classe ressource, id ressource, opération, décision, règles matchées
-- horodatage, hash SHA-256 chaîné (pour vérification d'intégrité)
+Every decision is persisted in an embedded H2 database with:
+- subject, resource class, resource id, operation, decision, matched rules
+- timestamp, chained SHA-256 hash (for integrity verification)
 
-API de recherche avec pagination, filtres et export CSV.
+Search API with pagination, filters, and CSV export.
 
-### `autho.delegation` — Délégation d'autorisation
+### `autho.delegation` — Authorisation Delegation
 
-Si un sujet n'est pas autorisé, le PDP vérifie s'il bénéficie d'une délégation depuis un autre sujet autorisé. La délégation est récursive avec détection de cycles.
+When a subject is not directly authorised, the PDP checks whether they hold a delegation from another authorised subject. Delegation is recursive with cycle detection.
 
 ---
 
-## Communication avec les services externes
+## External Service Communication
 
 ### LDAP
 
-**Rôle :** source des attributs personnes (rôle, service, habilitation, etc.)
+**Role:** source of person attributes (role, department, clearance level, etc.)
 
-**Connexion :**
+**Connection properties:**
 ```properties
-ldap.server = localhost
-ldap.port   = 389
+ldap.server        = localhost
+ldap.port          = 389
 ldap.connectstring = cn=admin,dc=example,dc=com
 ldap.password      = admin
 ldap.basedn        = ou=people,dc=example,dc=com
@@ -214,35 +214,35 @@ ldap.filter        = (objectClass=inetOrgPerson)
 ldap.attributes    = uid,cn,role,service,seuil,clearance-level
 ```
 
-**Intégration :**
-- Au démarrage : `person/loadPersons` charge l'annuaire en mémoire (`prp/personSingleton`)
-- Pendant l'évaluation : `attfun/fillPerson` fusionne le sujet avec les données LDAP en mémoire
-- Librairie : `puppetlabs/clj-ldap`
-- Rechargement à chaud : `POST /admin/reload_persons`
+**Integration:**
+- At startup: `person/loadPersons` loads the directory into memory (`prp/personSingleton`)
+- During evaluation: `attfun/fillPerson` merges the subject with in-memory LDAP data
+- Library: `puppetlabs/clj-ldap`
+- Hot reload: `POST /admin/reload_persons`
 
-**Flux :**
+**Flow:**
 ```
-Démarrage → ldap/init → ldap/search → person/loadPersons → prp/personSingleton
-Requête   → callFillers → fillPerson → merge(sujet, personne LDAP)
+Startup  → ldap/init → ldap/search → person/loadPersons → prp/personSingleton
+Request  → callFillers → fillPerson → merge(subject, LDAP person)
 ```
 
 ### Kafka + RocksDB
 
-**Rôle :** enrichissement des objets métier (Factures, Contrats, etc.) avec leurs attributs courants
+**Role:** enrichment of business objects (invoices, contracts, etc.) with their current attributes
 
-**Architecture :**
+**Architecture:**
 ```
-Producteurs métier  →  Kafka topic "business-objects-compacted"
-                                  ↓
-                        Consommateur dédié (thread)
-                                  ↓
-                        RocksDB (Column Families par classe)
-                        /tmp/rocksdb/shared
-                                  ↑
-                        callPip :kafka-pip-unified
+Business producers  →  Kafka topic "business-objects-compacted"
+                                   ↓
+                         Dedicated consumer thread
+                                   ↓
+                         RocksDB (Column Families per class)
+                         /tmp/rocksdb/shared
+                                   ↑
+                         callPip :kafka-pip-unified
 ```
 
-**Configuration (`resources/pips.edn`) :**
+**Configuration (`resources/pips.edn`):**
 ```clojure
 {:type :kafka-pip-unified
  :kafka-topic "business-objects-compacted"
@@ -250,127 +250,127 @@ Producteurs métier  →  Kafka topic "business-objects-compacted"
  :classes ["Facture" "Contrat" "EngagementJuridique"]}
 ```
 
-**Format des messages Kafka :**
+**Kafka message format:**
 ```json
 {
-  "class": "Facture",
-  "id":    "FAC-123",
-  "montant": 4500,
+  "class":   "Facture",
+  "id":      "FAC-123",
+  "amount":  4500,
   "service": "service1",
-  "statut":  "validée"
+  "status":  "approved"
 }
 ```
 
-**Désactivation :** `KAFKA_ENABLED=false` désactive le PIP `:kafka-pip` (pas `:kafka-pip-unified`).
+**Disabling Kafka:** `KAFKA_ENABLED=false` disables the `:kafka-pip` type (not `:kafka-pip-unified`).
 
-**RocksDB :** base embarquée (pas de serveur externe). Chemin configurable : `kafka.pip.rocksdb.path`.
+**RocksDB:** embedded database, no external server required. Path: `kafka.pip.rocksdb.path`.
 
-### PIPs REST externes
+### External REST PIPs
 
-**Rôle :** enrichissement depuis des services applicatifs existants
+**Role:** attribute enrichment from existing application services
 
-**Configuration :**
+**Configuration:**
 ```clojure
-{:class "Rapport"
- :pip {:type :rest
-       :url  "http://service-rapports:8080/api/rapports"
-       :verb "get"           ; ou "post"
-       :timeout-ms 5000}}   ; timeout optionnel (défaut 10 000 ms)
+{:class "Report"
+ :pip {:type       :rest
+       :url        "http://report-service:8080/api/reports"
+       :verb       "get"       ; or "post"
+       :timeout-ms 5000}}      ; optional, default 10 000 ms
 ```
 
-**Comportement :**
-- `GET` : appelle `{url}/{id}` — attend un objet JSON complet
-- `POST` : envoie le contexte objet en body
-- Circuit breaker par URL (Diehard) — ouvre après N échecs consécutifs
-- Pool de connexions HTTP partagé (clj-http + connection manager)
-- Métriques Prometheus par PIP
+**Behaviour:**
+- `GET`: calls `{url}/{id}` — expects a full JSON object in response
+- `POST`: sends the object context as body
+- Per-URL circuit breaker (Diehard) — opens after N consecutive failures
+- Shared HTTP connection pool (clj-http + connection manager)
+- Per-PIP Prometheus metrics
 
-**Retour :** le corps JSON est parsé comme map keyword → valeur. L'attribut demandé est extrait depuis cette map.
+**Return value:** the JSON body is parsed into a keyword-keyed map. The requested attribute is extracted from that map.
 
-### Base H2 (audit et versionnage)
+### H2 Database (audit and versioning)
 
-**Rôle :** persistance de l'audit des décisions et des versions de politiques
+**Role:** persistence of the decision audit log and policy versions
 
-- Base embarquée (fichier `resources/h2db`)
-- Accès via `clojure.java.jdbc`
-- Pas de service externe requis
+- Embedded database (file `resources/h2db`)
+- Accessed via `clojure.java.jdbc`
+- No external service required
 
 ---
 
-## Middleware stack (ordre d'application)
+## Middleware Stack (application order)
 
 ```
-requête entrante
+incoming request
     ↓
-wrap-graceful-shutdown   — rejette les nouvelles requêtes pendant l'arrêt
+wrap-graceful-shutdown   — rejects new requests during shutdown
     ↓
-wrap-error-handling      — catch toutes les exceptions, retourne JSON structuré
+wrap-error-handling      — catches all exceptions, returns structured JSON
     ↓
-tracing/wrap-tracing     — injection du trace-id OpenTelemetry
+tracing/wrap-tracing     — injects OpenTelemetry trace id
     ↓
-wrap-metrics             — comptage des requêtes Prometheus
+wrap-metrics             — Prometheus request counter
     ↓
-wrap-request-size-limit  — limite la taille du body (défaut configurable)
+wrap-request-size-limit  — enforces maximum body size
     ↓
-wrap-rate-limit          — limitation de débit par IP
+wrap-rate-limit          — per-IP rate limiting
     ↓
-wrap-input-validation    — validation JSON du body
+wrap-input-validation    — validates JSON body
     ↓
-auth/wrap-authentication — vérifie JWT ou API Key, injecte :identity dans la requête
+auth/wrap-authentication — verifies JWT or API Key, injects :identity into request
     ↓
 handler (PDP / PAP / Admin)
 ```
 
 ---
 
-## Structure des fichiers de configuration
+## Configuration Files
 
-| Fichier | Contenu |
-|---------|---------|
-| `resources/pdp-prop.properties` | Configuration principale (LDAP, Kafka, chemins) |
-| `resources/jrules.edn` | Politiques initiales chargées au démarrage |
-| `resources/pips.edn` | Déclarations des PIPs |
-| `resources/fillers.edn` | Fillers sujet/ressource |
-| `resources/delegations.edn` | Déclarations de délégation |
-| `resources/policySchema.json` | Schéma JSON de validation des politiques |
-
----
-
-## Variables d'environnement
-
-| Variable | Obligatoire | Description |
-|----------|-------------|-------------|
-| `JWT_SECRET` | Oui | Clé de signature JWT (min. 32 caractères) |
-| `API_KEY` | Oui | Clé API pour les clients de confiance |
-| `KAFKA_ENABLED` | Non | `false` pour désactiver le PIP Kafka (défaut `true`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Non | Endpoint OTLP pour les traces |
+| File | Contents |
+|------|----------|
+| `resources/pdp-prop.properties` | Main configuration (LDAP, Kafka, paths) |
+| `resources/jrules.edn` | Initial policies loaded at startup |
+| `resources/pips.edn` | PIP declarations |
+| `resources/fillers.edn` | Subject/resource filler configuration |
+| `resources/delegations.edn` | Delegation declarations |
+| `resources/policySchema.json` | JSON Schema used to validate submitted policies |
 
 ---
 
-## Déploiement
+## Environment Variables
 
-### Jar autonome
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JWT_SECRET` | Yes | JWT signing key (min. 32 characters) |
+| `API_KEY` | Yes | API key for trusted clients |
+| `KAFKA_ENABLED` | No | Set to `false` to disable the Kafka PIP (default `true`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | OTLP endpoint for distributed traces |
+
+---
+
+## Deployment
+
+### Standalone JAR
 
 ```bash
 lein uberjar
 java -jar target/uberjar/autho-0.1.0-SNAPSHOT-standalone.jar
 ```
 
-### Environnement de développement
+### Development Environment
 
 ```bash
-# Démarrer LDAP + Kafka
+# Start LDAP + Kafka
 docker-compose -f docker/docker-compose.yml up -d
 
-# Démarrer le serveur
+# Start the server
 JWT_SECRET=dev-secret API_KEY=dev-key lein run
 ```
 
-### Tests d'intégration
+### Integration Tests
 
 ```bash
-# Requiert docker-compose up -d
+# Requires docker-compose up -d
 lein test :integration
 ```
 
-Les tests d'intégration créent leurs propres topics Kafka, bases RocksDB et serveur HTTP — ils ne partagent pas l'état du serveur en production.
+Integration tests create their own Kafka topics, RocksDB databases, and HTTP server — they do not share state with a running production server.
