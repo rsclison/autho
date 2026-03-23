@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { X, Save } from 'lucide-react'
+import { X, Save, AlertCircle } from 'lucide-react'
 import { ConditionBuilder } from './ConditionBuilder'
-import type { Rule, Condition } from '@/types/policy'
+import type { Rule, Condition, ConditionMember } from '@/types/policy'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,18 +36,38 @@ interface Props {
   onCancel: () => void
 }
 
+function hasEmptyAttribute(m: ConditionMember): boolean {
+  return Array.isArray(m) && !m[2]
+}
+
 export function RuleForm({ initial, onSave, onCancel }: Props) {
   const [rule, setRule] = useState<Rule>(initial ?? emptyRule())
   const [useDateRange, setUseDateRange] = useState(
     !isDefaultDateRange(initial?.startDate, initial?.endDate) &&
     !!(initial?.startDate && initial?.endDate)
   )
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const set = <K extends keyof Rule>(key: K, value: Rule[K]) =>
     setRule((r) => ({ ...r, [key]: value }))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setValidationError(null)
+
+    if (!rule.name?.trim()) {
+      setValidationError('Le nom de la règle est requis.')
+      return
+    }
+
+    const badCondition = (rule.conditions ?? []).find(
+      ([, op1, op2]) => hasEmptyAttribute(op1) || hasEmptyAttribute(op2),
+    )
+    if (badCondition) {
+      setValidationError("Toutes les conditions doivent avoir un attribut renseigné.")
+      return
+    }
+
     const saved: Rule = {
       ...rule,
       startDate: useDateRange ? rule.startDate : DEFAULT_START,
@@ -176,6 +196,14 @@ export function RuleForm({ initial, onSave, onCancel }: Props) {
           onChange={(c: Condition[]) => set('conditions', c)}
         />
       </div>
+
+      {/* Validation error */}
+      {validationError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <AlertCircle size={13} className="shrink-0" />
+          {validationError}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-2 border-t border-border">

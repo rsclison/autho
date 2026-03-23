@@ -29,6 +29,10 @@ export function useSubmitPolicy() {
       void qc.invalidateQueries({ queryKey: ['versions', resourceClass] })
       toast.success('Politique sauvegardée')
     },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Erreur lors de la sauvegarde'
+      toast.error(msg)
+    },
   })
 }
 
@@ -40,6 +44,10 @@ export function useDeletePolicy() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['policies'] })
       toast.success('Politique supprimée')
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Erreur lors de la suppression'
+      toast.error(msg)
     },
   })
 }
@@ -55,6 +63,10 @@ export function useImportYaml() {
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: ['policies'] })
       toast.success(`${data.rulesLoaded} règles importées pour ${data.resourceClass}`)
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Erreur lors de l'import YAML"
+      toast.error(msg)
     },
   })
 }
@@ -105,6 +117,10 @@ export function useRollback() {
       void qc.invalidateQueries({ queryKey: ['policy', data.resourceClass] })
       void qc.invalidateQueries({ queryKey: ['versions', data.resourceClass] })
       toast.success(`Rollback effectué — nouvelle version : v${data.newVersion}`)
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Erreur lors du rollback'
+      toast.error(msg)
     },
   })
 }

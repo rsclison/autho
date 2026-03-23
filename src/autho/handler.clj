@@ -459,7 +459,17 @@
 
            (PUT "/policy/:resourceClass"
                 {params :params body :body}
-                (json-response (prp/submit-policy (:resourceClass params) (slurp body))))
+                (try
+                  (prp/submit-policy (:resourceClass params) (slurp body))
+                  (json-response {:ok true})
+                  (catch clojure.lang.ExceptionInfo e
+                    (error-response "INVALID_POLICY"
+                                    (str "Policy validation failed: " (ex-message e))
+                                    400))
+                  (catch Exception e
+                    (error-response "POLICY_ERROR"
+                                    (str "Error saving policy: " (ex-message e))
+                                    500))))
            (DELETE "/policy/:resourceClass" [resourceClass]
                    (json-response (prp/delete-policy resourceClass)))
            (POST "/explain" request

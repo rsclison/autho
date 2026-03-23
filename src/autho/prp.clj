@@ -162,11 +162,12 @@
   ([^String resourceClass ^String policy]
    (submit-policy resourceClass policy nil nil))
   ([^String resourceClass ^String policy author comment]
-   (when (validjs/validate policySchema policy)
-     (let [pol-map (json/read-str policy :key-fn keyword)]
-       (insert-policy resourceClass pol-map)
-       (pv/save-version! resourceClass pol-map author comment)
-       (local-cache/invalidate-decisions-for-class! resourceClass)))))
+   ;; validate throws clojure.lang.ExceptionInfo on failure, returns nil on success
+   (validjs/validate policySchema policy)
+   (let [pol-map (json/read-str policy :key-fn keyword)]
+     (insert-policy resourceClass pol-map)
+     (pv/save-version! resourceClass pol-map author comment)
+     (local-cache/invalidate-decisions-for-class! resourceClass))))
 
 
 
