@@ -5,7 +5,7 @@
             [autho.kafka-invalidation :as invalidation]
             [autho.metrics :as metrics]
             [clojure.tools.logging :as log])
-  (:import (java.util.concurrent TimeUnit)))
+)
 
 ;; =============================================================================
 ;; Helper Functions

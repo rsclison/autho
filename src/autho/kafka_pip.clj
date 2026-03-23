@@ -1,9 +1,9 @@
 (ns autho.kafka-pip
   (:require [clojure.tools.logging :as log]
             [jsonista.core :as json])
-  (:import (org.rocksdb RocksDB Options DBOptions ColumnFamilyDescriptor ColumnFamilyHandle ColumnFamilyOptions)
+  (:import (org.rocksdb RocksDB DBOptions ColumnFamilyDescriptor ColumnFamilyHandle ColumnFamilyOptions)
            (org.apache.kafka.clients.consumer KafkaConsumer ConsumerConfig)
-           (java.util Properties ArrayList List)
+           (java.util Properties ArrayList)
            (java.nio.charset StandardCharsets)
            (java.time Duration)))
 

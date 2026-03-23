@@ -1,11 +1,7 @@
 (ns autho.jsonrule
-  (:require [clojure.string :as str]
-            [autho.jsonpath :as js]
-            [autho.pip :as pip]
-            [autho.prp :as prp]
+  (:require [autho.jsonpath :as js]
             [autho.attfun :as attfun])
-  (:use clojure.test)
-  )
+  (:use clojure.test))
 
 ;; a context is like {:class :student :name "john" :age 21}
 ;; callPip return a map which is like a context. In fact alaways return the object map with the attribute included

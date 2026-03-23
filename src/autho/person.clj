@@ -1,6 +1,5 @@
 (ns autho.person
-  (:require [autho.utils :as utl]
-            [autho.prp :as prp]
+  (:require [autho.prp :as prp]
             [autho.ldap :as ldap]))
 
 

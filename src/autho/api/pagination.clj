@@ -1,8 +1,7 @@
 (ns autho.api.pagination
   "Pagination utilities for API list endpoints.
    Provides parsing and processing of pagination parameters."
-  (:require [clojure.string :as str])
-  (:import (java.util ArrayList)))
+  (:require [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Configuration

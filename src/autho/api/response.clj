@@ -1,8 +1,7 @@
 (ns autho.api.response
   "Standardized API response utilities with consistent format.
    Provides success and error responses with metadata support."
-  (:require [jsonista.core :as json]
-            [clojure.string :as str])
+  (:require [jsonista.core :as json])
   (:import (java.time Instant)))
 ;; =============================================================================
 ;; Response Builders

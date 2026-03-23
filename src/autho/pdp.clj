@@ -1,5 +1,4 @@
 (ns autho.pdp
-  (:use [clojure.test :exclude [report]])
   (:require [autho.prp :as prp]
             [autho.jsonrule :as rule]
             [autho.kafka-pip :as kafka-pip]
@@ -17,14 +16,7 @@
             [clojure.data.json :as json]
             [autho.ldap :as ldap]
             [clojure.string :as str]
-            [autho.person :as person]
-            [java-time :as ti]
- ;;           [taoensso.timbre :as timbre
- ;;            :refer [log  trace  debug  info  warn  error  fatal report
- ;;                    logf tracef debugf infof warnf errorf fatalf reportf
- ;;                    spy get-env]]
-        ;;    [buddy.sign.jwt :as jwt]
-            )
+            [autho.person :as person])
   (:import (java.util Map)))
 
 (def properties (atom {}))

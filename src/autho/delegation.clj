@@ -1,7 +1,6 @@
 (ns autho.delegation
   (:require [autho.prp :as prp]
-            [autho.jsonrule :as jsonrule]
-            [autho.utils :as utl])
+            [autho.jsonrule :as jsonrule])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.delegation"))

@@ -1,15 +1,7 @@
 (ns autho.attfun
-  ;;(:use clojure.instant)
-;;  (:import (org.cocktail Pip))
-  (:require [clojure.string :as str])
-  (:require [clojure.data.json :as json])
-  (:require [clojure.core.cache :as cache])
-  (:require [clojure.edn :as edn])
-  (:require [clj-http [client]])
-  (:require [java-time :as ti])
- ;; (:require [clj-time.core :as t])
-  (:require
-    ;;[clj-time.format :as f]
+  (:require [clojure.string :as str]
+            [clojure.edn :as edn]
+            [java-time :as ti]
             [autho.prp :as prp]
             [autho.pip :as pip])
   (:import (org.slf4j LoggerFactory)))

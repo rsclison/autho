@@ -33,7 +33,6 @@
                  [metosin/jsonista "0.3.13"]
                  [com.h2database/h2 "2.4.240"]
                  [com.brunobonacci/mulog "0.9.0"]
-                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
                  [org.slf4j/slf4j-api "2.0.17"]
                  [ch.qos.logback/logback-classic "1.5.18"]
                  [org.apache.kafka/kafka-clients "4.1.0"]

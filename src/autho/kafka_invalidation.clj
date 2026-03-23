@@ -7,8 +7,7 @@
            (org.apache.kafka.clients.consumer ConsumerConfig KafkaConsumer)
            (org.apache.kafka.common.serialization StringSerializer StringDeserializer)
            (java.util Properties ArrayList)
-           (java.time Duration)
-           (java.nio.charset StandardCharsets)))
+           (java.time Duration)))
 
 ;; =============================================================================
 ;; Helper Functions

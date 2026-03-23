@@ -1,13 +1,11 @@
 (ns autho.prp
-  (:use [clojure.test])
   (:require [json-schema.core :as validjs]
             [clojure.data.json :as json]
             [clojure.java.jdbc :as jd]
             [autho.local-cache :as local-cache]
-            [autho.policy-versions :as pv])
-  (:require [clojure.java.io :as io] [clojure.edn :as edn])
-  (:require [java-time :as ti])
-  (:require [autho.utils :as utl])
+            [autho.policy-versions :as pv]
+            [java-time :as ti]
+            [autho.utils :as utl])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.prp"))
