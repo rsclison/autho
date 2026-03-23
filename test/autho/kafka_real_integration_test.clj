@@ -8,6 +8,7 @@
    3. Stop Kafka: docker-compose down"
   (:require [clojure.test :refer :all]
             [autho.kafka-pip :as kpip]
+            [autho.kafka-pip-unified :as kpu]
             [jsonista.core :as json])
   (:import [org.apache.kafka.clients.producer KafkaProducer ProducerConfig ProducerRecord]
            [org.apache.kafka.clients.admin AdminClient NewTopic]
@@ -387,3 +388,89 @@
               (str "Expected at least 950 users processed, got " (count valid-results))))
 
         (.close producer)))))
+
+;; =============================================================================
+;; Real Integration Test 7: Attribute Overwrite Verification (kafka-pip-unified)
+;; =============================================================================
+
+(def unified-test-db-path (str (System/getProperty "java.io.tmpdir") java.io.File/separator "rocksdb-unified-overwrite-test"))
+(def unified-test-topic "business-objects-overwrite-test")
+
+(defn cleanup-unified-test-db []
+  (let [dir (clojure.java.io/file unified-test-db-path)]
+    (when (.exists dir)
+      (doseq [file (.listFiles dir)]
+        (.delete file))
+      (.delete dir))))
+
+(deftest ^:integration kafka-unified-attribute-overwrite-test
+  (when-not (kafka-available?)
+    (println "⚠️  Skipping test: Kafka not available")
+    (is true "Skipped - Kafka not running"))
+
+  (when (kafka-available?)
+    (testing "kafka-pip-unified: updated attribute is overwritten; unchanged attributes are preserved"
+      (cleanup-unified-test-db)
+      (ensure-topic-exists unified-test-topic 1)
+
+      ;; Open shared RocksDB for the unified PIP
+      (kpu/open-shared-db unified-test-db-path ["Facture"])
+
+      ;; Start the unified consumer
+      (kpu/start-unified-consumer {:kafka-bootstrap-servers kafka-bootstrap-servers
+                                   :kafka-topic             unified-test-topic})
+
+      (let [producer (create-kafka-producer)]
+
+        ;; -- Step 1: send initial object --
+        ;; The unified topic expects messages that include a "class" and "id" field.
+        (send-kafka-message producer unified-test-topic "FAC-001"
+                            {:class   "Facture"
+                             :id      "FAC-001"
+                             :montant 1000
+                             :statut  "brouillon"
+                             :service "finance"})
+
+        (wait-for-kafka-message-processing 3000)
+
+        ;; Verify initial state
+        ;; Note: numeric values are preserved as numbers through JSON serialization
+        (let [v1 (kpu/query-pip "Facture" "FAC-001")]
+          (is (some? v1)                        "Object should exist after initial message")
+          (is (= 1000        (get v1 :montant)) "Initial montant should be 1000")
+          (is (= "brouillon" (get v1 :statut))  "Initial statut should be brouillon")
+          (is (= "finance"   (get v1 :service)) "Initial service should be finance"))
+
+        ;; -- Step 2: update only :statut --
+        (send-kafka-message producer unified-test-topic "FAC-001"
+                            {:class  "Facture"
+                             :id     "FAC-001"
+                             :statut "valide"})
+
+        (wait-for-kafka-message-processing 3000)
+
+        ;; :statut must be overwritten; :montant and :service must be preserved
+        (let [v2 (kpu/query-pip "Facture" "FAC-001")]
+          (is (= "valide"  (get v2 :statut))  "statut should be overwritten to valide")
+          (is (= 1000      (get v2 :montant)) "montant should still be 1000 (preserved)")
+          (is (= "finance" (get v2 :service)) "service should still be finance (preserved)"))
+
+        ;; -- Step 3: update only :montant --
+        (send-kafka-message producer unified-test-topic "FAC-001"
+                            {:class   "Facture"
+                             :id      "FAC-001"
+                             :montant 2500})
+
+        (wait-for-kafka-message-processing 3000)
+
+        ;; Old montant value (1000) must be gone; statut and service must be preserved
+        (let [v3 (kpu/query-pip "Facture" "FAC-001")]
+          (is (= 2500      (get v3 :montant)) "montant should be overwritten to 2500 (old value 1000 is gone)")
+          (is (= "valide"  (get v3 :statut))  "statut should still be valide (preserved)")
+          (is (= "finance" (get v3 :service)) "service should still be finance (preserved)"))
+
+        (.close producer))
+
+      ;; Teardown
+      (kpu/stop-unified-pip)
+      (cleanup-unified-test-db))))
