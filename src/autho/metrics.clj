@@ -1,7 +1,7 @@
 (ns autho.metrics
   "Prometheus metrics registry for autho.
    Exposes counters and timers for PDP decisions, cache activity, and HTTP traffic."
-  (:import (io.micrometer.prometheus PrometheusMeterRegistry PrometheusConfig)
+  (:import (io.micrometer.prometheusmetrics PrometheusMeterRegistry PrometheusConfig)
            (io.micrometer.core.instrument Counter Counter$Builder Timer Timer$Builder)
            (io.micrometer.core.instrument.binder.jvm JvmMemoryMetrics JvmGcMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)))
