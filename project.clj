@@ -37,7 +37,7 @@
                  [ch.qos.logback/logback-classic "1.5.32"]
                  [org.apache.kafka/kafka-clients "4.2.0"]
                  [org.apache.kafka/kafka-streams "4.2.0"]
-                 [org.rocksdb/rocksdbjni "8.11.4"]
+                 [org.rocksdb/rocksdbjni "10.5.1"]
                  [clj-commons/clj-yaml "1.0.29"]
                  [io.micrometer/micrometer-core "1.16.4"]
                  [io.micrometer/micrometer-registry-prometheus "1.16.4"]
