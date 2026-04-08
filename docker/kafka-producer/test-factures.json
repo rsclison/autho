@@ -1,0 +1,32 @@
+[
+  {
+    "class": "Facture",
+    "id": "FAC-TEST-01",
+    "montant": 30000,
+    "statut": "validée",
+    "service": "service1",
+    "emetteur": "fournisseur-1",
+    "date": "2026-03-01",
+    "echeance": "2026-04-01"
+  },
+  {
+    "class": "Facture",
+    "id": "FAC-TEST-02",
+    "montant": 80000,
+    "statut": "validée",
+    "service": "service1",
+    "emetteur": "fournisseur-2",
+    "date": "2026-03-01",
+    "echeance": "2026-04-01"
+  },
+  {
+    "class": "Facture",
+    "id": "FAC-TEST-03",
+    "montant": 25000,
+    "statut": "en_attente",
+    "service": "service2",
+    "emetteur": "fournisseur-3",
+    "date": "2026-03-15",
+    "echeance": "2026-05-01"
+  }
+]

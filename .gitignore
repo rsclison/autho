@@ -15,9 +15,25 @@ pom.xml.asc
 .calva/output-window/output.calva-repl
 .lsp/.cache/db.transit.json
 autho.log
+autho.*.log
+autho-test*.log
 
-# Licence — clé privée JAMAIS committée
+# Bases de données runtime
+resources/auditdb.*
+resources/h2db.trace.db
+
+# Licence — clés et tokens ne jamais committer
 tools/license-private.pem
+licence_key_*
+
+# Fichiers temporaires
+res.txt
+
+# Environnements Python
+docker/**/.venv/
+
+# Outils tiers (cache)
+.serena/
 
 # Claude Code configuration
 .claude/.session/

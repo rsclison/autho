@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  nvd-suppressions.xml — Suppressions CVE pour OWASP DependencyCheck / lein-nvd
+  Référence : https://jeremylong.github.io/DependencyCheck/general/suppression.html
+
+  Format :
+  <suppress>
+    <notes>Raison de la suppression + référence interne (ex: VUL-2026-001)</notes>
+    <cve>CVE-YYYY-NNNNN</cve>
+    <until>YYYY-MM-DD</until>   <!-- date d'expiration optionnelle -->
+  </suppress>
+
+  Règles :
+  - Ne jamais supprimer un CVE critique (CVSS ≥ 9.0) sans date d'expiration et sans correctif
+  - Documenter systématiquement la raison (faux positif, non applicable, mitigation externe)
+  - Réviser ce fichier après chaque `lein nvd check` ou au moins mensuellement
+
+  Exemple de suppression (décommenter et adapter) :
+  <suppress>
+    <notes>Faux positif : CVE-YYYY-NNNNN s'applique au module X mais Autho n'utilise pas
+    la fonctionnalité vulnérable (endpoint Y désactivé). Référence : VUL-2026-001.</notes>
+    <cve>CVE-YYYY-NNNNN</cve>
+    <until>2026-12-31</until>
+  </suppress>
+-->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+  <!--
+    Ajoutez ici les suppressions au fur et à mesure des analyses.
+    Lancez d'abord : NVD_API_TOKEN=<votre-cle> lein nvd check
+  -->
+
+</suppressions>

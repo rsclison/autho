@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "clojure": {
+      "command": "npx",
+      "args": ["-y", "@glance/clojure-mcp"]
+    }
+  }
+}

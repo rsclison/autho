@@ -1,0 +1,23 @@
+{;; Seuil d'échec : fail si le CVSS le plus élevé dépasse ce seuil.
+ ;; 7.0 = High (bloque sur High et Critical, ignore Low et Medium).
+ ;; Mettre 11 pour ne jamais bloquer, 0 pour bloquer sur toute vulnérabilité.
+ :fail-threshold 7
+
+ ;; Répertoire de cache de la base NVD (évite 300 MB de téléchargement à chaque run).
+ :data-directory "/tmp/nvd-data"
+
+ ;; Fichier de suppressions des faux positifs (chemin relatif au répertoire nvd-helper).
+ :suppression-file "../nvd-suppressions.xml"
+
+ ;; Répertoire de sortie des rapports HTML/JSON (relatif au projet principal).
+ :output-dir "../target/nvd/"
+
+ ;; Afficher la sévérité pour toutes les dépendances, pas seulement celles vulnérables.
+ :verbose-summary false
+
+ ;; Clé API NVD — recommandée pour éviter le rate-limiting.
+ ;; Obtenir gratuitement sur : https://nvd.nist.gov/developers/request-an-api-key
+ ;; Passer via variable d'environnement plutôt qu'ici :
+ ;;   export NVD_API_TOKEN=<votre-clé>
+ ;; :nvd-api {:key "votre-clé-ici"}  ; <-- décommenter seulement si pas d'env var
+ }
