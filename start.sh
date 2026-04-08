@@ -17,8 +17,11 @@
 #   RATE_LIMIT_ANON_RPM    Limite anonyme (req/min)       (défaut: 100)
 #   KAFKA_ENABLED      Active Kafka / time-travel         (défaut: true)
 #   KAFKA_BOOTSTRAP_SERVERS  Serveurs Kafka               (défaut: localhost:9092)
-#   API_KEY            Clé API admin pour les routes /admin
-#   JWT_SECRET         Secret HMAC pour valider les JWT
+#   API_KEY            Clé API (OBLIGATOIRE, ≥ 32 caractères) — ex: $(openssl rand -hex 32)
+#   JWT_SECRET         Secret HMAC-SHA256 pour JWT (OBLIGATOIRE, ≥ 32 caractères) — ex: $(openssl rand -hex 32)
+#   AUDIT_HMAC_SECRET  Secret HMAC de la chaîne d'audit (OBLIGATOIRE, ≥ 32 caractères) — ex: $(openssl rand -hex 32)
+#   H2_AUDIT_CIPHER_KEY   Clé AES chiffrement base audit (recommandé prod) — ex: $(openssl rand -hex 32)
+#   H2_POLICY_CIPHER_KEY  Clé AES chiffrement base policy (recommandé prod) — ex: $(openssl rand -hex 32)
 
 set -euo pipefail
 
@@ -74,8 +77,33 @@ log "Config       : $PDP_CONFIG"
 log "Port         : ${PORT:-8080}"
 log "Kafka        : ${KAFKA_ENABLED}"
 log "Rate limit   : ${RATE_LIMIT_ENABLED}"
-[[ -n "${API_KEY:-}" ]] && ok "API_KEY      : définie" || warn "API_KEY      : non définie (routes /admin non protégées par clé)"
-[[ -n "${JWT_SECRET:-}" ]] && ok "JWT_SECRET   : définie" || warn "JWT_SECRET   : non définie"
+echo ""
+
+# ─── Vérification des secrets obligatoires (RGS : ≥ 32 caractères) ───────────
+check_secret() {
+  local name="$1" val="${!1:-}"
+  if [[ -z "$val" ]]; then
+    err "$name : non définie — OBLIGATOIRE"
+    err "  Générer : export $name=\$(openssl rand -hex 32)"
+    exit 1
+  elif [[ ${#val} -lt 32 ]]; then
+    err "$name : trop courte (${#val} caractères, minimum 32 requis par le RGS)"
+    err "  Générer : export $name=\$(openssl rand -hex 32)"
+    exit 1
+  else
+    ok "$name : définie (${#val} caractères)"
+  fi
+}
+
+check_secret JWT_SECRET
+check_secret API_KEY
+check_secret AUDIT_HMAC_SECRET
+
+# Clés de chiffrement H2 — optionnelles mais fortement recommandées en production
+[[ -n "${H2_AUDIT_CIPHER_KEY:-}"  ]] && ok "H2_AUDIT_CIPHER_KEY  : définie (chiffrement AES activé)" \
+                                      || warn "H2_AUDIT_CIPHER_KEY  : non définie — base audit NON CHIFFRÉE (déconseillé en production)"
+[[ -n "${H2_POLICY_CIPHER_KEY:-}" ]] && ok "H2_POLICY_CIPHER_KEY : définie (chiffrement AES activé)" \
+                                      || warn "H2_POLICY_CIPHER_KEY : non définie — base policy NON CHIFFRÉE (déconseillé en production)"
 echo ""
 
 # ─── Construction de l'UI si nécessaire ───────────────────────────────────────

@@ -8,8 +8,10 @@
             [autho.audit :as audit]
             [autho.policy-yaml :as policy-yaml]
             [autho.policy-versions :as pv]
+            [autho.policy-impact-history :as pih]
             [autho.otel :as otel]
             [autho.delegation :as deleg]
+            [autho.features :as features]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
             [clj-http [client]]
@@ -133,35 +135,190 @@
 ;; return a map composed of the result (:result) and the set of applicable rules (:rules)
 
 (defn- applicable-rules
-  "Filtre les règles d'une politique selon l'opération demandée.
-   Une règle sans :operation s'applique à toutes les opérations."
+  "Filtre les regles d'une politique selon l'operation demandee.
+   Si aucune operation n'est fournie, toutes les regles sont candidates.
+   Une regle sans :operation s'applique a toutes les operations."
   [rules operation]
   (filter (fn [rule]
             (let [rule-op (:operation rule)]
-              (or (nil? rule-op) (= rule-op operation))))
+              (or (nil? operation)
+                  (nil? rule-op)
+                  (= rule-op operation))))
           rules))
+
+(defn- validate-authz-request!
+  [authz-request]
+  (if-not (:resource authz-request)
+    (throw (ex-info "No resource specified" {:status 400})))
+  (if-not (:subject authz-request)
+    (throw (ex-info "No subject specified" {:status 400})))
+  authz-request)
+
+(defn- build-authz-request
+  [request body]
+  (validate-authz-request!
+   {:subject (get-subject request body)
+    :resource (:resource body)
+    :operation (:operation body)
+    :context (:context body)}))
+
+(defn- build-rule-evaluation
+  [rule augreq operation]
+  (let [rule-op (:operation rule)
+        op-match (or (nil? rule-op) (= rule-op operation))
+        eval-result (if op-match
+                      (rule/evaluateRule rule augreq)
+                      {:value false})]
+    {:rule rule
+     :name (:name rule)
+     :effect (:effect rule)
+     :operation (:operation rule)
+     :matched (:value eval-result)
+     :resourceClass (:resourceClass rule)
+     :priority (:priority rule)
+     :subjectCond (when-let [subject-cond (:subjectCond rule)]
+                    (rest subject-cond))
+     :resourceCond (when-let [resource-cond (:resourceCond rule)]
+                     (rest resource-cond))}))
+
+(defn- evaluate-policy-rules
+  [policy authz-request]
+  (let [augreq (enrich-request authz-request)
+        all-rules (vec (or (:rules policy) []))
+        op (:operation authz-request)
+        evaluated-rules (mapv #(build-rule-evaluation % augreq op) all-rules)
+        matched-rule-objs (mapv :rule (filter :matched evaluated-rules))]
+    {:policy policy
+     :authz-request authz-request
+     :augreq augreq
+     :operation op
+     :all-rules all-rules
+     :evaluated-rules evaluated-rules
+     :matched-rule-objs matched-rule-objs}))
+
+(defn- canonical-decision
+  [policy-eval]
+  (let [policy (:policy policy-eval)
+        matched-rule-objs (:matched-rule-objs policy-eval)
+        allowed? (boolean (resolve-conflict policy matched-rule-objs))]
+    (assoc policy-eval
+           :decision (if allowed? :allow :deny)
+           :allowed? allowed?
+           :matched-rule-names (mapv :name matched-rule-objs)
+           :conflict-strategy (:strategy policy))))
+
+(defn- who-authorized-matches
+  [policy body]
+  (let [op (:operation body)
+        candidate-rules (vec (applicable-rules (:rules policy) op))]
+    {:strategy (:strategy policy)
+     :allow-rules (->> candidate-rules
+                       (filter #(= "allow" (:effect %)))
+                       (filter #(rule/evalRuleWithResource % body))
+                       vec)
+     :deny-rules (->> candidate-rules
+                      (filter #(= "deny" (:effect %)))
+                      (filter #(rule/evalRuleWithResource % body))
+                      vec)}))
+
+(defn- project-who-authorized-rule
+  [rule]
+  {:resourceClass (:resourceClass rule)
+   :subjectCond (rest (:subjectCond rule))
+   :operation (:operation rule)})
+
+(declare enrich-with-objects)
+
+(defn- what-authorized-matches
+  [policy authz-request]
+  (let [op (:operation authz-request)
+        op-rules (vec (applicable-rules (:rules policy) op))]
+    {:strategy (:strategy policy)
+     :allow-rules (->> op-rules
+                       (filter #(= "allow" (:effect %)))
+                       (filter #(rule/evalRuleWithSubject % authz-request))
+                       vec)
+     :deny-rules (->> op-rules
+                      (filter #(= "deny" (:effect %)))
+                      (filter #(rule/evalRuleWithSubject % authz-request))
+                      vec)}))
+
+(defn- project-what-authorized-rule
+  [rule pagination-opts]
+  (enrich-with-objects
+   {:resourceClass (:resourceClass rule)
+    :resourceCond (if (vector? (:resourceCond rule))
+                    (rest (:resourceCond rule))
+                    (:resourceCond rule))
+    :operation (:operation rule)}
+   pagination-opts))
+
+(defn whoAuthorizedDetailed
+  "Returns the inverse authorization analysis for a resource.
+   This exposes both allow and deny rule candidates so callers can reason
+   about the inverse view without losing the policy conflict context."
+  [request body]
+  (if-not (:resource body)
+    (throw (ex-info "No resource specified" {:status 400})))
+
+  (let [policy (prp/getGlobalPolicy (:class (:resource body)))]
+    (if-not policy
+      (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
+
+    (let [matches (who-authorized-matches policy body)]
+      {:strategy (:strategy matches)
+       :operation (:operation body)
+       :resourceClass (:class (:resource body))
+       :allowCandidates (mapv project-who-authorized-rule (:allow-rules matches))
+       :denyCandidates (mapv project-who-authorized-rule (:deny-rules matches))})))
+
+(defn whatAuthorizedDetailed
+  "Returns the forward authorization analysis for a subject and optional resource class.
+   The result preserves both allow and deny rule projections so callers can
+   inspect the effective permission space with the policy strategy in view.
+   For backward compatibility, :resource is optional as long as the policy lookup
+   layer can resolve the intended class."
+  [request body]
+  (let [subject (get-subject request body)
+        page (get body :page 1)
+        pageSize (get body :pageSize 20)
+        authz-request {:subject subject
+                       :resource (:resource body)
+                       :operation (:operation body)
+                       :context (:context body)}]
+    (if-not (:subject authz-request)
+      (throw (ex-info "No subject specified" {:status 400})))
+
+    (let [policy (prp/getGlobalPolicy (:class (:resource authz-request)))]
+      (if-not policy
+        (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
+
+      (let [matches (what-authorized-matches policy authz-request)
+            pagination-opts {:page page :pageSize pageSize}]
+        {:strategy (:strategy matches)
+         :resourceClass (:class (:resource authz-request))
+         :operation (:operation authz-request)
+         :page page
+         :pageSize pageSize
+         :allow (mapv #(project-what-authorized-rule % pagination-opts)
+                      (:allow-rules matches))
+         :deny (mapv #(project-what-authorized-rule % pagination-opts)
+                     (:deny-rules matches))}))))
 
 (defn evalRequest
   "Evaluates an authorization request.
   Optional visited-subjects parameter tracks delegation chain to prevent cycles."
   ([request] (evalRequest request #{}))
   ([^Map request visited-subjects]
-   (if-not (:resource request)
-     (throw (ex-info "No resource specified" {:status 400})))
-   (if-not (:subject request)
-     (throw (ex-info "No subject specified" {:status 400})))
+   (validate-authz-request! request)
 
    (let [subject-id (:id (:subject request))
          globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
-         policy (prp/getPolicy (:class (:resource request)) (:application (:context request)))
-         augreq (enrich-request request)
-         evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                            (conj res rule)
-                                            res))
-                          [] (applicable-rules (:rules globalPolicy) (:operation request)))
-         resolve (resolve-conflict globalPolicy evalglob)]
+         decision-result (-> (evaluate-policy-rules globalPolicy request)
+                             (canonical-decision))
+         allowed? (:allowed? decision-result)]
 
-     (if resolve
+     (if allowed?
        (do
          (metrics/record-decision! :allow (:class (:resource request)))
          (audit/log-decision! {:subject-id     (:id (:subject request))
@@ -169,25 +326,23 @@
                                :resource-id    (:id (:resource request))
                                :operation      (:operation request)
                                :decision       :allow
-                               :matched-rules  (mapv :name evalglob)})
-         {:result resolve :rules evalglob})
+                               :matched-rules  (:matched-rule-names decision-result)})
+         {:result true :rules (:matched-rule-objs decision-result)})
        (let [deleg (deleg/findDelegation (:subject request))
-             ;; Filter out delegations that would create cycles
              safe-deleg (filter #(let [delegate-id (:id (:delegate %))]
                                    (not (contains? visited-subjects delegate-id)))
                                 deleg)
              new-visited (conj visited-subjects subject-id)
-             one (some #(let [delegate-id (:id (:delegate %))]
-                          ;; Log circular delegation attempts
-                          (when (contains? visited-subjects delegate-id)
-                            (.warn (org.slf4j.LoggerFactory/getLogger "autho.pdp")
-                                   "Circular delegation detected: {} -> {}"
-                                   subject-id delegate-id))
-                          (let [ev (evalRequest (assoc request :subject (:delegate %)) new-visited)]
-                            (when ev ev)))
-                       safe-deleg)]
-         (if one
-           one
+             delegated-allow (some #(let [delegate-id (:id (:delegate %))]
+                                      (when (contains? visited-subjects delegate-id)
+                                        (.warn (org.slf4j.LoggerFactory/getLogger "autho.pdp")
+                                               "Circular delegation detected: {} -> {}"
+                                               subject-id delegate-id))
+                                      (let [ev (evalRequest (assoc request :subject (:delegate %)) new-visited)]
+                                        (when (:result ev) ev)))
+                                   safe-deleg)]
+         (if delegated-allow
+           delegated-allow
            (do
              (metrics/record-decision! :deny (:class (:resource request)))
              (audit/log-decision! {:subject-id     (:id (:subject request))
@@ -195,55 +350,42 @@
                                    :resource-id    (:id (:resource request))
                                    :operation      (:operation request)
                                    :decision       :deny
-                                   :matched-rules  (mapv :name evalglob)})
-             {:result false :rules evalglob})))))))
+                                   :matched-rules  (:matched-rule-names decision-result)})
+             {:result false :rules (:matched-rule-objs decision-result)})))))))
 
 (defn isAuthorized [request body]
   (otel/with-span "authz.isAuthorized"
     {:subject-id     (str (get-in body [:subject :id]))
      :resource-class (str (get-in body [:resource :class]))
      :operation      (str (:operation body))}
-    (let [subject        (get-subject request body)
-          authz-request  {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}
-          subject-id     (:id subject)
-          resource-class (:class (:resource body))
-          resource-id    (:id (:resource body))
-          operation      (:operation body)]
-      (if-not (:resource authz-request)
-        (throw (ex-info "No resource specified" {:status 400})))
-      (if-not (:subject authz-request)
-        (throw (ex-info "No subject specified" {:status 400})))
+    (let [authz-request (build-authz-request request body)
+          subject-id (:id (:subject authz-request))
+          resource-class (:class (:resource authz-request))
+          resource-id (:id (:resource authz-request))
+          operation (:operation authz-request)]
+      (if-not (prp/getGlobalPolicy resource-class)
+        (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
 
-      ;; Decision cache lookup — skip when a context timestamp is present (time-travel)
       (or (when-not (:timestamp (:context body))
             (local-cache/get-cached-decision subject-id resource-class resource-id operation))
-          (let [globalPolicy (prp/getGlobalPolicy resource-class)]
-            (if-not globalPolicy
-              (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
-            (let [augreq   (enrich-request authz-request)
-                  evalglob (reduce (fn [res rule] (if (:value (rule/evaluateRule rule augreq))
-                                                    (conj res rule)
-                                                    res))
-                                   [] (applicable-rules (:rules globalPolicy) operation))
-                  result   {:results (map #(:name %1) evalglob)}]
-              (local-cache/cache-decision! subject-id resource-class resource-id operation result)
-              result))))))
+          (let [decision-result (evalRequest authz-request)
+                allowed? (:result decision-result)
+                matched-rules (mapv :name (:rules decision-result))
+                result {:allowed allowed?
+                        :decision (if allowed? "allow" "deny")
+                        :results matched-rules
+                        :matchedRules matched-rules
+                        :resourceClass resource-class
+                        :resourceId resource-id
+                        :operation operation}]
+            (local-cache/cache-decision! subject-id resource-class resource-id operation result)
+            result)))))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
-;; on considère pour simplifier que la condition est un ET de clauses
-;; on simplifie en retournant la 1ere règle en allow sans vérifier les deny
+;; on considÃ¨re pour simplifier que la condition est un ET de clauses
+;; on simplifie en retournant la 1ere rÃ¨gle en allow sans vÃ©rifier les deny
 (defn whoAuthorized [request body]
-  (if-not (:resource body)
-    (throw (ex-info "No resource specified" {:status 400})))
-
-  (let [op        (:operation body)
-        all-rules (:rules (prp/getGlobalPolicy (:class (:resource body))))
-        candrules (filter #(= "allow" (:effect %)) (applicable-rules all-rules op))
-        evrules   (filter #(rule/evalRuleWithResource % body) candrules)]
-    (map (fn [rule] {:resourceClass (:resourceClass rule)
-                     :subjectCond (rest (:subjectCond rule))
-                     :operation (:operation rule)})
-         evrules)))
+  (:allowCandidates (whoAuthorizedDetailed request body)))
 
 (defn whoAuthorizedByClass
   "Returns all authorization rules (allow) for a given resource class.
@@ -324,150 +466,77 @@
   - page: Page number (default: 1)
   - pageSize: Number of objects per page (default: 20)"
   [request body]
-  (let [subject (get-subject request body)
-        page (get body :page 1)
-        pageSize (get body :pageSize 20)
-        authz-request {:subject subject :resource (:resource body) :operation (:operation body)}]
-    (if-not (:subject authz-request)
-      (throw (ex-info "No subject specified" {:status 400})))
-
-    (let [op        (:operation authz-request)
-          all-rules (:rules (prp/getGlobalPolicy (:class (:resource authz-request))))
-          op-rules  (applicable-rules all-rules op)
-          allowrules (filter #(= "allow" (:effect %)) op-rules)
-          denyrules  (filter #(= "deny"  (:effect %)) op-rules)
-          evrules1 (filter #(rule/evalRuleWithSubject % authz-request) allowrules)
-          evrules2 (filter #(rule/evalRuleWithSubject % authz-request) denyrules)
-          pagination-opts {:page page :pageSize pageSize}]
-      {:allow (map #(enrich-with-objects % pagination-opts)
-                   (map (fn [rule] {:resourceClass (:resourceClass rule)
-                                    :resourceCond (if (vector? (:resourceCond rule))
-                                                    (rest (:resourceCond rule))
-                                                    (:resourceCond rule))
-                                    :operation (:operation rule)})
-                        evrules1))
-       :deny (map #(enrich-with-objects % pagination-opts)
-                  (map (fn [rule] {:resourceClass (:resourceClass rule)
-                                   :resourceCond (if (vector? (:resourceCond rule))
-                                                   (rest (:resourceCond rule))
-                                                   (:resourceCond rule))
-                                   :operation (:operation rule)})
-                       evrules2))})))
+  (let [detailed (whatAuthorizedDetailed request body)]
+    {:allow (:allow detailed)
+     :deny (:deny detailed)}))
 
 (defn explain
   "Explains the authorization decision by showing all evaluated rules and their results.
   Takes the same request body as isAuthorized, returns detailed rule evaluation information."
   [request body]
-  (let [subject (get-subject request body)
-        authz-request {:subject subject :resource (:resource body) :operation (:operation body) :context (:context body)}]
-    (if-not (:resource authz-request)
-      (throw (ex-info "No resource specified" {:status 400 :error-code "MISSING_RESOURCE"})))
-    (if-not (:subject authz-request)
-      (throw (ex-info "No subject specified" {:status 400 :error-code "MISSING_SUBJECT"})))
+  (let [authz-request (build-authz-request request body)
+        resource-class (:class (:resource authz-request))
+        resource-id (:id (:resource authz-request))
+        operation (:operation authz-request)
+        globalPolicy (prp/getGlobalPolicy resource-class)]
+    (if-not globalPolicy
+      (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
 
-    (let [globalPolicy (prp/getGlobalPolicy (:class (:resource authz-request)))
-          augreq (enrich-request authz-request)
-          all-rules (:rules globalPolicy)
-          op (:operation authz-request)
-          evaluated-rules (map (fn [rule]
-                                 (let [op-match    (let [rule-op (:operation rule)]
-                                                     (or (nil? rule-op) (= rule-op op)))
-                                       eval-result (if op-match
-                                                     (rule/evaluateRule rule augreq)
-                                                     {:value false})]
-                                   {:name (:name rule)
-                                    :effect (:effect rule)
-                                    :operation (:operation rule)
-                                    :matched (:value eval-result)
-                                    :resourceClass (:resourceClass rule)
-                                    :subjectCond (rest (:subjectCond rule))
-                                    :resourceCond (rest (:resourceCond rule))}))
-                               all-rules)
-          matched-rules (filter :matched evaluated-rules)
-          final-decision (resolve-conflict globalPolicy
-                                           (filter #(:value (rule/evaluateRule % augreq))
-                                                   (applicable-rules all-rules op)))]
-
-      (if-not globalPolicy
-        (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
-
-      {:decision final-decision
-       :strategy (:strategy globalPolicy)
-       :totalRules (count all-rules)
-       :matchedRules (count matched-rules)
-       :rules evaluated-rules})))
+    (let [decision-result (-> (evaluate-policy-rules globalPolicy authz-request)
+                              (canonical-decision))]
+      {:decision (:allowed? decision-result)
+       :allowed? (:allowed? decision-result)
+       :decisionType (name (:decision decision-result))
+       :strategy (:conflict-strategy decision-result)
+       :resourceClass resource-class
+       :resourceId resource-id
+       :operation operation
+       :totalRules (count (:all-rules decision-result))
+       :matchedRules (count (:matched-rule-objs decision-result))
+       :matchedRuleNames (:matched-rule-names decision-result)
+       :rules (:evaluated-rules decision-result)})))
 
 (defn simulate
   "Dry-run: evaluates an authorization request against a supplied (unsaved) policy.
    body keys:
-     :subject, :resource, :operation — same as isAuthorized
-     :simulatedPolicy — full policy map (resourceClass, strategy, rules)
+     :subject, :resource, :operation - same as isAuthorized
+     :simulatedPolicy - full policy map (resourceClass, strategy, rules)
                         If absent, uses the currently active policy (like explain).
-     :policyVersion   — integer; if supplied, uses that stored version instead
+     :policyVersion   - integer; if supplied, uses that stored version instead
    Returns the same shape as explain: decision + per-rule trace.
    Never writes to cache or audit log."
   [request body]
   (otel/with-span "authz.simulate"
     {:resource-class (str (get-in body [:resource :class]))}
-    (let [subject        (get-subject request body)
-          authz-request  {:subject subject
-                          :resource (:resource body)
-                          :operation (:operation body)
-                          :context (:context body)}
-          resource-class (:class (:resource body))]
-      (if-not (:resource authz-request)
-        (throw (ex-info "No resource specified" {:status 400})))
-      (if-not (:subject authz-request)
-        (throw (ex-info "No subject specified" {:status 400})))
+    (let [authz-request (build-authz-request request body)
+          resource-class (:class (:resource authz-request))
+          policy (cond
+                   (:simulatedPolicy body) (:simulatedPolicy body)
+                   (:policyVersion body) (pv/get-version resource-class (:policyVersion body))
+                   :else (prp/getGlobalPolicy resource-class))]
+      (if-not policy
+        (throw (ex-info "No policy available for simulation"
+                        {:status 404 :error-code "NO_POLICY"})))
 
-      (let [policy (cond
-                     ;; Explicit policy provided in the request body
-                     (:simulatedPolicy body)
-                     (:simulatedPolicy body)
-
-                     ;; Specific stored version requested
-                     (:policyVersion body)
-                     (pv/get-version resource-class (:policyVersion body))
-
-                     ;; Fallback: current active policy (same as explain)
-                     :else
-                     (prp/getGlobalPolicy resource-class))]
-        (if-not policy
-          (throw (ex-info "No policy available for simulation"
-                          {:status 404 :error-code "NO_POLICY"})))
-
-        (let [augreq    (enrich-request authz-request)
-              all-rules (:rules policy)
-              op        (:operation authz-request)
-              evaluated (map (fn [rule]
-                               (let [op-match (let [rule-op (:operation rule)]
-                                                (or (nil? rule-op) (= rule-op op)))
-                                     res      (if op-match
-                                                (rule/evaluateRule rule augreq)
-                                                {:value false})]
-                                 {:name         (:name rule)
-                                  :effect       (:effect rule)
-                                  :operation    (:operation rule)
-                                  :matched      (:value res)
-                                  :resourceClass (:resourceClass rule)
-                                  :subjectCond  (rest (:subjectCond rule))
-                                  :resourceCond (rest (:resourceCond rule))}))
-                             all-rules)
-              matched   (filter :matched evaluated)
-              decision  (resolve-conflict policy
-                                          (filter #(:value (rule/evaluateRule % augreq))
-                                                  (applicable-rules all-rules op)))]
-          {:decision      decision
-           :strategy      (:strategy policy)
-           :simulated     true
-           :policySource  (cond (:simulatedPolicy body) :provided
-                                (:policyVersion body)   :version
-                                :else                   :current)
-           :policyVersion (or (:policyVersion body)
-                              (pv/latest-version-number resource-class))
-           :totalRules    (count all-rules)
-           :matchedRules  (count matched)
-           :rules         evaluated})))))
+      (let [decision-result (-> (evaluate-policy-rules policy authz-request)
+                                (canonical-decision))]
+        {:decision      (:allowed? decision-result)
+         :allowed?      (:allowed? decision-result)
+         :decisionType  (name (:decision decision-result))
+         :strategy      (:conflict-strategy decision-result)
+         :resourceClass resource-class
+         :resourceId    (:id (:resource authz-request))
+         :operation     (:operation authz-request)
+         :simulated     true
+         :policySource  (cond (:simulatedPolicy body) :provided
+                              (:policyVersion body)   :version
+                              :else                   :current)
+         :policyVersion (or (:policyVersion body)
+                            (pv/latest-version-number resource-class))
+         :totalRules    (count (:all-rules decision-result))
+         :matchedRules  (count (:matched-rule-objs decision-result))
+         :matchedRuleNames (:matched-rule-names decision-result)
+         :rules         (:evaluated-rules decision-result)}))))
 
 (defn- load-props
   [file-name]
@@ -479,8 +548,11 @@
 (defn init []
   (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
   (metrics/init-jvm-metrics!)
-  (audit/init!)
-  (pv/init!)
+  (when (features/licensed? :audit)
+    (audit/init!))
+  (when (features/licensed? :versioning)
+    (pv/init!)
+    (pih/init!))
 
   ;; Only register Kafka shutdown hook if Kafka is enabled
   (when (kafka-enabled?)
@@ -503,7 +575,7 @@
       (kafka-pip/open-shared-db rocksdb-path kafka-pip-classes)
       (doseq [pip-config kafka-pips]
         (kafka-pip/init-pip pip-config)))
-    ;; Initialise le PIP Kafka unifié
+    ;; Initialise le PIP Kafka unifiÃ©
     (when (and (kafka-enabled?) (seq unified-pips) rocksdb-path)
       (kafka-pip-unified/open-shared-db rocksdb-path unified-classes)
       (doseq [pip-config unified-pips]
@@ -524,4 +596,6 @@
 
 
   )
+
+
 

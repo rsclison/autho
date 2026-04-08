@@ -19,17 +19,40 @@
 ;; Configuration
 ;; ---------------------------------------------------------------------------
 
-(def ^:private audit-db
-  {:classname   "org.h2.Driver"
-   :subprotocol "h2"
-   :subname     "./resources/auditdb;AUTO_SERVER=TRUE"
-   :user        "sa"
-   :password    ""})
+;; H2_AUDIT_CIPHER_KEY enables AES-128 at-rest encryption of the audit database.
+;; If set (≥ 32 chars recommended), the database file is encrypted transparently.
+;; WARNING: changing this key on an existing unencrypted database requires migration
+;; (see docs/SECURITY_ADMIN_GUIDE.md § "Migration vers le chiffrement H2").
+;; If unset, the database is stored unencrypted — acceptable for development only.
+(def ^:private h2-audit-cipher-key (System/getenv "H2_AUDIT_CIPHER_KEY"))
 
-;; HMAC secret loaded once at startup — rotate by restarting the server.
-;; For chain verification across restarts the same secret must be used.
-(defonce ^:private hmac-secret
-  (or (System/getenv "AUDIT_HMAC_SECRET") "default-dev-secret-change-in-prod"))
+(def ^:private audit-db
+  (merge
+   {:classname   "org.h2.Driver"
+    :subprotocol "h2"
+    :user        "sa"}
+   (if h2-audit-cipher-key
+     {:subname  "./resources/auditdb;AUTO_SERVER=TRUE;CIPHER=AES"
+      :password (str h2-audit-cipher-key " ")}
+     {:subname  "./resources/auditdb;AUTO_SERVER=TRUE"
+      :password ""})))
+
+;; hmac-secret is kept as a var for compatibility with audit tests that
+;; override private vars via with-redefs. Its value is resolved lazily to avoid
+;; failing namespace loading when the environment is not configured yet.
+(def ^:private hmac-secret nil)
+
+(defn- require-hmac-secret!
+  []
+  (let [secret (or hmac-secret (System/getenv "AUDIT_HMAC_SECRET"))]
+    (cond
+      (nil? secret)
+      (throw (ex-info "AUDIT_HMAC_SECRET environment variable must be set"
+                      {:type ::missing-config}))
+      (< (count secret) 32)
+      (throw (ex-info "AUDIT_HMAC_SECRET must be at least 32 characters (256 bits)"
+                      {:type ::weak-config :length (count secret) :minimum 32}))
+      :else secret)))
 
 ;; ---------------------------------------------------------------------------
 ;; Crypto helpers
@@ -91,10 +114,14 @@
 (defn init!
   "Create the audit table and load the last chain hash. Call from pdp/init."
   []
+  (when-not h2-audit-cipher-key
+    (.warn logger "H2_AUDIT_CIPHER_KEY is not set — audit database is stored UNENCRYPTED. Set this variable in production."))
   (try
+    (require-hmac-secret!)
     (create-table-if-absent!)
     (load-last-hash!)
-    (.info logger "Audit log initialised")
+    (.info logger "Audit log initialised (encryption: {})"
+           (if h2-audit-cipher-key "AES/CIPHER" "none"))
     (catch Exception e
       (.error logger "Failed to initialise audit log: {}" (.getMessage e) e))))
 
@@ -116,6 +143,7 @@
                                  :matched-rules matched-rules})
                   payload-hash (sha256 payload)
                   prev-hash    @last-hash
+                  hmac-secret  (require-hmac-secret!)
                   hmac         (hmac-sha256 (str prev-hash payload-hash) hmac-secret)]
               (jdbc/insert! audit-db :audit_log
                             {:ts             (java.sql.Timestamp/from (Instant/now))
@@ -189,7 +217,8 @@
   "Re-reads all audit entries in order and verifies the HMAC chain.
    Returns {:valid true} or {:valid false :broken-at id :reason reason}."
   []
-  (let [rows (jdbc/query audit-db ["SELECT * FROM AUDIT_LOG ORDER BY id ASC"])]
+  (let [hmac-secret (require-hmac-secret!)
+        rows (jdbc/query audit-db ["SELECT * FROM AUDIT_LOG ORDER BY id ASC"])]
     (loop [remaining rows
            prev-hash  "0000000000000000000000000000000000000000000000000000000000000000"]
       (if-let [row (first remaining)]

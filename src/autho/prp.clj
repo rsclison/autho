@@ -1,8 +1,10 @@
 (ns autho.prp
   (:require [json-schema.core :as validjs]
             [clojure.data.json :as json]
+            [autho.policy-format :as policy-format]
             [clojure.java.jdbc :as jd]
             [autho.local-cache :as local-cache]
+            [autho.policy-safety :as policy-safety]
             [autho.policy-versions :as pv]
             [java-time :as ti]
             [autho.utils :as utl])
@@ -10,16 +12,21 @@
 
 (defonce logger (LoggerFactory/getLogger "autho.prp"))
 
+;; H2_POLICY_CIPHER_KEY enables AES-128 at-rest encryption of the policy database.
+;; Must match the key used by policy_versions.clj (shared database).
+;; See docs/SECURITY_ADMIN_GUIDE.md for migration from unencrypted.
+(def ^:private h2-policy-cipher-key (System/getenv "H2_POLICY_CIPHER_KEY"))
+
 (def h2db
-  {:classname   "org.h2.Driver"
-   ;; :subprotocol "h2:mem"
-   :subprotocol "h2"
-  ;; :subname     "demo;DB_CLOSE_DELAY=-1"
-   :subname "./resources/h2db"
-   :user        "sa"
-   :password    ""
-  ;; :make-pool? true
-   })
+  (merge
+   {:classname   "org.h2.Driver"
+    :subprotocol "h2"
+    :user        "sa"}
+   (if h2-policy-cipher-key
+     {:subname  "./resources/h2db;CIPHER=AES"
+      :password (str h2-policy-cipher-key " ")}
+     {:subname  "./resources/h2db"
+      :password ""})))
 
 
 ;;(defrecord Rule [^String name ^String resourceClass ^String operation ^String condition ^String effect ^String startDate ^String endDate])
@@ -162,10 +169,12 @@
   ([^String resourceClass ^String policy author comment]
    ;; validate throws clojure.lang.ExceptionInfo on failure, returns nil on success
    (validjs/validate policySchema policy)
-   (let [pol-map (json/read-str policy :key-fn keyword)]
-     (insert-policy resourceClass pol-map)
-     (pv/save-version! resourceClass pol-map author comment)
-     (local-cache/invalidate-decisions-for-class! resourceClass))))
+   (let [pol-map (-> (json/read-str policy :key-fn keyword)
+                     (policy-format/normalize-policy))]
+      (policy-safety/validate-policy! resourceClass pol-map)
+      (insert-policy resourceClass pol-map)
+      (pv/save-version! resourceClass pol-map author comment)
+      (local-cache/invalidate-decisions-for-class! resourceClass))))
 
 
 

@@ -25,7 +25,7 @@
           (handlers/what-authorized request))
 
     (POST "/explain" request
-          (handlers/explain-decision))
+          (handlers/explain-decision request))
 
     (POST "/simulate" request
           (handlers/simulate-decision request))
@@ -56,6 +56,25 @@
          (handlers/diff-policy-versions resource-class
                                          (get-in request [:params :from])
                                          (get-in request [:params :to])))
+
+    (GET "/:resource-class/timeline" [resource-class :as request]
+         (handlers/get-policy-change-timeline resource-class request))
+
+    (POST "/:resource-class/impact" [resource-class :as request]
+          (handlers/analyze-policy-impact resource-class request))
+
+    (GET "/:resource-class/impact/history" [resource-class]
+         (handlers/list-policy-impact-history resource-class))
+
+    (GET "/:resource-class/impact/history/:analysis-id" [resource-class analysis-id]
+         (handlers/get-policy-impact-history-entry resource-class analysis-id))
+
+
+    (POST "/:resource-class/impact/history/:analysis-id/review" [resource-class analysis-id :as request]
+          (handlers/update-policy-impact-review resource-class analysis-id request))
+
+    (POST "/:resource-class/impact/history/:analysis-id/rollout" [resource-class analysis-id :as request]
+          (handlers/rollout-policy-impact-preview resource-class analysis-id request))
 
     (POST "/:resource-class/rollback/:version" [resource-class version :as request]
           (handlers/rollback-policy resource-class version request))
@@ -116,3 +135,6 @@
 
     (POST "/batch-get" request
           (resource-handlers/batch-get-resources request))))
+
+
+

@@ -9,8 +9,8 @@
     (let [ldap-props {:ldap.basedn "dc=example,dc=com"
                       :ldap.filter "(objectClass=person)"
                       :ldap.attributes "cn,sn,mail"}
-          dummy-persons [{:dn "cn=user1,dc=example,dc=com" :attributes {:cn ["User1"] :sn ["Test"] :mail ["user1@example.com"]}}
-                         {:dn "cn=user2,dc=example,dc=com" :attributes {:cn ["User2"] :sn ["Test"] :mail ["user2@example.com"]}}]]
+          dummy-persons [{:dn "cn=user1,dc=example,dc=com" :cn ["User1"] :sn ["Test"] :mail ["user1@example.com"]}
+                         {:dn "cn=user2,dc=example,dc=com" :cn ["User2"] :sn ["Test"] :mail ["user2@example.com"]}]]
       (with-redefs [ldap/search (fn [base-dn opts] dummy-persons)]
         (person/loadPersons {:type :ldap :props ldap-props})
         (let [loaded-persons @prp/personSingleton]
