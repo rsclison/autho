@@ -92,11 +92,434 @@ components:
     AuthzDecision:
       type: object
       properties:
+        allowed:
+          type: boolean
+        decision:
+          type: string
+          enum: [allow, deny]
         results:
           type: array
           items:
             type: string
           description: Names of matched rules
+        matchedRules:
+          type: array
+          items:
+            type: string
+        resourceClass:
+          type: string
+        resourceId:
+          type: string
+        operation:
+          type: string
+
+    WhoAuthorizedRuleProjection:
+      type: object
+      properties:
+        resourceClass:
+          type: string
+        subjectCond:
+          type: array
+          items:
+            type: array
+            items: {}
+        operation:
+          type: string
+
+    WhoAuthorizedDecision:
+      type: object
+      properties:
+        strategy:
+          type: string
+        resourceClass:
+          type: string
+        operation:
+          type: string
+        allowCandidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/WhoAuthorizedRuleProjection'
+        denyCandidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/WhoAuthorizedRuleProjection'
+
+    WhatAuthorizedRuleProjection:
+      type: object
+      properties:
+        resourceClass:
+          type: string
+        resourceCond:
+          oneOf:
+            - type: array
+              items: {}
+            - type: object
+              additionalProperties: true
+        operation:
+          type: string
+        objects:
+          type: object
+          additionalProperties: true
+
+    WhatAuthorizedDecision:
+      type: object
+      properties:
+        strategy:
+          type: string
+        resourceClass:
+          type: string
+        operation:
+          type: string
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        allow:
+          type: array
+          items:
+            $ref: '#/components/schemas/WhatAuthorizedRuleProjection'
+        deny:
+          type: array
+          items:
+            $ref: '#/components/schemas/WhatAuthorizedRuleProjection'
+
+    DecisionExplanation:
+      type: object
+      properties:
+        decision:
+          type: boolean
+        "allowed?":
+          type: boolean
+        decisionType:
+          type: string
+          enum: [allow, deny]
+        strategy:
+          type: string
+        resourceClass:
+          type: string
+        resourceId:
+          type: string
+        operation:
+          type: string
+        totalRules:
+          type: integer
+        matchedRules:
+          type: integer
+        matchedRuleNames:
+          type: array
+          items:
+            type: string
+        rules:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    SimulationDecision:
+      allOf:
+        - $ref: '#/components/schemas/DecisionExplanation'
+        - type: object
+          properties:
+            simulated:
+              type: boolean
+            policySource:
+              type: string
+              enum: [provided, version, current]
+            policyVersion:
+              type: integer
+
+    PolicyImpactChange:
+      type: object
+      properties:
+        requestId:
+          type: integer
+        request:
+          type: object
+          additionalProperties: true
+        before:
+          type: object
+          additionalProperties: true
+        after:
+          type: object
+          additionalProperties: true
+        changed:
+          type: boolean
+        changeType:
+          type: string
+          enum: [grant, revoke, unchanged]
+        changeCategory:
+          type: string
+          enum: [deny_to_allow, allow_to_deny, unchanged]
+        winningRuleNames:
+          type: array
+          items:
+            type: string
+        losingRuleNames:
+          type: array
+          items:
+            type: string
+
+    PolicyImpactOperationSummary:
+      type: object
+      properties:
+        totalRequests:
+          type: integer
+        changedDecisions:
+          type: integer
+        grants:
+          type: integer
+        revokes:
+          type: integer
+
+    PolicyBlastRadius:
+      type: object
+      properties:
+        subjects:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PolicyImpactOperationSummary'
+        resources:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PolicyImpactOperationSummary'
+        operations:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PolicyImpactOperationSummary'
+
+    PolicyImpactRankingEntry:
+      type: object
+      properties:
+        key:
+          type: string
+        changedDecisions:
+          type: integer
+        grants:
+          type: integer
+        revokes:
+          type: integer
+
+    PolicyImpactRiskSignals:
+      type: object
+      properties:
+        highRisk:
+          type: boolean
+        revokeCount:
+          type: integer
+        changedSubjectCount:
+          type: integer
+        changedResourceCount:
+          type: integer
+        changedOperationCount:
+          type: integer
+        topImpactedSubjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyImpactRankingEntry'
+        topImpactedResources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyImpactRankingEntry'
+
+    PolicyImpactSummary:
+      type: object
+      properties:
+        totalRequests:
+          type: integer
+        changedDecisions:
+          type: integer
+        grants:
+          type: integer
+        revokes:
+          type: integer
+        byOperation:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PolicyImpactOperationSummary'
+
+    PolicyImpactAnalysis:
+      type: object
+      properties:
+        analysisId:
+          type: integer
+        resourceClass:
+          type: string
+        baseline:
+          type: object
+          additionalProperties: true
+        candidate:
+          type: object
+          additionalProperties: true
+        summary:
+          $ref: '#/components/schemas/PolicyImpactSummary'
+        blastRadius:
+          $ref: '#/components/schemas/PolicyBlastRadius'
+        riskSignals:
+          $ref: '#/components/schemas/PolicyImpactRiskSignals'
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyImpactChange'
+
+    PolicyImpactHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        resourceClass:
+          type: string
+        baselineVersion:
+          type: integer
+        candidateVersion:
+          type: integer
+        candidateSource:
+          type: string
+        author:
+          type: string
+        requestCount:
+          type: integer
+        changedDecisions:
+          type: integer
+        revokeCount:
+          type: integer
+        highRisk:
+          type: boolean
+        reviewStatus:
+          type: string
+          enum: [draft, reviewed, approved, rejected]
+        reviewedBy:
+          type: string
+        reviewNote:
+          type: string
+        reviewedAt:
+          type: string
+          format: date-time
+        rolloutStatus:
+          type: string
+          enum: [not_deployed, deployed]
+        deployedVersion:
+          type: integer
+        deployedBy:
+          type: string
+        deployedAt:
+          type: string
+          format: date-time
+        candidatePolicy:
+          type: object
+          additionalProperties: true
+        deployedVersions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyVersionRecord'
+        analysis:
+          $ref: '#/components/schemas/PolicyImpactAnalysis'
+
+    PolicyVersionLink:
+      type: object
+      properties:
+        version:
+          type: integer
+        source_analysis_id:
+          type: integer
+        deployment_kind:
+          type: string
+        source_candidate_version:
+          type: integer
+
+    PolicyImpactRolloutResponse:
+      type: object
+      properties:
+        resourceClass:
+          type: string
+        analysisId:
+          type: integer
+        sourceCandidateVersion:
+          type: integer
+        sourceCandidatePolicy:
+          type: boolean
+        newVersion:
+          type: integer
+        rolloutStatus:
+          type: string
+          enum: [deployed]
+        versionLink:
+          $ref: '#/components/schemas/PolicyVersionLink'
+        history:
+          $ref: '#/components/schemas/PolicyImpactHistoryEntry'
+
+    PolicyVersionDiffRuleChange:
+      type: object
+      properties:
+        name:
+          type: string
+        changedFields:
+          type: array
+          items:
+            type: string
+        before:
+          type: object
+          additionalProperties: true
+        after:
+          type: object
+          additionalProperties: true
+
+    PolicyVersionDiffSummary:
+      type: object
+      properties:
+        strategyChanged:
+          type: boolean
+        addedRules:
+          type: integer
+        removedRules:
+          type: integer
+        changedRules:
+          type: integer
+        unchangedRules:
+          type: integer
+        totalRuleChanges:
+          type: integer
+
+    PolicyVersionDiff:
+      type: object
+      properties:
+        resourceClass:
+          type: string
+        from:
+          type: integer
+        to:
+          type: integer
+        strategy:
+          type: object
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+            changed:
+              type: boolean
+        summary:
+          $ref: '#/components/schemas/PolicyVersionDiffSummary'
+        rules:
+          type: object
+          properties:
+            added:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            removed:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            changed:
+              type: array
+              items:
+                $ref: '#/components/schemas/PolicyVersionDiffRuleChange'
+            unchanged:
+              type: array
+              items:
+                type: string
 
     BatchRequest:
       type: object
@@ -221,7 +644,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/WhoAuthorizedDecision'
+              example:
+                status: success
+                data:
+                  strategy: almost_one_allow_no_deny
+                  resourceClass: Document
+                  operation: read
+                  allowCandidates:
+                    - resourceClass: Document
+                      subjectCond: [["=", "role", "manager"]]
+                      operation: read
+                  denyCandidates: []
+                timestamp: "2026-03-26T10:00:00Z"
 
   /authz/permissions:
     post:
@@ -249,7 +688,22 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/WhatAuthorizedDecision'
+              example:
+                status: success
+                data:
+                  strategy: almost_one_allow_no_deny
+                  resourceClass: Document
+                  operation: read
+                  page: 1
+                  pageSize: 20
+                  allow: []
+                  deny: []
+                timestamp: "2026-03-26T10:00:00Z"
 
   /authz/explain:
     post:
@@ -268,7 +722,34 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/DecisionExplanation'
+
+  /authz/simulate:
+    post:
+      tags: [authorization]
+      summary: Simulate authorization decision against current, versioned, or provided policy
+      operationId: simulateDecision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthzRequest'
+      responses:
+        '200':
+          description: Simulated decision with rule trace
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/SimulationDecision'
 
   /authz/batch:
     post:
@@ -294,6 +775,229 @@ paths:
                         $ref: '#/components/schemas/BatchResult'
         '400':
           description: Batch too large or invalid
+
+  /policies/{resource-class}/impact:
+    post:
+      tags: [policies]
+      summary: Analyze decision impact of a candidate policy against a batch of requests
+      operationId: analyzePolicyImpact
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requests]
+              properties:
+                baselineVersion:
+                  type: integer
+                candidateVersion:
+                  type: integer
+                candidatePolicy:
+                  type: object
+                  additionalProperties: true
+                requests:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/AuthzRequest'
+      responses:
+        '200':
+          description: Policy impact analysis
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyImpactAnalysis'
+
+  /policies/{resource-class}/impact/history:
+    get:
+      tags: [policies]
+      summary: List persisted policy impact previews for a resource class
+      operationId: listPolicyImpactHistory
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stored impact previews
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PolicyImpactHistoryEntry'
+
+  /policies/{resource-class}/impact/history/{analysis-id}:
+    get:
+      tags: [policies]
+      summary: Get a persisted policy impact preview
+      operationId: getPolicyImpactHistoryEntry
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: analysis-id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Stored impact preview
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyImpactHistoryEntry'
+
+  /policies/{resource-class}/impact/history/{analysis-id}/review:
+    post:
+      tags: [policies]
+      summary: Update review status for a persisted policy impact preview
+      operationId: updatePolicyImpactReview
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: analysis-id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, reviewed, approved, rejected]
+                reviewNote:
+                  type: string
+      responses:
+        '200':
+          description: Updated review status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyImpactHistoryEntry'
+
+  /policies/{resource-class}/impact/history/{analysis-id}/rollout:
+    post:
+      tags: [policies]
+      summary: Promote an approved impact preview into a deployed policy version
+      operationId: rolloutPolicyImpactPreview
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: analysis-id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Preview promoted to a deployed version
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyImpactRolloutResponse'
+        '409':
+          description: Preview is not approved, not promotable, or already deployed
+
+  /policies/{resource-class}/timeline:
+    get:
+      tags: [policies]
+      summary: Get an audit-ready chronological timeline of policy changes
+      operationId: getPolicyChangeTimeline
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy change timeline
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyChangeTimeline'
+  /policies/{resource-class}/diff:
+    get:
+      tags: [policies]
+      summary: Compare two stored policy versions
+      operationId: diffPolicyVersions
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Policy version diff
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyVersionDiff'
+        '404':
+          description: One or both versions not found
 
   /policies:
     get:
@@ -358,6 +1062,61 @@ paths:
           description: Policy imported
         '400':
           description: Invalid YAML or missing resourceClass
+
+  /policies/{resource-class}/versions:
+    get:
+      tags: [policies]
+      summary: List stored policy versions with rollout lineage metadata
+      operationId: listPolicyVersions
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy versions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PolicyVersionRecord'
+
+  /policies/{resource-class}/versions/{version}:
+    get:
+      tags: [policies]
+      summary: Get a stored policy version with rollout lineage metadata
+      operationId: getPolicyVersion
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Policy version
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyVersionRecord'
+        '404':
+          description: Version not found
 
   /policies/{resourceClass}:
     get:
@@ -446,3 +1205,11 @@ paths:
       responses:
         '200':
           description: Cache entry invalidated
+
+
+
+
+
+
+
+
