@@ -80,7 +80,17 @@ export const api = {
 }
 
 /** Gestionnaire d'erreur global pour TanStack Query */
-export function handleQueryError(error: unknown): void {
+function shouldSuppressErrorToast(context: unknown): boolean {
+  if (!context || typeof context !== 'object') return false
+  const meta = (context as { meta?: { suppressErrorToast?: boolean } }).meta
+  return meta?.suppressErrorToast === true
+}
+
+export function handleQueryError(error: unknown, context?: unknown): void {
+  if (shouldSuppressErrorToast(context)) {
+    return
+  }
+
   if (error instanceof ApiError) {
     toast.error(error.message)
   } else if (error instanceof Error) {

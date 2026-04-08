@@ -2,7 +2,12 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import type { AuditResult, AuditSearchParams, AuditChainResult } from '@/types/audit'
 
-export function useAudit(params: AuditSearchParams) {
+interface UseAuditOptions {
+  suppressErrorToast?: boolean
+  retry?: boolean | number
+}
+
+export function useAudit(params: AuditSearchParams, options?: UseAuditOptions) {
   return useQuery({
     queryKey: ['audit', params],
     queryFn: () => {
@@ -17,6 +22,8 @@ export function useAudit(params: AuditSearchParams) {
       return api.get<AuditResult>(`/admin/audit/search?${qs.toString()}`)
     },
     placeholderData: (prev) => prev,
+    retry: options?.retry,
+    meta: options?.suppressErrorToast ? { suppressErrorToast: true } : undefined,
   })
 }
 

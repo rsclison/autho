@@ -1,4 +1,4 @@
-const TOKEN_KEY = 'autho-admin-token'
+﻿const TOKEN_KEY = 'autho-admin-token'
 const TOKEN_TYPE_KEY = 'autho-admin-token-type'
 const DARK_MODE_KEY = 'autho-dark-mode'
 
@@ -52,3 +52,4 @@ export function initDarkMode(): void {
     document.documentElement.classList.add('dark')
   }
 }
+

@@ -1,8 +1,8 @@
-import { defineConfig } from 'vitest/config'
+﻿import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') }
@@ -17,13 +17,17 @@ export default defineConfig({
       '/policies':       'http://localhost:8080',
       '/policy':         'http://localhost:8080',
       '/v1':             'http://localhost:8080',
-      '/admin':          'http://localhost:8080',
+      '/admin/audit':    'http://localhost:8080',
+      '/admin/reinit':   'http://localhost:8080',
+      '/admin/reload_rules': 'http://localhost:8080',
+      '/admin/reload_persons': 'http://localhost:8080',
+      '/admin/pips':     'http://localhost:8080',
       '/status':         'http://localhost:8080',
       '/health':         'http://localhost:8080',
       '/metrics':        'http://localhost:8080',
     }
   },
-  base: '/admin/',
+  base: command === 'serve' ? '/admin/ui/' : '/admin/',
   build: {
     outDir: '../resources/public/admin',
     emptyOutDir: true,
@@ -48,4 +52,4 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
   },
-})
+}))

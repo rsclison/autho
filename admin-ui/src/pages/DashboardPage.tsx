@@ -12,7 +12,14 @@ export default function DashboardPage() {
   const { data: status, isLoading: statusLoading } = useStatus()
   const { data: cache } = useCacheStats()
   const { data: policies } = usePolicies()
-  const { data: recentAudit } = useAudit({ page: 1, pageSize: 10 })
+  const {
+    data: recentAudit,
+    error: auditError,
+    isError: auditUnavailable,
+  } = useAudit(
+    { page: 1, pageSize: 10 },
+    { suppressErrorToast: true, retry: false },
+  )
 
   const policyCount = policies ? Object.keys(policies).length : 0
   const decisionHitRate = cache && (cache['decision-hits'] + cache['decision-misses']) > 0
@@ -82,7 +89,21 @@ export default function DashboardPage() {
         <h2 className="text-sm font-semibold text-foreground mb-4">
           Dernières décisions d'autorisation
         </h2>
-        {recentAudit?.items && recentAudit.items.length > 0 ? (
+        {auditUnavailable ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="font-medium">Journal d'audit indisponible</p>
+                <p className="text-xs leading-5 text-amber-800/90 dark:text-amber-200/80">
+                  {auditError instanceof Error
+                    ? auditError.message
+                    : "La lecture du stockage d'audit a échoué. Le Dashboard reste utilisable, mais les dernières décisions ne peuvent pas être affichées."}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : recentAudit?.items && recentAudit.items.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

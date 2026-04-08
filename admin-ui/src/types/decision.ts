@@ -1,4 +1,4 @@
-export interface AuthRequest {
+﻿export interface AuthRequest {
   subject: Record<string, unknown>
   resource: Record<string, unknown>
   operation: string
@@ -8,7 +8,15 @@ export interface AuthRequest {
 }
 
 export interface AuthResult {
+  allowed?: boolean
+  decision?: boolean
+  decisionType?: 'allow' | 'deny' | string
+  strategy?: string
   results: string[]
+  matchedRules?: number
+  resourceClass?: string
+  resourceId?: string
+  operation?: string
 }
 
 export interface ExplainRule {
@@ -21,10 +29,14 @@ export interface ExplainRule {
 }
 
 export interface ExplainResult {
+  allowed?: boolean
   decision: boolean
+  decisionType?: 'allow' | 'deny' | string
   strategy: string
-  totalRules: number
-  matchedRules: number
+  resourceClass?: string
+  resourceId?: string
+  operation?: string
+  matchedRuleNames?: string[]
   rules: ExplainRule[]
 }
 
@@ -33,3 +45,4 @@ export interface SimulateResult extends ExplainResult {
   policySource: 'provided' | 'version' | 'current'
   policyVersion: number | null
 }
+
