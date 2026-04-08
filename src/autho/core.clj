@@ -1,12 +1,14 @@
 (ns autho.core
   (:require [autho.handler :as handler]
-            [autho.pdp :as pdp])
+            [autho.pdp :as pdp]
+            [autho.features :as features])
   (:import (org.slf4j LoggerFactory))
   (:gen-class))
 
 (defonce logger (LoggerFactory/getLogger "autho.core"))
 
 (defn -main [& args]
+  (features/init!)
   (pdp/init)
   (let [mode (or (pdp/getProperty :autho.mode) "rest")]
     (if (= mode "rest")

@@ -21,6 +21,7 @@
             [compojure.route :as route]
             [jsonista.core :as json]
             [autho.auth :as auth]
+            [autho.features :as features]
             [clojure.string :as str])
   (:import (org.slf4j LoggerFactory)))
 
@@ -320,9 +321,13 @@
 
            ;; Health and monitoring endpoints
            (GET "/metrics" []
-                {:status  200
-                 :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
-                 :body    (metrics/scrape)})
+                (if (features/licensed? :metrics)
+                  {:status  200
+                   :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
+                   :body    (metrics/scrape)}
+                  (error-response "LICENSE_REQUIRED"
+                                  "L'endpoint /metrics requiert une licence Pro ou Enterprise."
+                                  402)))
 
            (GET "/health" []
                 (json-response {:status "ok"
@@ -619,23 +624,27 @@
                                               (str "Failed to reload person cache: " (.getMessage e))
                                               500))))
 
-                    ;; Audit log endpoints
+                    ;; Audit log endpoints (licence Pro/Enterprise requise)
                     (GET "/audit/search" request
-                         (let [params (:query-params request)]
-                           (try
-                             (json-response (audit/search
-                                             {:subject-id     (get params "subjectId")
-                                              :resource-class (get params "resourceClass")
-                                              :decision       (when-let [d (get params "decision")] (keyword d))
-                                              :from           (get params "from")
-                                              :to             (get params "to")
-                                              :page           (some-> (get params "page") Long/parseLong)
-                                              :page-size      (some-> (get params "pageSize") Long/parseLong)}))
-                             (catch Exception e
-                               (.error logger "Audit search failed" e)
-                               (error-response "AUDIT_SEARCH_FAILED"
-                                               (str "Audit search failed: " (.getMessage e))
-                                               500)))))
+                         (if-not (features/licensed? :audit)
+                           (error-response "LICENSE_REQUIRED"
+                                           "L'audit requiert une licence Pro ou Enterprise."
+                                           402)
+                           (let [params (:query-params request)]
+                             (try
+                               (json-response (audit/search
+                                               {:subject-id     (get params "subjectId")
+                                                :resource-class (get params "resourceClass")
+                                                :decision       (when-let [d (get params "decision")] (keyword d))
+                                                :from           (get params "from")
+                                                :to             (get params "to")
+                                                :page           (some-> (get params "page") Long/parseLong)
+                                                :page-size      (some-> (get params "pageSize") Long/parseLong)}))
+                               (catch Exception e
+                                 (.error logger "Audit search failed" e)
+                                 (error-response "AUDIT_SEARCH_FAILED"
+                                                 (str "Audit search failed: " (.getMessage e))
+                                                 500))))))
 
                     ;; PIP schema: entity class → declared attributes (for UI autocomplete)
                     (GET "/pips/schema" []
@@ -677,12 +686,16 @@
                            (json-response mined)))
 
                     (GET "/audit/verify" []
-                         (try
-                           (json-response (audit/verify-chain))
-                           (catch Exception e
-                             (error-response "AUDIT_VERIFY_FAILED"
-                                             (str "Audit verification failed: " (.getMessage e))
-                                             500))))
+                         (if-not (features/licensed? :audit)
+                           (error-response "LICENSE_REQUIRED"
+                                           "L'audit requiert une licence Pro ou Enterprise."
+                                           402)
+                           (try
+                             (json-response (audit/verify-chain))
+                             (catch Exception e
+                               (error-response "AUDIT_VERIFY_FAILED"
+                                               (str "Audit verification failed: " (.getMessage e))
+                                               500)))))
 
                     ))))
 

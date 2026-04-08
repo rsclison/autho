@@ -16,6 +16,9 @@ pom.xml.asc
 .lsp/.cache/db.transit.json
 autho.log
 
+# Licence — clé privée JAMAIS committée
+tools/license-private.pem
+
 # Claude Code configuration
 .claude/.session/
 .claude/.*.tmp

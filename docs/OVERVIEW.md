@@ -71,6 +71,22 @@ A rare capability among authorisation servers, made possible by the immutable ev
 - Circuit breakers on HTTP PIPs
 - Real-time dashboard in the admin UI
 
+### Licensing
+
+Autho uses an **open-core** model. The core PDP (decisions) is free; advanced features require a Pro or Enterprise licence activated via the `AUTHO_LICENSE_KEY` environment variable.
+
+| Feature | Free | Pro | Enterprise |
+|---|:---:|:---:|:---:|
+| `isAuthorized`, `whoAuthorized`, `whatAuthorized` | ✓ | ✓ | ✓ |
+| Audit trail with HMAC integrity chain | — | ✓ | ✓ |
+| Policy versioning, diff & rollback | — | ✓ | ✓ |
+| `explain` & `simulate` | — | ✓ | ✓ |
+| Prometheus metrics (`/metrics`) | — | ✓ | ✓ |
+| Kafka PIP / RocksDB | — | — | ✓ |
+| Multi-instance cache synchronisation | — | — | ✓ |
+
+Without `AUTHO_LICENSE_KEY`, the server starts in Free mode — no error, no crash. A gated endpoint returns HTTP 402 with a clear message when accessed without the required licence.
+
 ---
 
 ## Authorisation Request Format
