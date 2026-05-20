@@ -54,6 +54,8 @@ If a trusted backend must evaluate permissions for a user on behalf of an applic
 
 All responses follow a standard format:
 
+Authorization decision endpoints expose the canonical decision contract documented in `docs/DECISION_CONTRACT.md`. New clients should prefer `allowed?`, `decisionType`, `effectiveSubject`, `matchedRuleNames`, `strategy`, and `policySource`. Compatibility fields such as `allowed`, `decision`, `results`, and `matchedRules` are still returned.
+
 ### Success Response
 ```json
 {
@@ -265,8 +267,26 @@ Make multiple authorization decisions in a single request.
   "status": "success",
   "data": {
     "results": [
-      {"request-id": 0, "decision": "allow"},
-      {"request-id": 1, "decision": "deny", "reason": "Insufficient permissions"}
+      {
+        "allowed?": true,
+        "decisionType": "allow",
+        "subjectId": "user123",
+        "resourceClass": "Document",
+        "resourceId": "doc1",
+        "operation": "read",
+        "matchedRuleNames": ["allow-read"],
+        "policySource": "current"
+      },
+      {
+        "allowed?": false,
+        "decisionType": "deny",
+        "subjectId": "user123",
+        "resourceClass": "Document",
+        "resourceId": "doc2",
+        "operation": "write",
+        "matchedRuleNames": [],
+        "policySource": "current"
+      }
     ]
   }
 }

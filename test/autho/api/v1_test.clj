@@ -361,6 +361,38 @@
       (is (= "AUTHENTICATION_REQUIRED" (get-in body [:error :code])))
       (is (= "Authentication required" (get-in body [:error :message]))))))
 
+(deftest batch-authorization-returns-canonical-decisions-test
+  (with-redefs [pdp/isAuthorized (fn [_ body]
+                                   {:allowed true
+                                    :allowed? true
+                                    :decision "allow"
+                                    :decisionType "allow"
+                                    :subjectId (get-in body [:subject :id])
+                                    :effectiveSubject (:subject body)
+                                    :resourceClass (get-in body [:resource :class])
+                                    :resourceId (get-in body [:resource :id])
+                                    :operation (:operation body)
+                                    :strategy :almost_one_allow_no_deny
+                                    :matchedRuleNames ["allow-rule"]
+                                    :policySource :current
+                                    :results ["allow-rule"]
+                                    :matchedRules ["allow-rule"]})]
+    (let [request-body (json/write-value-as-string
+                        {:requests [{:subject {:id "user1"}
+                                     :resource {:class "doc" :id "doc-1"}
+                                     :operation "read"}]})
+          response (handlers/batch-decisions (mock-request :body request-body))
+          body (parse-response-body response)
+          decision (first (get-in body [:data :results]))]
+      (is (= 200 (:status response)))
+      (is (= 1 (get-in body [:data :count])))
+      (is (= true (:allowed? decision)))
+      (is (= "allow" (:decisionType decision)))
+      (is (= "user1" (:subjectId decision)))
+      (is (= {:id "user1"} (:effectiveSubject decision)))
+      (is (= ["allow-rule"] (:matchedRuleNames decision)))
+      (is (= "current" (:policySource decision))))))
+
 (deftest explain-route-forwards-request-test
   (let [captured (atom nil)
         response (with-redefs [handlers/explain-decision

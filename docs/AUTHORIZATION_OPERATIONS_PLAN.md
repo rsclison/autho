@@ -32,6 +32,14 @@ Chantiers :
 
 Critere de succes : une meme requete donne la meme decision logique et les memes regles matchees sur tous les endpoints de decision.
 
+Etat d'avancement :
+
+- contrat canonique initial ajoute sur `isAuthorized`, `explain` et `simulate`;
+- coherence croisee testee entre ces trois endpoints;
+- batch v1 cadre pour retourner des decisions canoniques dans `data.results`;
+- invariants documentes dans `docs/DECISION_CONTRACT.md`;
+- time-travel explicitement exclu du contrat tant que l'integration PDP historique reste en attente.
+
 ## Priorite 2 - Policy Safety
 
 Objectif : empecher de deployer une mauvaise politique.

@@ -159,6 +159,8 @@ Renvoie 503 si le dépôt de règles n'est pas chargé.
 
 ## Décisions d'autorisation
 
+Les nouveaux clients doivent utiliser le contrat canonique documente dans `docs/DECISION_CONTRACT.md`. En particulier, les champs de reference sont `allowed?`, `decisionType`, `effectiveSubject`, `matchedRuleNames`, `strategy` et `policySource`. Les champs historiques `allowed`, `decision`, `results` et `matchedRules` restent presents pour compatibilite.
+
 ### POST /isAuthorized (legacy)
 
 Évalue si un sujet peut effectuer une opération sur une ressource.
@@ -467,18 +469,40 @@ Trace détaillée règle par règle de la décision.
 ```json
 {
   "results": [
-    {"request-id": 0, "decision": {"results": ["R1"]}},
-    {"request-id": 1, "decision": {"results": []}}
+    {
+      "allowed": true,
+      "allowed?": true,
+      "decision": "allow",
+      "decisionType": "allow",
+      "subjectId": "alice",
+      "resourceClass": "Facture",
+      "resourceId": "INV-001",
+      "operation": "lire",
+      "matchedRuleNames": ["R1"],
+      "policySource": "current",
+      "results": ["R1"],
+      "matchedRules": ["R1"]
+    },
+    {
+      "allowed": false,
+      "allowed?": false,
+      "decision": "deny",
+      "decisionType": "deny",
+      "subjectId": "bob",
+      "resourceClass": "Facture",
+      "resourceId": "INV-002",
+      "operation": "lire",
+      "matchedRuleNames": [],
+      "policySource": "current",
+      "results": [],
+      "matchedRules": []
+    }
   ],
   "count": 2
 }
 ```
 
-En cas d'erreur sur un élément du batch :
-
-```json
-{"request-id": 1, "error": "Validation failed: subject.id is required"}
-```
+Les resultats sont retournes dans le meme ordre que les requetes d'entree.
 
 ---
 

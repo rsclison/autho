@@ -115,9 +115,25 @@ components:
       properties:
         allowed:
           type: boolean
+          description: Historical compatibility field; new clients should prefer allowed?.
+        "allowed?":
+          type: boolean
+          description: Canonical boolean decision.
         decision:
           type: string
           enum: [allow, deny]
+          description: Historical compatibility field; new clients should prefer decisionType.
+        decisionType:
+          type: string
+          enum: [allow, deny]
+          description: Canonical decision type.
+        subjectId:
+          type: string
+          description: Effective subject identifier used by the PDP.
+        effectiveSubject:
+          type: object
+          additionalProperties: true
+          description: Effective subject used by the PDP after authentication/delegation.
         results:
           type: array
           items:
@@ -133,6 +149,21 @@ components:
           type: string
         operation:
           type: string
+        strategy:
+          type: string
+          description: Conflict resolution strategy applied by the policy.
+        matchedRuleNames:
+          type: array
+          items:
+            type: string
+          description: Canonical names of matched rules.
+        policySource:
+          type: string
+          enum: [current, provided, version]
+          description: Source of the policy used for the decision.
+        policyVersion:
+          type: integer
+          description: Policy version when known.
 
     WhoAuthorizedRuleProjection:
       type: object
@@ -558,14 +589,8 @@ components:
         results:
           type: array
           items:
-            type: object
-            properties:
-              request-id:
-                type: integer
-              decision:
-                $ref: '#/components/schemas/AuthzDecision'
-              error:
-                type: string
+            $ref: '#/components/schemas/AuthzDecision'
+          description: Canonical decision for each request, in request order.
         count:
           type: integer
 
