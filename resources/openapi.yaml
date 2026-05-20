@@ -33,6 +33,8 @@ tags:
     description: Subject entity endpoints
   - name: resources
     description: Resource entity endpoints
+  - name: relations
+    description: ReBAC relationship tuple endpoints
   - name: admin
     description: Administration endpoints
   - name: audit
@@ -776,6 +778,22 @@ components:
           description: Canonical decision for each request, in request order.
         count:
           type: integer
+
+    RelationTuple:
+      type: object
+      required: [subject, relation, resource]
+      properties:
+        subject:
+          type: object
+          required: [class, id]
+          additionalProperties: true
+        relation:
+          type: string
+          example: viewer
+        resource:
+          type: object
+          required: [class, id]
+          additionalProperties: true
 
     Policy:
       type: object
@@ -1990,6 +2008,64 @@ paths:
       responses:
         '204':
           description: Policy deleted
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
+
+  /v1/relations:
+    get:
+      tags: [relations]
+      summary: List direct ReBAC relation tuples
+      operationId: listRelations
+      responses:
+        '200':
+          description: Direct relation tuples
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          relations:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/RelationTuple'
+    post:
+      tags: [relations]
+      summary: Create a direct ReBAC relation tuple
+      description: Requires governance-admin or relation-admin.
+      operationId: createRelation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationTuple'
+      responses:
+        '201':
+          description: Relation tuple created
+        '400':
+          description: Invalid relation tuple
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
+    delete:
+      tags: [relations]
+      summary: Delete a direct ReBAC relation tuple
+      description: Requires governance-admin or relation-admin.
+      operationId: deleteRelation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationTuple'
+      responses:
+        '200':
+          description: Relation tuple deleted
+        '400':
+          description: Invalid relation tuple
         '403':
           $ref: '#/components/responses/GovernanceForbidden'
 

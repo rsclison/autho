@@ -61,6 +61,7 @@ Policy governance write endpoints require an authenticated identity with a gover
 | `risk-profile-admin` | Upsert and delete policy impact risk profiles |
 | `policy-reviewer` | Review persisted policy impact analyses |
 | `policy-deployer` | Roll out approved impact analyses and perform rollbacks |
+| `relation-admin` | Create and delete ReBAC relation tuples |
 
 For API-key clients, roles are loaded from `API_CLIENT_ROLES` as a comma-separated list. The default is `governance-admin` for compatibility; production deployments should set least-privilege roles explicitly.
 
@@ -518,6 +519,8 @@ Policy conditions can also use a direct ReBAC predicate:
 ```
 
 This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. The current implementation supports direct subject-relation-resource tuples; recursive relation traversal is a later roadmap item.
+
+Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`.
 
 **Response:** `200 OK`
 ```json

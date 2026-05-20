@@ -130,7 +130,8 @@ Etat d'avancement :
 
 - modele relationnel direct ajoute sous forme de tuples sujet-relation-ressource;
 - predicat de politique `["relation", "$s", "viewer", "$r"]` disponible dans `conditions`;
-- prochaine etape : exposer une API admin pour gerer les tuples et ajouter la resolution parent/heritage.
+- API minimale `GET/POST/DELETE /v1/relations` pour administrer les tuples directs;
+- prochaine etape : ajouter la resolution parent/heritage.
 
 ## Priorite 5 - Architecture enterprise
 

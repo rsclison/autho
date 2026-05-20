@@ -119,6 +119,19 @@
             (handlers/delete-policy resource-class request)))
 
   ;; ===================================================================
+  ;; Relationship Management Endpoints
+  ;; ===================================================================
+  (context "/relations" []
+    (GET "/" []
+         (handlers/list-relations))
+
+    (POST "/" request
+          (handlers/create-relation request))
+
+    (DELETE "/" request
+            (handlers/delete-relation request)))
+
+  ;; ===================================================================
   ;; Cache Management Endpoints
   ;; ===================================================================
   (context "/cache" []

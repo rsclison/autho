@@ -50,6 +50,7 @@ Les endpoints de gouvernance qui modifient l'état exigent aussi un rôle applic
 | `risk-profile-admin` | Modifier ou supprimer les profils de risque d'impact |
 | `policy-reviewer` | Approuver ou rejeter une analyse d'impact |
 | `policy-deployer` | Déployer une analyse d'impact approuvée ou faire un rollback |
+| `relation-admin` | Créer ou supprimer des tuples relationnels ReBAC |
 
 Pour une clé API, les rôles viennent de `API_CLIENT_ROLES` sous forme de liste séparée par des virgules. Par défaut, l'identité applicative reçoit `governance-admin` pour préserver la compatibilité des installations existantes ; en production, configurez explicitement les rôles minimaux nécessaires.
 
@@ -747,6 +748,21 @@ Le rollout applique ces garde-fous :
 - `recommendation = approve` et `status = no_impact` : rollout possible sans revue manuelle.
 
 La revue d'impact requiert `governance-admin` ou `policy-reviewer`. Le rollout d'impact et le rollback requierent `governance-admin` ou `policy-deployer`.
+
+### ReBAC relations
+
+Les tuples relationnels directs sont administrables via `GET/POST/DELETE /v1/relations`. Les mutations requierent `governance-admin` ou `relation-admin`.
+
+```bash
+curl -X POST http://localhost:8080/v1/relations \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{
+    "subject": {"class": "Person", "id": "alice"},
+    "relation": "viewer",
+    "resource": {"class": "Document", "id": "doc-1"}
+  }'
+```
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 

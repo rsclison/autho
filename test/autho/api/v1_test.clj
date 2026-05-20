@@ -13,6 +13,7 @@
             [autho.policy-versions :as pv]
             [autho.policy-impact-history :as impact-history]
             [autho.policy-risk-profiles :as risk-profiles]
+            [autho.rebac :as rebac]
             [autho.features :as features]
             [jsonista.core :as json]
             [clojure.string :as str])
@@ -667,6 +668,55 @@
     (is (= "resource_class" (:scopeType @captured)))
     (is (= "Document" (:scopeKey @captured)))
     (is (= "/policies/risk-profiles/resource-classes/Document" (:uri @captured)))))
+
+(deftest relation-handlers-manage-tuples-test
+  (rebac/clear-relations!)
+  (try
+    (let [payload {:subject {:class "Person" :id "alice"}
+                   :relation "viewer"
+                   :resource {:class "Document" :id "doc-1"}}
+          create-response (handlers/create-relation
+                           (governance-request :body (json/write-value-as-string payload)))
+          create-body (parse-response-body create-response)
+          list-response (handlers/list-relations)
+          list-body (parse-response-body list-response)
+          delete-response (handlers/delete-relation
+                           (governance-request :body (json/write-value-as-string payload)))
+          delete-body (parse-response-body delete-response)]
+      (is (= 201 (:status create-response)))
+      (is (= "viewer" (get-in create-body [:data :relation])))
+      (is (= "alice" (get-in list-body [:data :relations 0 :subject :id])))
+      (is (= 200 (:status delete-response)))
+      (is (= true (get-in delete-body [:data :deleted])))
+      (is (empty? (rebac/list-relations))))
+    (finally
+      (rebac/clear-relations!))))
+
+(deftest relation-mutation-requires-admin-role-test
+  (let [payload {:subject {:class "Person" :id "alice"}
+                 :relation "viewer"
+                 :resource {:class "Document" :id "doc-1"}}
+        request (mock-request :body (json/write-value-as-string payload)
+                              :identity {:client-id "viewer"
+                                         :roles ["policy-viewer"]})
+        response (handlers/create-relation request)
+        body (parse-response-body response)]
+    (is (= 403 (:status response)))
+    (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code])))))
+
+(deftest relation-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/create-relation
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :post
+                     :uri "/relations"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= "/relations" (:uri @captured)))))
 
 (deftest list-policy-versions-handler-returns-lineage-metadata-test
   (with-redefs [pv/list-versions (fn [_]

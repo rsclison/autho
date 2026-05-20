@@ -12,6 +12,7 @@
             [autho.policy-impact-history :as impact-history]
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.policy-versions :as pv]
+            [autho.rebac :as rebac]
             [autho.features :as features]
             [jsonista.core :as json]
             [clojure.set :as set]
@@ -104,6 +105,26 @@
                        :error-code "GOVERNANCE_FORBIDDEN"
                        :requiredRoles (sort (conj allowed "governance-admin"))
                        :roles (sort roles)})))))
+
+(defn- validate-relation-payload!
+  [body]
+  (let [subject (:subject body)
+        relation (:relation body)
+        resource (:resource body)]
+    (when-not (and (map? subject)
+                   (some? (:id subject))
+                   (or (:class subject) (:resourceClass subject))
+                   (some? relation)
+                   (not (str/blank? (str relation)))
+                   (map? resource)
+                   (some? (:id resource))
+                   (or (:class resource) (:resourceClass resource)))
+      (throw (ex-info "Relation tuple requires subject, relation and resource"
+                      {:status 400
+                       :error-code "INVALID_RELATION_TUPLE"})))
+    {:subject subject
+     :relation relation
+     :resource resource}))
 
 (defn require-body
   [request]
@@ -927,6 +948,47 @@
       (log/error e "Error rolling back policy")
       (response/error-response "ROLLBACK_ERROR"
                                (str "Failed to rollback: " (.getMessage e)) 500))))
+
+(defn list-relations
+  []
+  (response/success-response {:relations (rebac/list-relations)}))
+
+(defn create-relation
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (require-governance-role! request #{"relation-admin"})
+        (let [{:keys [subject relation resource]} (validate-relation-payload! body-or-response)
+              tuple (rebac/add-relation! subject relation resource)]
+          (response/created-response tuple "/v1/relations"))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RELATION_ERROR" "Failed to create relation: "))
+        (catch Exception e
+          (log/error e "Error creating relation")
+          (response/error-response "RELATION_ERROR"
+                                   (str "Failed to create relation: " (.getMessage e))
+                                   500))))))
+
+(defn delete-relation
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (require-governance-role! request #{"relation-admin"})
+        (let [{:keys [subject relation resource]} (validate-relation-payload! body-or-response)
+              tuple (rebac/remove-relation! subject relation resource)]
+          (response/success-response {:deleted true
+                                      :relation tuple}))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RELATION_ERROR" "Failed to delete relation: "))
+        (catch Exception e
+          (log/error e "Error deleting relation")
+          (response/error-response "RELATION_ERROR"
+                                   (str "Failed to delete relation: " (.getMessage e))
+                                   500))))))
 
 (defn get-cache-stats
   []
