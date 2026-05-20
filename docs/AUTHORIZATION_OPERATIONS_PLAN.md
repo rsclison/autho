@@ -61,6 +61,13 @@ Chantiers :
 
 Critere de succes : aucune politique ne passe en production sans validation et tests.
 
+Etat d'avancement :
+
+- validation statique existante : doublons, contradictions, operateurs invalides, regles trop larges et shadowed;
+- schema optionnel ajoute pour valider classes, attributs et operations connus;
+- documentation du schema et des erreurs dans `docs/POLICY_SAFETY.md`;
+- prochaine etape : ajouter un format de tests declaratifs de politiques executable en CI.
+
 ## Priorite 3 - Replay, shadow et impact analysis
 
 Objectif : predire l'effet d'une politique avant activation.

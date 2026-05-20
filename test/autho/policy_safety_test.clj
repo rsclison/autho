@@ -69,6 +69,49 @@
         (is (= ["almost_one_allow_no_deny"]
                (get-in (ex-data e) [:issues 0 :supported-strategies])))))))
 
+(deftest validate-policy-accepts-schema-declared-references-test
+  (let [policy (assoc valid-policy
+                      :schema {:subjects {:Person ["role" "status"]}
+                               :resources {:Document ["classification"]}
+                               :operations ["read"]})]
+    (let [analysis (safety/validate-policy! "Document" policy)]
+      (is (= [] (:errors analysis))))))
+
+(deftest validate-policy-detects-unknown-operation-from-schema-test
+  (let [policy (assoc valid-policy
+                      :schema {:subjects {:Person ["role"]}
+                               :resources {:Document ["classification"]}
+                               :operations ["write"]})]
+    (try
+      (safety/validate-policy! "Document" policy)
+      (is false "Expected unknown operation validation failure")
+      (catch clojure.lang.ExceptionInfo e
+        (is (= "UNKNOWN_OPERATION" (get-in (ex-data e) [:issues 0 :code])))))))
+
+(deftest validate-policy-detects-unknown-attribute-from-schema-test
+  (let [policy (assoc valid-policy
+                      :schema {:subjects {:Person ["department"]}
+                               :resources {:Document ["classification"]}
+                               :operations ["read"]})]
+    (try
+      (safety/validate-policy! "Document" policy)
+      (is false "Expected unknown attribute validation failure")
+      (catch clojure.lang.ExceptionInfo e
+        (is (= "UNKNOWN_SUBJECT_ATTRIBUTE" (get-in (ex-data e) [:issues 0 :code])))
+        (is (= "role" (get-in (ex-data e) [:issues 0 :attribute])))))))
+
+(deftest validate-policy-detects-unknown-class-from-schema-test
+  (let [policy (assoc valid-policy
+                      :schema {:subjects {:Account ["role"]}
+                               :resources {:Document ["classification"]}
+                               :operations ["read"]})]
+    (try
+      (safety/validate-policy! "Document" policy)
+      (is false "Expected unknown class validation failure")
+      (catch clojure.lang.ExceptionInfo e
+        (is (= "UNKNOWN_SUBJECT_CLASS" (get-in (ex-data e) [:issues 0 :code])))
+        (is (= "Person" (get-in (ex-data e) [:issues 0 :class])))))))
+
 (deftest validate-policy-detects-contradictory-equality-test
   (let [policy {:strategy "almost_one_allow_no_deny"
                 :rules [{:name "contradictory"

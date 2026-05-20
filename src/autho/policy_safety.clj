@@ -42,6 +42,14 @@
   (and (or (string? value) (keyword? value) (symbol? value))
        (not (str/blank? (name value)))))
 
+(defn- ident-name
+  [value]
+  (cond
+    (keyword? value) (name value)
+    (symbol? value) (name value)
+    (string? value) value
+    :else nil))
+
 (defn- variable-reference?
   [operand]
   (and (sequential? operand)
@@ -210,6 +218,12 @@
     (rest cond-vector)
     []))
 
+(defn- rule-clauses
+  [rule]
+  (concat (or (:conditions rule) [])
+          (legacy-clauses (:subjectCond rule))
+          (legacy-clauses (:resourceCond rule))))
+
 (defn- validate-legacy-field
   [rule-name field cond-vector default-scope]
   (cond
@@ -270,6 +284,116 @@
               :supported-strategies (vec (sort supported-strategies)))]
 
       :else [])))
+
+(defn- schema-section
+  [schema scope]
+  (case scope
+    :subject (or (:subjects schema) (:subject schema) {})
+    :resource (or (:resources schema) (:resource schema) {})
+    {}))
+
+(defn- schema-classes
+  [schema scope]
+  (set (keep ident-name (keys (schema-section schema scope)))))
+
+(defn- schema-operations
+  [schema]
+  (set (keep ident-name (or (:operations schema) (:operation schema) []))))
+
+(defn- schema-attributes
+  [schema scope class-name]
+  (let [section (schema-section schema scope)
+        requested (ident-name class-name)
+        attrs (some (fn [[declared-class declared-attrs]]
+                      (when (= requested (ident-name declared-class))
+                        declared-attrs))
+                    section)]
+    (set (keep ident-name attrs))))
+
+(defn- default-schema-class
+  [schema scope]
+  (let [classes (schema-classes schema scope)]
+    (when (= 1 (count classes))
+      (first classes))))
+
+(defn- operand-schema-issue
+  [schema rule-name field clause-index operand default-scope]
+  (when-let [ref (parse-field-reference operand default-scope)]
+    (let [scope (:scope ref)
+          class-name (or (:class ref) (default-schema-class schema scope))
+          attribute (:attribute ref)
+          declared-classes (schema-classes schema scope)
+          declared-attrs (when class-name (schema-attributes schema scope class-name))
+          scope-label (name scope)]
+      (cond
+        (and (:class ref)
+             (seq declared-classes)
+             (not (contains? declared-classes class-name)))
+        (issue (str "UNKNOWN_" (str/upper-case scope-label) "_CLASS")
+               (str "Rule '" rule-name "' references unknown " scope-label " class '" class-name "'.")
+               :rule rule-name
+               :field field
+               :clause-index clause-index
+               :class class-name)
+
+        (and class-name
+             (seq declared-attrs)
+             (not (contains? declared-attrs attribute)))
+        (issue (str "UNKNOWN_" (str/upper-case scope-label) "_ATTRIBUTE")
+               (str "Rule '" rule-name "' references unknown " scope-label " attribute '" attribute
+                    "' for class '" class-name "'.")
+               :rule rule-name
+               :field field
+               :clause-index clause-index
+               :class class-name
+               :attribute attribute)))))
+
+(defn- schema-clause-issues
+  [schema rule-name field clause-index clause default-scope]
+  (if (and (sequential? clause) (= 3 (count clause)))
+    (let [[_ op1 op2] clause]
+      (vec (keep #(operand-schema-issue schema rule-name field clause-index % default-scope)
+                 [op1 op2])))
+    []))
+
+(defn- schema-rule-issues
+  [schema rule]
+  (let [rule-name (or (:name rule) "<unnamed>")
+        operations (schema-operations schema)
+        operation (ident-name (:operation rule))
+        operation-issues (when (and operation
+                                    (seq operations)
+                                    (not (contains? operations operation)))
+                           [(issue "UNKNOWN_OPERATION"
+                                   (str "Rule '" rule-name "' uses unknown operation '" operation "'.")
+                                   :rule rule-name
+                                   :field :operation
+                                   :operation operation)])]
+    (vec (concat
+          operation-issues
+          (mapcat-indexed (fn [idx clause]
+                            (schema-clause-issues schema rule-name :conditions idx clause :subject))
+                          (or (:conditions rule) []))
+          (mapcat-indexed (fn [idx clause]
+                            (schema-clause-issues schema rule-name :subjectCond idx clause :subject))
+                          (legacy-clauses (:subjectCond rule)))
+          (mapcat-indexed (fn [idx clause]
+                            (schema-clause-issues schema rule-name :resourceCond idx clause :resource))
+                          (legacy-clauses (:resourceCond rule)))))))
+
+(defn- schema-issues
+  [submitted-resource-class policy rules]
+  (if-let [schema (:schema policy)]
+    (let [resource-classes (schema-classes schema :resource)]
+      (vec (concat
+            (when (and (seq resource-classes)
+                       (not (contains? resource-classes submitted-resource-class)))
+              [(issue "UNKNOWN_RESOURCE_CLASS"
+                      (str "Submitted resource class '" submitted-resource-class "' is not declared in policy schema.")
+                      :field :resourceClass
+                      :class submitted-resource-class)])
+            (mapcat #(schema-rule-issues schema %) rules))))
+    []))
 
 (defn- normalized-condition-signature
   [rule]
@@ -335,6 +459,7 @@
     {:errors (vec (concat (duplicate-name-issues rules)
                           (strategy-issues policy)
                           (resource-class-issues submitted-resource-class rules)
+                          (schema-issues submitted-resource-class policy rules)
                           per-rule-issues))
      :warnings (warning-issues rules)}))
 
