@@ -1,19 +1,13 @@
 {
   "mcpServers": {
-    "clojure": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@glance/clojure-mcp"
-      ]
-    },
     "code-review-graph": {
       "command": "uvx",
       "args": [
         "code-review-graph",
         "serve"
       ],
-      "type": "stdio"
+      "type": "stdio",
+      "env": []
     }
   }
 }

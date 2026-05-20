@@ -38,3 +38,5 @@ docker/**/.venv/
 # Claude Code configuration
 .claude/.session/
 .claude/.*.tmp
+# Added by code-review-graph
+.code-review-graph/
