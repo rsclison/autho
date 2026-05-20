@@ -719,7 +719,7 @@ curl -H "X-API-Key: key" \
 
 Endpoints disponibles : `PUT/DELETE /v1/policies/risk-profiles/default`, `PUT/DELETE /v1/policies/risk-profiles/environments/:environment`, `PUT/DELETE /v1/policies/risk-profiles/resource-classes/:resourceClass`.
 Chaque modification de profil produit une revision append-only avec `action`, `previousProfile`, `newProfile`, `changedBy` et `changedAt`.
-Les changements critiques, comme augmenter `maxRevokes`, augmenter `maxChangedDecisions`, autoriser les changements de ressources sensibles ou supprimer un profil existant, exigent `approval.approved = true`.
+Les changements critiques, comme augmenter `maxRevokes`, augmenter `maxChangedDecisions`, autoriser les changements de ressources sensibles ou supprimer un profil existant, exigent `approval.approved = true` et un `approval.approvedBy` different de l'auteur.
 Ces revisions apparaissent aussi dans `GET /v1/policies/:resourceClass/timeline` avec `eventType = risk_profile_changed`. Les revisions `default` et `environment` sont visibles pour toutes les classes ; les revisions `resource_class` sont visibles seulement pour la classe concernee.
 
 Le rollout applique ces garde-fous :

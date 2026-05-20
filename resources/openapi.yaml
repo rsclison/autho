@@ -1381,7 +1381,7 @@ paths:
         '200':
           description: Updated risk profile
         '409':
-          description: Critical profile change requires approval
+          description: Critical profile change requires approval by a different approver
     delete:
       tags: [policies]
       summary: Delete the default impact risk profile
@@ -1392,7 +1392,7 @@ paths:
         '404':
           description: Risk profile not found
         '409':
-          description: Critical profile deletion requires approval
+          description: Critical profile deletion requires approval by a different approver
 
   /v1/policies/risk-profiles/environments/{environment}:
     put:
@@ -1416,7 +1416,7 @@ paths:
         '200':
           description: Updated risk profile
         '409':
-          description: Critical profile change requires approval
+          description: Critical profile change requires approval by a different approver
     delete:
       tags: [policies]
       summary: Delete an environment impact risk profile
@@ -1433,7 +1433,7 @@ paths:
         '404':
           description: Risk profile not found
         '409':
-          description: Critical profile deletion requires approval
+          description: Critical profile deletion requires approval by a different approver
 
   /v1/policies/risk-profiles/resource-classes/{resource-class}:
     put:
@@ -1457,7 +1457,7 @@ paths:
         '200':
           description: Updated risk profile
         '409':
-          description: Critical profile change requires approval
+          description: Critical profile change requires approval by a different approver
     delete:
       tags: [policies]
       summary: Delete a resource-class impact risk profile
@@ -1474,7 +1474,7 @@ paths:
         '404':
           description: Risk profile not found
         '409':
-          description: Critical profile deletion requires approval
+          description: Critical profile deletion requires approval by a different approver
 
   /v1/policies/{resource-class}/impact/history:
     get:

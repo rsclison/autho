@@ -582,7 +582,7 @@ Persisted profiles are available through:
 
 Inline `riskProfiles` and request-level `thresholds` still override persisted profiles for one-off analyses.
 Every profile change appends a revision with the action, previous profile, new profile, author and timestamp.
-Critical changes require explicit approval: increasing `maxRevokes`, increasing `maxChangedDecisions`, enabling `allowSensitiveResourceChanges`, or deleting an existing profile. Send `approval.approved = true` with `approval.approvedBy` and an optional `approval.note`.
+Critical changes require explicit approval by a different person: increasing `maxRevokes`, increasing `maxChangedDecisions`, enabling `allowSensitiveResourceChanges`, or deleting an existing profile. Send `approval.approved = true` with `approval.approvedBy` and an optional `approval.note`.
 Risk profile revisions are included in `GET /v1/policies/:resource-class/timeline` as `risk_profile_changed` events. `default` and `environment` revisions are visible for every class; `resource_class` revisions are visible only for their class.
 
 Rollout gates are enforced when promoting an impact preview:

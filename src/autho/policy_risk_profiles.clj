@@ -134,7 +134,7 @@
        false))))
 
 (defn- require-approval!
-  [approval-required? {:keys [approved? approvedBy]}]
+  [approval-required? changed-by {:keys [approved? approvedBy]}]
   (when (and approval-required? (not approved?))
     (throw (ex-info "Critical risk profile changes require approval"
                     {:status 409
@@ -142,7 +142,11 @@
   (when (and approval-required? (empty? (str approvedBy)))
     (throw (ex-info "Critical risk profile approval requires approvedBy"
                     {:status 400
-                     :error-code "MISSING_RISK_PROFILE_APPROVER"}))))
+                     :error-code "MISSING_RISK_PROFILE_APPROVER"})))
+  (when (and approval-required? (= (str changed-by) (str approvedBy)))
+    (throw (ex-info "Critical risk profile approval requires a different approver"
+                    {:status 409
+                     :error-code "RISK_PROFILE_APPROVER_MUST_DIFFER"}))))
 
 (defn- current-profile-row
   [conn scope-type scope-key]
@@ -156,7 +160,7 @@
 (defn- insert-revision!
   [conn scope-type scope-key action previous-profile-json new-profile-json changed-by changed-at approval]
   (let [approval-required? (critical-change? action previous-profile-json new-profile-json)]
-    (require-approval! approval-required? approval)
+    (require-approval! approval-required? changed-by approval)
   (jdbc/insert! conn :policy_risk_profile_revisions
                 {:scope_type scope-type
                  :scope_key scope-key

@@ -614,6 +614,7 @@
       (is (= 2 (get-in upsert-body [:data :profile :maxRevokes])))
       (is (= "api" (get-in upsert-body [:data :updatedBy])))
       (is (= "risk-owner" (get-in upsert-body [:data :approval :approvedBy])))
+      (is (nil? (get-in upsert-body [:data :approval :changedBy])))
       (is (= 200 (:status delete-response)))
       (is (= true (get-in delete-body [:data :deleted]))))))
 

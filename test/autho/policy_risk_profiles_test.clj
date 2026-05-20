@@ -70,6 +70,15 @@
        #"Critical risk profile changes require approval"
        (risk-profiles/delete-profile! "environment" "prod" "tester"))))
 
+(deftest critical-risk-profile-approver-must-differ-from-author-test
+  (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 1} "tester")
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"requires a different approver"
+       (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 2} "tester"
+                                      {:approved? true
+                                       :approvedBy "tester"}))))
+
 (deftest invalid-risk-profile-scope-is-rejected-test
   (is (thrown-with-msg?
        clojure.lang.ExceptionInfo

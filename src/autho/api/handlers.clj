@@ -611,10 +611,10 @@
     body))
 
 (defn- risk-profile-approval
-  [body author]
+  [body]
   (let [approval (:approval body)]
     {:approved? (true? (:approved approval))
-     :approvedBy (or (:approvedBy approval) author)
+     :approvedBy (:approvedBy approval)
      :approvalNote (:note approval)}))
 
 (defn list-policy-risk-profiles
@@ -651,7 +651,7 @@
               row (risk-profiles/upsert-profile! scope-type scope-key
                                                  (risk-profile-payload body-or-response)
                                                  author
-                                                 (risk-profile-approval body-or-response author))]
+                                                 (risk-profile-approval body-or-response))]
           (response/success-response row))
         (catch clojure.lang.ExceptionInfo e
           (policy-exception->response e "POLICY_RISK_PROFILE_ERROR" "Failed to update policy risk profile: "))
@@ -668,7 +668,7 @@
     (let [author (get-in request [:identity :client-id] "api")
           body (or (parse-json-body request) {})]
       (if (risk-profiles/delete-profile! scope-type scope-key author
-                                          (risk-profile-approval body author))
+                                          (risk-profile-approval body))
       (response/success-response {:deleted true
                                   :scopeType scope-type
                                   :scopeKey (if (= "default" scope-type) "*" scope-key)})
