@@ -636,6 +636,36 @@ Pour un usage CI sans serveur HTTP, la meme chaine est disponible via :
 ./lein policy:validate --resource-class Facture --file candidate-policy.json --format json
 ```
 
+### POST /v1/policies/:resourceClass/impact
+
+Compare une politique courante ou versionnee avec une politique candidate sur un batch de requetes. Le resultat inclut `impactReport`, un resume exploitable en revue de changement.
+
+```bash
+curl -X POST http://localhost:8080/v1/policies/Facture/impact \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{
+    "candidatePolicy": {
+      "strategy": "almost_one_allow_no_deny",
+      "rules": []
+    },
+    "thresholds": {
+      "maxRevokes": 0,
+      "maxChangedDecisions": 50,
+      "allowSensitiveResourceChanges": false
+    },
+    "requests": [
+      {
+        "subject": {"id": "alice"},
+        "resource": {"class": "Facture", "id": "F-001", "classification": "confidential"},
+        "operation": "lire"
+      }
+    ]
+  }'
+```
+
+`impactReport.status` vaut `no_impact`, `review_required`, `high_risk` ou `blocked`. `recommendation` vaut `approve`, `review` ou `block`. Les blockers standards couvrent les revocations, le volume de decisions changees et les ressources sensibles touchees.
+
 ### DELETE /policies/:resourceClass (legacy)
 
 ```bash

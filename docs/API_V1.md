@@ -500,6 +500,34 @@ Validate a candidate policy without persisting it. This endpoint runs JSON Schem
 }
 ```
 
+#### POST /v1/policies/:resource-class/impact
+
+Compare the current or versioned baseline with a candidate policy over a request batch. The response includes `impactReport` for change review and rollout gates.
+
+**Request:**
+```json
+{
+  "candidatePolicy": {
+    "strategy": "almost_one_allow_no_deny",
+    "rules": []
+  },
+  "thresholds": {
+    "maxRevokes": 0,
+    "maxChangedDecisions": 50,
+    "allowSensitiveResourceChanges": false
+  },
+  "requests": [
+    {
+      "subject": {"id": "alice"},
+      "resource": {"class": "Document", "id": "doc-1", "classification": "secret"},
+      "operation": "read"
+    }
+  ]
+}
+```
+
+`impactReport.status` is one of `no_impact`, `review_required`, `high_risk`, `blocked`; `recommendation` is one of `approve`, `review`, `block`.
+
 #### DELETE /v1/policies/:resource-class
 
 Delete a policy.

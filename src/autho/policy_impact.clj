@@ -3,7 +3,8 @@
    Compares the current policy against a candidate, versioned, or provided policy."
   (:require [autho.policy-versions :as pv]
             [autho.pdp :as pdp]
-            [autho.prp :as prp]))
+            [autho.prp :as prp]
+            [clojure.string :as str]))
 
 (defn- candidate-policy
   [resource-class {:keys [candidatePolicy candidateVersion]}]
@@ -118,6 +119,99 @@
      :topImpactedSubjects (top-entries subjects)
      :topImpactedResources (top-entries resources)}))
 
+(defn- rule-impact
+  [changes]
+  (let [winning (frequencies (mapcat :winningRuleNames changes))
+        losing (frequencies (mapcat :losingRuleNames changes))]
+    {:winningRules (->> winning
+                        (mapv (fn [[rule-name count]]
+                                {:ruleName rule-name :count count}))
+                        (sort-by (fn [{:keys [ruleName count]}] [(- count) ruleName]))
+                        vec)
+     :losingRules (->> losing
+                       (mapv (fn [[rule-name count]]
+                               {:ruleName rule-name :count count}))
+                       (sort-by (fn [{:keys [ruleName count]}] [(- count) ruleName]))
+                       vec)}))
+
+(defn- sensitive-resource?
+  [authz-request]
+  (let [resource (or (:resource authz-request) {})
+        classification (some-> (or (:classification resource)
+                                   (:sensitivity resource)
+                               (:risk resource))
+                               str
+                               str/lower-case)]
+    (boolean (or (:sensitive resource)
+                 (contains? #{"restricted" "confidential" "secret" "high" "critical"}
+                            classification)))))
+
+(defn- impacted-sensitive-resources
+  [changes]
+  (->> changes
+       (filter #(sensitive-resource? (:request %)))
+       (map (fn [change]
+              {:key (resource-key (:request change))
+               :changeCategory (:changeCategory change)
+               :changeType (:changeType change)
+               :subject (subject-key (:request change))
+               :operation (or (get-in change [:request :operation]) "*")}))
+       vec))
+
+(defn- threshold-value
+  [thresholds key default]
+  (if (contains? thresholds key)
+    (get thresholds key)
+    default))
+
+(defn- build-impact-report
+  [summary blast-radius changes thresholds]
+  (let [thresholds (or thresholds {})
+        sensitive-resources (impacted-sensitive-resources changes)
+        max-revokes (threshold-value thresholds :maxRevokes 0)
+        max-changed (threshold-value thresholds :maxChangedDecisions 50)
+        allow-sensitive? (threshold-value thresholds :allowSensitiveResourceChanges false)
+        blockers (cond-> []
+                   (> (:revokes summary) max-revokes)
+                   (conj {:code "REVOKE_THRESHOLD_EXCEEDED"
+                          :message (str "Revokes exceed threshold " max-revokes ".")
+                          :actual (:revokes summary)
+                          :threshold max-revokes})
+
+                   (> (:changedDecisions summary) max-changed)
+                   (conj {:code "CHANGED_DECISIONS_THRESHOLD_EXCEEDED"
+                          :message (str "Changed decisions exceed threshold " max-changed ".")
+                          :actual (:changedDecisions summary)
+                          :threshold max-changed})
+
+                   (and (seq sensitive-resources) (not allow-sensitive?))
+                   (conj {:code "SENSITIVE_RESOURCE_IMPACT"
+                          :message "Sensitive resources are impacted."
+                          :actual (count sensitive-resources)
+                          :threshold 0}))
+        review-required? (or (seq blockers)
+                             (pos? (:changedDecisions summary))
+                             (pos? (:revokes summary)))
+        status (cond
+                 (seq blockers) "blocked"
+                 (pos? (:revokes summary)) "high_risk"
+                 (pos? (:changedDecisions summary)) "review_required"
+                 :else "no_impact")]
+    {:status status
+     :recommendation (cond
+                       (seq blockers) "block"
+                       review-required? "review"
+                       :else "approve")
+     :reviewRequired (boolean review-required?)
+     :blockers blockers
+     :thresholds {:maxRevokes max-revokes
+                  :maxChangedDecisions max-changed
+                  :allowSensitiveResourceChanges allow-sensitive?}
+     :sensitiveResourcesImpacted sensitive-resources
+     :rulesResponsible (rule-impact changes)
+     :populationsTouched (:subjects blast-radius)
+     :resourcesTouched (:resources blast-radius)}))
+
 (defn analyze-impact
   [request {:keys [resourceClass requests] :as body}]
   (let [resource-class (or resourceClass (get-in body [:resource :class]))
@@ -144,7 +238,8 @@
           changed (filter :changed comparisons)
           summary (assoc (summarize-items comparisons)
                          :byOperation (summarize-by comparisons #(or (get-in % [:request :operation]) "*")))
-          blast-radius (build-blast-radius changed)]
+          blast-radius (build-blast-radius changed)
+          impact-report (build-impact-report summary blast-radius (vec changed) (:thresholds body))]
       {:resourceClass resource-class
        :baseline {:version (:baselineVersion body)
                   :strategy (:strategy base-policy)}
@@ -157,4 +252,5 @@
        :summary summary
        :blastRadius blast-radius
        :riskSignals (build-risk-signals summary blast-radius)
+       :impactReport impact-report
        :changes (vec changed)})))

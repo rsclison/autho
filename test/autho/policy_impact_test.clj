@@ -36,6 +36,9 @@
         (is (= 1 (get-in result [:blastRadius :resources "Document/doc-1" :grants])))
         (is (false? (get-in result [:riskSignals :highRisk])))
         (is (= 2 (get-in result [:riskSignals :changedSubjectCount])))
+        (is (= "review_required" (get-in result [:impactReport :status])))
+        (is (= "review" (get-in result [:impactReport :recommendation])))
+        (is (= "new-rule" (get-in result [:impactReport :rulesResponsible :winningRules 0 :ruleName])))
         (is (= "user1" (get-in result [:riskSignals :topImpactedSubjects 0 :key])))))))
 
 (deftest analyze-impact-uses-versioned-baseline-and-candidate-test
@@ -60,6 +63,10 @@
       (is (= ["deny-v2"] (get-in result [:changes 0 :winningRuleNames])))
       (is (= ["allow-v1"] (get-in result [:changes 0 :losingRuleNames])))
       (is (true? (get-in result [:riskSignals :highRisk])))
+      (is (= "blocked" (get-in result [:impactReport :status])))
+      (is (= "block" (get-in result [:impactReport :recommendation])))
+      (is (= "REVOKE_THRESHOLD_EXCEEDED"
+             (get-in result [:impactReport :blockers 0 :code])))
       (is (= 1 (get-in result [:riskSignals :revokeCount]))))))
 
 (deftest analyze-impact-summarizes-by-operation-test
@@ -98,6 +105,48 @@
         (is (= 1 (get-in result [:blastRadius :operations "write" :revokes])))
         (is (= 1 (get-in result [:riskSignals :changedSubjectCount])))
         (is (= 1 (get-in result [:riskSignals :changedResourceCount])))))))
+
+(deftest analyze-impact-reports-sensitive-resource-blockers-test
+  (let [current-policy {:strategy "almost_one_allow_no_deny" :id "current"}
+        candidate-policy {:strategy "almost_one_allow_no_deny" :id "candidate"}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] current-policy)
+                  pdp/simulate (fn [_ simulate-body]
+                                 (if (= current-policy (:simulatedPolicy simulate-body))
+                                   {:allowed? false :decisionType "deny" :matchedRuleNames ["old"]}
+                                   {:allowed? true :decisionType "allow" :matchedRuleNames ["new"]}))]
+      (let [result (impact/analyze-impact {} {:resourceClass "Document"
+                                              :candidatePolicy candidate-policy
+                                              :requests [{:subject {:id "user1"}
+                                                          :resource {:class "Document"
+                                                                     :id "secret-doc"
+                                                                     :classification "secret"}
+                                                          :operation "read"}]})]
+        (is (= "blocked" (get-in result [:impactReport :status])))
+        (is (= "SENSITIVE_RESOURCE_IMPACT"
+               (get-in result [:impactReport :blockers 0 :code])))
+        (is (= "Document/secret-doc"
+               (get-in result [:impactReport :sensitiveResourcesImpacted 0 :key])))))))
+
+(deftest analyze-impact-allows-threshold-overrides-test
+  (let [current-policy {:strategy "almost_one_allow_no_deny" :id "current"}
+        candidate-policy {:strategy "almost_one_allow_no_deny" :id "candidate"}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] current-policy)
+                  pdp/simulate (fn [_ simulate-body]
+                                 (if (= current-policy (:simulatedPolicy simulate-body))
+                                   {:allowed? true :decisionType "allow" :matchedRuleNames ["old"]}
+                                   {:allowed? false :decisionType "deny" :matchedRuleNames ["new"]}))]
+      (let [result (impact/analyze-impact {} {:resourceClass "Document"
+                                              :candidatePolicy candidate-policy
+                                              :thresholds {:maxRevokes 1
+                                                           :allowSensitiveResourceChanges true}
+                                              :requests [{:subject {:id "user1"}
+                                                          :resource {:class "Document"
+                                                                     :id "secret-doc"
+                                                                     :sensitive true}
+                                                          :operation "read"}]})]
+        (is (= "high_risk" (get-in result [:impactReport :status])))
+        (is (= "review" (get-in result [:impactReport :recommendation])))
+        (is (= [] (get-in result [:impactReport :blockers])))))))
 
 (deftest analyze-impact-blast-radius-ignores-unchanged-decisions-test
   (let [current-policy {:strategy "almost_one_allow_no_deny"}

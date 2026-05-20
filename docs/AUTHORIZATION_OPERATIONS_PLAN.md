@@ -92,6 +92,14 @@ Chantiers :
 
 Critere de succes : chaque changement majeur de politique peut etre compare avant activation.
 
+Etat d'avancement :
+
+- comparaison policy courante/versionnee vs policy candidate disponible via `POST /v1/policies/:resourceClass/impact`;
+- rapport d'impact ajoute avec recommendation `approve`, `review`, `block`;
+- seuils de blocage configurables : `maxRevokes`, `maxChangedDecisions`, `allowSensitiveResourceChanges`;
+- rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
+- prochaine etape : rejouer les decisions historiques depuis l'audit comme source de requetes d'impact.
+
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 
 Objectif : couvrir les cas relationnels de type Zanzibar sans perdre la richesse ABAC.

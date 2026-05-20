@@ -373,6 +373,42 @@ components:
           items:
             $ref: '#/components/schemas/PolicyImpactRankingEntry'
 
+    PolicyImpactReport:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [no_impact, review_required, high_risk, blocked]
+        recommendation:
+          type: string
+          enum: [approve, review, block]
+        reviewRequired:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        thresholds:
+          type: object
+          additionalProperties: true
+        sensitiveResourcesImpacted:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        rulesResponsible:
+          type: object
+          additionalProperties: true
+        populationsTouched:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PolicyImpactOperationSummary'
+        resourcesTouched:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PolicyImpactOperationSummary'
+
     PolicyImpactSummary:
       type: object
       properties:
@@ -408,6 +444,8 @@ components:
           $ref: '#/components/schemas/PolicyBlastRadius'
         riskSignals:
           $ref: '#/components/schemas/PolicyImpactRiskSignals'
+        impactReport:
+          $ref: '#/components/schemas/PolicyImpactReport'
         changes:
           type: array
           items:
@@ -1022,6 +1060,18 @@ paths:
                   type: array
                   items:
                     $ref: '#/components/schemas/AuthzRequest'
+                thresholds:
+                  type: object
+                  properties:
+                    maxRevokes:
+                      type: integer
+                      default: 0
+                    maxChangedDecisions:
+                      type: integer
+                      default: 50
+                    allowSensitiveResourceChanges:
+                      type: boolean
+                      default: false
       responses:
         '200':
           description: Policy impact analysis
