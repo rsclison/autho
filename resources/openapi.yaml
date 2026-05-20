@@ -608,6 +608,33 @@ components:
           type: array
           items:
             type: object
+        tests:
+          type: array
+          description: Declarative policy scenarios executed before persistence.
+          items:
+            type: object
+            required: [subject, resource, operation, expect]
+            properties:
+              name:
+                type: string
+              subject:
+                type: object
+                additionalProperties: true
+              resource:
+                type: object
+                additionalProperties: true
+              operation:
+                type: string
+              context:
+                type: object
+                additionalProperties: true
+              expect:
+                oneOf:
+                  - type: string
+                    enum: [allow, deny]
+                  - type: boolean
+                  - type: object
+                    additionalProperties: true
 
     PolicyVersionRecord:
       type: object

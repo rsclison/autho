@@ -5,6 +5,7 @@
             [clojure.java.jdbc :as jd]
             [autho.local-cache :as local-cache]
             [autho.policy-safety :as policy-safety]
+            [autho.policy-tests :as policy-tests]
             [autho.policy-versions :as pv]
             [java-time :as ti]
             [autho.utils :as utl])
@@ -176,6 +177,7 @@
    (let [pol-map (-> (json/read-str policy :key-fn keyword)
                      (policy-format/normalize-policy))]
       (policy-safety/validate-policy! resourceClass pol-map)
+      (policy-tests/validate-policy-tests! pol-map)
       (insert-policy resourceClass pol-map)
       (pv/save-version! resourceClass pol-map author comment)
       (local-cache/invalidate-decisions-for-class! resourceClass))))

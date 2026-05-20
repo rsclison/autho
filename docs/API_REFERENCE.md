@@ -536,7 +536,7 @@ curl -H "X-API-Key: key" http://localhost:8080/policies/Facture
 
 ### PUT /policies/:resourceClass (legacy)
 
-Crée ou met à jour une politique. Valide contre `policySchema.json`, sauvegarde une version.
+Crée ou met à jour une politique. Autho valide le JSON contre `policySchema.json`, execute la validation statique de policy safety, execute les tests declaratifs embarques dans `tests` s'ils existent, puis sauvegarde une version. Voir `docs/POLICY_SAFETY.md`.
 
 ```bash
 curl -X PUT http://localhost:8080/policies/Facture \
@@ -552,6 +552,15 @@ curl -X PUT http://localhost:8080/policies/Facture \
         "priority": 0,
         "effect": "allow",
         "conditions": [["=", "$s.role", "chef_de_service"]]
+      }
+    ],
+    "tests": [
+      {
+        "name": "chef de service can read",
+        "subject": {"id": "alice", "class": "Person", "role": "chef_de_service"},
+        "resource": {"id": "F-001", "class": "Facture"},
+        "operation": "lire",
+        "expect": "allow"
       }
     ]
   }'

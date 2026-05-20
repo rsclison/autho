@@ -65,8 +65,9 @@ Etat d'avancement :
 
 - validation statique existante : doublons, contradictions, operateurs invalides, regles trop larges et shadowed;
 - schema optionnel ajoute pour valider classes, attributs et operations connus;
-- documentation du schema et des erreurs dans `docs/POLICY_SAFETY.md`;
-- prochaine etape : ajouter un format de tests declaratifs de politiques executable en CI.
+- tests declaratifs embarques dans les politiques et executes avant persistence via `submit-policy`;
+- documentation du schema, des tests declaratifs et des erreurs dans `docs/POLICY_SAFETY.md`;
+- prochaine etape : exposer une commande et un endpoint de validation pre-deploiement reutilisables par la CI.
 
 ## Priorite 3 - Replay, shadow et impact analysis
 

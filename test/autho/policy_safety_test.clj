@@ -2,6 +2,7 @@
   (:require [clojure.test :refer :all]
             [jsonista.core :as json]
             [autho.policy-safety :as safety]
+            [autho.policy-tests :as policy-tests]
             [autho.prp :as prp]
             [autho.policy-versions :as pv]
             [autho.local-cache :as local-cache]))
@@ -143,10 +144,32 @@
                                  :conditions [["diff" ["Person" "$s" "status"] "suspended"]]}]}
         payload (json/write-value-as-string invalid-policy)]
     (with-redefs [pv/save-version! (fn [& _] nil)
-                  local-cache/invalidate-decisions-for-class! (fn [& _] nil)]
+                  local-cache/invalidate-decisions-for-class! (fn [& _] nil)
+                  policy-tests/validate-policy-tests! (fn [_] {:count 0 :errors []})]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Policy safety validation failed"
+           (prp/submit-policy "Document" payload))))))
+
+(deftest submit-policy-applies-declarative-policy-tests-test
+  (let [policy {:strategy "almost_one_allow_no_deny"
+                :rules [{:name "allow-admin-read"
+                         :priority 10
+                         :effect "allow"
+                         :resourceClass "Document"
+                         :operation "read"
+                         :conditions [["=" ["Person" "$s" "role"] "admin"]]}]
+                :tests [{:name "wrong expectation"
+                         :subject {:id "alice" :class "Person" :role "admin"}
+                         :resource {:id "doc-1" :class "Document"}
+                         :operation "read"
+                         :expect "deny"}]}
+        payload (json/write-value-as-string policy)]
+    (with-redefs [pv/save-version! (fn [& _] nil)
+                  local-cache/invalidate-decisions-for-class! (fn [& _] nil)]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Policy tests failed"
            (prp/submit-policy "Document" payload))))))
 
 
