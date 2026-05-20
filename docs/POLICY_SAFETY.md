@@ -50,6 +50,17 @@ Exemple :
 
 Une politique peut embarquer une liste `tests`. Ces scenarios sont executes par `submit-policy` apres la validation statique et avant la persistence. Une politique dont au moins un scenario echoue est rejetee avec le code `POLICY_TESTS_FAILED`.
 
+La meme chaine de validation peut etre executee sans persistence avec :
+
+```bash
+curl -X POST http://localhost:8080/v1/policies/Document/validate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @candidate-policy.json
+```
+
+Cet endpoint execute le schema JSON, la policy safety et les tests declaratifs, puis retourne le detail de validation sans modifier la politique active, sans creer de version et sans invalider le cache.
+
 Exemple :
 
 ```json

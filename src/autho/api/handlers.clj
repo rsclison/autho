@@ -381,6 +381,27 @@
                                    (str "Failed to create policy: " (.getMessage e))
                                    500))))))
 
+(defn validate-policy
+  [resource-class request]
+  (log/debug "Validating policy for" resource-class)
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (let [body (assoc body-or-response :resourceClass resource-class)]
+        (try
+          (let [policy-json (json/write-value-as-string body)
+                analysis (prp/validate-policy-submission resource-class policy-json)]
+            (response/success-response {:valid true
+                                        :resourceClass resource-class
+                                        :validation (dissoc analysis :policy)}))
+          (catch clojure.lang.ExceptionInfo e
+            (policy-exception->response e "INVALID_POLICY" "Failed to validate policy: "))
+          (catch Exception e
+            (log/error e "Error validating policy")
+            (response/error-response "VALIDATE_POLICY_ERROR"
+                                     (str "Failed to validate policy: " (.getMessage e))
+                                     500)))))))
+
 (defn update-policy
   [resource-class request]
   (log/debug "Updating policy for" resource-class)

@@ -420,6 +420,66 @@
         (is (= 201 (:status response)))
         (is (= "UNCONDITIONAL_RULE" (get-in body [:data :validation :warnings 0 :code])))))))
 
+(deftest validate-policy-handler-runs-predeployment-validation-test
+  (let [captured (atom nil)
+        request (mock-request :body (json/write-value-as-string {:strategy "almost_one_allow_no_deny"
+                                                                 :rules []
+                                                                 :tests []}))]
+    (with-redefs [prp/validate-policy-submission
+                  (fn [resource-class policy-json]
+                    (reset! captured {:resourceClass resource-class
+                                      :policyJson policy-json})
+                    {:valid true
+                     :policy {:resourceClass resource-class}
+                     :errors []
+                     :warnings [{:code "MISSING_OPERATION"}]
+                     :safety {:errors [] :warnings [{:code "MISSING_OPERATION"}]}
+                     :tests {:count 0 :passed 0 :failed 0 :errors []}})
+                  prp/submit-policy
+                  (fn [& _]
+                    (throw (ex-info "should not persist" {})))]
+      (let [response (handlers/validate-policy "Document" request)
+            body (parse-response-body response)]
+        (is (= 200 (:status response)))
+        (is (= true (get-in body [:data :valid])))
+        (is (= "Document" (:resourceClass @captured)))
+        (is (str/includes? (:policyJson @captured) "\"resourceClass\":\"Document\""))
+        (is (= "MISSING_OPERATION"
+               (get-in body [:data :validation :warnings 0 :code])))
+        (is (nil? (get-in body [:data :validation :policy])))))))
+
+(deftest validate-policy-handler-returns-validation-errors-test
+  (let [request (mock-request :body (json/write-value-as-string {:strategy "almost_one_allow_no_deny"
+                                                                 :rules []}))]
+    (with-redefs [prp/validate-policy-submission
+                  (fn [& _]
+                    (throw (ex-info "Policy tests failed"
+                                    {:status 400
+                                     :error-code "POLICY_TESTS_FAILED"
+                                     :issues [{:code "POLICY_TEST_FAILED"
+                                               :message "wrong"}]})))]
+      (let [response (handlers/validate-policy "Document" request)
+            body (parse-response-body response)]
+        (is (= 400 (:status response)))
+        (is (= "POLICY_TESTS_FAILED" (get-in body [:error :code])))
+        (is (= "POLICY_TEST_FAILED" (get-in body [:error :details 0 :code])))))))
+
+(deftest validate-policy-route-forwards-request-test
+  (let [request-body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))
+        captured (atom nil)
+        response (with-redefs [handlers/validate-policy
+                               (fn [resource-class request]
+                                 (reset! captured {:resourceClass resource-class
+                                                   :request request})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes {:request-method :post
+                                      :uri "/policies/Document/validate"
+                                      :headers {}
+                                      :body request-body}))]
+    (is (= 200 (:status response)))
+    (is (= "Document" (:resourceClass @captured)))
+    (is (= "/policies/Document/validate" (get-in @captured [:request :uri])))))
+
 (deftest update-policy-returns-validation-details-for-policy-errors-test
   (let [request (mock-request :body (json/write-value-as-string {:resourceClass "Document"
                                                                  :strategy "almost_one_allow_no_deny"

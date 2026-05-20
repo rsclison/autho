@@ -161,6 +161,22 @@
 
   )
 
+(defn validate-policy-submission
+  "Validate a submitted policy without persisting it.
+   Runs JSON Schema validation, policy safety checks and declarative policy tests."
+  [^String resourceClass ^String policy]
+  (validjs/validate policySchema policy)
+  (let [pol-map (-> (json/read-str policy :key-fn keyword)
+                    (policy-format/normalize-policy))
+        safety-analysis (policy-safety/validate-policy! resourceClass pol-map)
+        test-analysis (policy-tests/validate-policy-tests! pol-map)]
+    {:valid true
+     :policy pol-map
+     :errors []
+     :warnings (:warnings safety-analysis)
+     :safety safety-analysis
+     :tests test-analysis}))
+
 ;;(defn submit-policy [^String resourceClass ^String policy]
 ;;  (let [js (slurp "resources/policySchema.json")
 ;;        jsvalidate (validjs/validator js)]
@@ -172,15 +188,12 @@
   ([^String resourceClass ^String policy]
    (submit-policy resourceClass policy nil nil))
   ([^String resourceClass ^String policy author comment]
-   ;; validate throws clojure.lang.ExceptionInfo on failure, returns nil on success
-   (validjs/validate policySchema policy)
-   (let [pol-map (-> (json/read-str policy :key-fn keyword)
-                     (policy-format/normalize-policy))]
-      (policy-safety/validate-policy! resourceClass pol-map)
-      (policy-tests/validate-policy-tests! pol-map)
-      (insert-policy resourceClass pol-map)
-      (pv/save-version! resourceClass pol-map author comment)
-      (local-cache/invalidate-decisions-for-class! resourceClass))))
+   ;; validate-policy-submission throws clojure.lang.ExceptionInfo on failure.
+   (let [{policy-map :policy :as analysis} (validate-policy-submission resourceClass policy)]
+      (insert-policy resourceClass policy-map)
+      (pv/save-version! resourceClass policy-map author comment)
+      (local-cache/invalidate-decisions-for-class! resourceClass)
+      (dissoc analysis :policy))))
 
 
 

@@ -566,6 +566,46 @@ curl -X PUT http://localhost:8080/policies/Facture \
   }'
 ```
 
+### POST /v1/policies/:resourceClass/validate
+
+Valide une politique candidate sans la persister. Cet endpoint applique les memes controles que la soumission de politique : schema JSON, validation statique de policy safety et tests declaratifs embarques.
+
+```bash
+curl -X POST http://localhost:8080/v1/policies/Facture/validate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @candidate-policy.json
+```
+
+Reponse de succes :
+
+```json
+{
+  "status": "success",
+  "data": {
+    "valid": true,
+    "resourceClass": "Facture",
+    "validation": {
+      "valid": true,
+      "errors": [],
+      "warnings": [],
+      "safety": {
+        "errors": [],
+        "warnings": []
+      },
+      "tests": {
+        "count": 2,
+        "passed": 2,
+        "failed": 0,
+        "errors": []
+      }
+    }
+  }
+}
+```
+
+En cas d'echec, la reponse est un `400` avec les issues dans `error.details`.
+
 ### DELETE /policies/:resourceClass (legacy)
 
 ```bash

@@ -172,6 +172,33 @@
            #"Policy tests failed"
            (prp/submit-policy "Document" payload))))))
 
+(deftest validate-policy-submission-runs-all-checks-without-persistence-test
+  (let [policy {:resourceClass "Document"
+                :strategy "almost_one_allow_no_deny"
+                :rules [{:name "allow-admin-read"
+                         :priority 10
+                         :effect "allow"
+                         :resourceClass "Document"
+                         :operation "read"
+                         :conditions [["=" ["Person" "$s" "role"] "admin"]]}]
+                :tests [{:name "admin can read"
+                         :subject {:id "alice" :class "Person" :role "admin"}
+                         :resource {:id "doc-1" :class "Document"}
+                         :operation "read"
+                         :expect "allow"}]}
+        payload (json/write-value-as-string policy)]
+    (with-redefs [prp/insert-policy (fn [& _]
+                                      (throw (ex-info "should not persist" {})))
+                  pv/save-version! (fn [& _]
+                                     (throw (ex-info "should not version" {})))
+                  local-cache/invalidate-decisions-for-class! (fn [& _]
+                                                                (throw (ex-info "should not invalidate" {})))]
+      (let [analysis (prp/validate-policy-submission "Document" payload)]
+        (is (= true (:valid analysis)))
+        (is (= [] (:errors analysis)))
+        (is (= 1 (get-in analysis [:tests :count])))
+        (is (= 1 (get-in analysis [:tests :passed])))))))
+
 
 
 (deftest analyze-policy-emits-warnings-for-broad-and-shadowed-rules-test

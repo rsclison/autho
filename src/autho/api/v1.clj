@@ -79,6 +79,9 @@
     (POST "/:resource-class/rollback/:version" [resource-class version :as request]
           (handlers/rollback-policy resource-class version request))
 
+    (POST "/:resource-class/validate" [resource-class :as request]
+          (handlers/validate-policy resource-class request))
+
     (GET "/:resource-class" [resource-class]
          (handlers/get-policy resource-class))
 

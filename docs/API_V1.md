@@ -429,6 +429,57 @@ Update an existing policy.
 }
 ```
 
+#### POST /v1/policies/:resource-class/validate
+
+Validate a candidate policy without persisting it. This endpoint runs JSON Schema validation, static policy safety checks and declarative policy tests, but does not create a policy version and does not invalidate decision caches.
+
+**Request:**
+```json
+{
+  "strategy": "almost_one_allow_no_deny",
+  "rules": [
+    {
+      "name": "document-read",
+      "priority": 10,
+      "operation": "read",
+      "effect": "allow",
+      "conditions": [["=", ["Person", "$s", "role"], "editor"]]
+    }
+  ],
+  "tests": [
+    {
+      "name": "editor can read",
+      "subject": {"id": "alice", "class": "Person", "role": "editor"},
+      "resource": {"id": "doc-1", "class": "Document"},
+      "operation": "read",
+      "expect": "allow"
+    }
+  ]
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "valid": true,
+    "resourceClass": "Document",
+    "validation": {
+      "valid": true,
+      "errors": [],
+      "warnings": [],
+      "tests": {
+        "count": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": []
+      }
+    }
+  }
+}
+```
+
 #### DELETE /v1/policies/:resource-class
 
 Delete a policy.

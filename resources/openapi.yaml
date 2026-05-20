@@ -636,6 +636,48 @@ components:
                   - type: object
                     additionalProperties: true
 
+    PolicyCandidate:
+      type: object
+      required: [strategy, rules]
+      properties:
+        resourceClass:
+          type: string
+          description: Optional in path-scoped validation endpoints; the path resource class wins.
+        strategy:
+          type: string
+          enum: [almost_one_allow_no_deny, default]
+        rules:
+          type: array
+          items:
+            type: object
+        tests:
+          type: array
+          description: Declarative policy scenarios executed before persistence.
+          items:
+            type: object
+            required: [subject, resource, operation, expect]
+            properties:
+              name:
+                type: string
+              subject:
+                type: object
+                additionalProperties: true
+              resource:
+                type: object
+                additionalProperties: true
+              operation:
+                type: string
+              context:
+                type: object
+                additionalProperties: true
+              expect:
+                oneOf:
+                  - type: string
+                    enum: [allow, deny]
+                  - type: boolean
+                  - type: object
+                    additionalProperties: true
+
     PolicyVersionRecord:
       type: object
       properties:
@@ -1283,6 +1325,45 @@ paths:
                         $ref: '#/components/schemas/PolicyVersionRecord'
         '404':
           description: Version not found
+
+  /v1/policies/{resource-class}/validate:
+    post:
+      tags: [policies]
+      summary: Validate a candidate policy without persisting it
+      operationId: validatePolicy
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCandidate'
+      responses:
+        '200':
+          description: Policy is valid and was not persisted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          valid:
+                            type: boolean
+                          resourceClass:
+                            type: string
+                          validation:
+                            type: object
+                            additionalProperties: true
+        '400':
+          description: Policy failed schema, safety or declarative test validation
 
   /v1/policies/{resourceClass}:
     get:
