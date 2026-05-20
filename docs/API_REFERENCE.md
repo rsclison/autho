@@ -441,6 +441,23 @@ Trace détaillée règle par règle de la décision.
 
 ---
 
+### POST /v1/authz/shadow
+
+Évalue la décision réelle avec la politique active, puis compare en dry-run avec une politique shadow. La décision retournée au client reste toujours la décision de production ; la politique shadow ne peut pas accorder ou refuser l'accès.
+
+```json
+{
+  "subject": {"id": "alice", "role": "chef_de_service"},
+  "resource": {"class": "Facture", "id": "INV-001"},
+  "operation": "lire",
+  "shadowPolicyVersion": 4
+}
+```
+
+`shadowPolicy` peut remplacer `shadowPolicyVersion` pour tester une politique inline. La réponse contient les champs habituels de `/v1/authz/decisions` et un bloc `shadowEvaluation` avec `changed`, `changeCategory`, `production` et `shadow`.
+
+---
+
 ### POST /v1/authz/batch
 
 Évalue jusqu'à 100 demandes en parallèle.

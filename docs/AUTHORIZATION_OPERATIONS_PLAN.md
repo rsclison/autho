@@ -97,10 +97,11 @@ Etat d'avancement :
 - comparaison policy courante/versionnee vs policy candidate disponible via `POST /v1/policies/:resourceClass/impact`;
 - replay audit initial disponible comme source de requetes via `auditReplay`;
 - nouvelles entrees d'audit enrichies avec snapshots complets de requete et decision;
+- shadow evaluation disponible via `POST /v1/authz/shadow` : la decision de production reste authoritative et la politique candidate est comparee en dry-run;
 - rapport d'impact ajoute avec recommendation `approve`, `review`, `block`;
 - seuils de blocage configurables : `maxRevokes`, `maxChangedDecisions`, `allowSensitiveResourceChanges`;
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
-- prochaine etape : ajouter le mode shadow evaluation.
+- prochaine etape : renforcer les garde-fous automatiques de rollout avec approbations obligatoires selon le risque.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 

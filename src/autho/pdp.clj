@@ -608,6 +608,55 @@
                 :matchedRuleNames (:matched-rule-names decision-result)
                 :rules         (:evaluated-rules decision-result)})))))
 
+(defn- decision-allowed?
+  [decision]
+  (boolean (or (:allowed? decision)
+               (:allowed decision)
+               (:decision decision))))
+
+(defn- shadow-change-category
+  [production-allowed shadow-allowed]
+  (cond
+    (and (not production-allowed) shadow-allowed) "deny_to_allow"
+    (and production-allowed (not shadow-allowed)) "allow_to_deny"
+    :else "unchanged"))
+
+(defn shadowEvaluate
+  "Evaluate the real authorization decision and compare it with a shadow policy.
+   The production decision is returned unchanged and remains the only decision
+   that can affect access. The shadow policy is evaluated through simulate, so
+   it never writes audit/cache state."
+  [request body]
+  (let [shadow-policy (:shadowPolicy body)
+        shadow-version (:shadowPolicyVersion body)]
+    (when-not (or shadow-policy shadow-version)
+      (throw (ex-info "Shadow evaluation requires shadowPolicy or shadowPolicyVersion"
+                      {:status 400 :error-code "MISSING_SHADOW_POLICY"})))
+    (let [production-body (dissoc body :shadowPolicy :shadowPolicyVersion)
+          production (isAuthorized request production-body)
+          shadow-body (cond-> production-body
+                        shadow-policy (assoc :simulatedPolicy shadow-policy)
+                        shadow-version (assoc :policyVersion shadow-version))
+          shadow (simulate request shadow-body)
+          production-allowed (decision-allowed? production)
+          shadow-allowed (decision-allowed? shadow)
+          changed? (not= production-allowed shadow-allowed)]
+      (assoc production
+             :shadowEvaluation
+             {:enabled true
+              :changed changed?
+              :changeCategory (shadow-change-category production-allowed shadow-allowed)
+              :production {:allowed production-allowed
+                           :decisionType (if production-allowed "allow" "deny")
+                           :matchedRuleNames (vec (or (:matchedRuleNames production)
+                                                      (:results production)
+                                                      []))}
+              :shadow {:allowed shadow-allowed
+                       :decisionType (:decisionType shadow)
+                       :matchedRuleNames (vec (or (:matchedRuleNames shadow) []))
+                       :policySource (:policySource shadow)
+                       :policyVersion (:policyVersion shadow)}}))))
+
 (defn- load-props
   [file-name]
   (with-open [^java.io.Reader reader (clojure.java.io/reader file-name)]

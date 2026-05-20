@@ -30,6 +30,9 @@
     (POST "/simulate" request
           (handlers/simulate-decision request))
 
+    (POST "/shadow" request
+          (handlers/shadow-decision request))
+
     (POST "/batch" request
           (handlers/batch-decisions)))
 

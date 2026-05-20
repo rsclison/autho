@@ -7,7 +7,7 @@
 
   Features available per tier:
     :free       — core PDP decisions only
-    :pro        — + audit, versioning, explain, simulate, metrics
+    :pro        — + audit, versioning, explain, simulate, shadow, metrics
     :enterprise — + kafka-pip, multi-instance"
   (:require [autho.license :as license]
             [clojure.string :as str])
@@ -22,9 +22,9 @@
 (def ^:private tier-features
   {:free       #{:is-authorized :who-authorized :what-authorized}
    :pro        #{:is-authorized :who-authorized :what-authorized
-                 :audit :versioning :explain :simulate :metrics}
+                 :audit :versioning :explain :simulate :shadow :metrics}
    :enterprise #{:is-authorized :who-authorized :what-authorized
-                 :audit :versioning :explain :simulate :metrics
+                 :audit :versioning :explain :simulate :shadow :metrics
                  :kafka-pip :multi-instance}})
 
 ;; Default: free tier (no AUTHO_LICENSE_KEY set)

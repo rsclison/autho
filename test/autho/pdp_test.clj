@@ -69,6 +69,46 @@
                       audit/log-decision! (fn [& _] nil)]
           (is (= false (:result (evalRequest {:subject {:id "Mary", :role "Professeur"} :resource {:class "Note"} :operation "lire" :context {:date "2019-08-14T04:03:27.456"}})))))))))
 
+(deftest shadowEvaluate-keeps-production-decision-test
+  (let [body {:subject {:id "alice"}
+              :resource {:class "Document" :id "doc-1"}
+              :operation "read"
+              :shadowPolicy {:strategy "almost_one_allow_no_deny"
+                             :rules []}}
+        production {:allowed? false
+                    :allowed false
+                    :decision false
+                    :decisionType "deny"
+                    :matchedRuleNames ["deny-current"]}
+        shadow {:allowed? true
+                :decision true
+                :decisionType "allow"
+                :matchedRuleNames ["allow-shadow"]
+                :policySource :provided
+                :policyVersion 9}]
+    (with-redefs [autho.pdp/isAuthorized (fn [_ production-body]
+                                            (is (nil? (:shadowPolicy production-body)))
+                                            production)
+                  autho.pdp/simulate (fn [_ simulate-body]
+                                        (is (= (:shadowPolicy body) (:simulatedPolicy simulate-body)))
+                                        shadow)]
+      (let [result (shadowEvaluate {} body)]
+        (is (= false (:allowed? result)))
+        (is (= "deny" (:decisionType result)))
+        (is (= true (get-in result [:shadowEvaluation :changed])))
+        (is (= "deny_to_allow" (get-in result [:shadowEvaluation :changeCategory])))
+        (is (= ["deny-current"] (get-in result [:shadowEvaluation :production :matchedRuleNames])))
+        (is (= ["allow-shadow"] (get-in result [:shadowEvaluation :shadow :matchedRuleNames])))
+        (is (= :provided (get-in result [:shadowEvaluation :shadow :policySource])))))))
+
+(deftest shadowEvaluate-requires-shadow-policy-test
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"Shadow evaluation requires"
+       (shadowEvaluate {} {:subject {:id "alice"}
+                           :resource {:class "Document" :id "doc-1"}
+                           :operation "read"}))))
+
 (deftest resolve-conflict-test
   (testing "resolve-conflict function"
     (testing "with no successful rules"

@@ -182,6 +182,12 @@
   (log/debug "Processing simulation request")
   (handle-authz-request request :simulate pdp/simulate "SIMULATE_ERROR" "Simulation failed: "))
 
+(defn shadow-decision
+  [request]
+  (features/require-license! :shadow)
+  (log/debug "Processing shadow evaluation request")
+  (handle-authz-request request :shadow pdp/shadowEvaluate "SHADOW_ERROR" "Shadow evaluation failed: "))
+
 (defn- version-record->api
   [record]
   (cond-> {:id (:id record)

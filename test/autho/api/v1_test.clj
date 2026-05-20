@@ -302,12 +302,17 @@
                   :policySource "current"
                   :policyVersion 7
                   :matchedRuleNames ["allow-rule"]
-                  :rules []}]
+                  :rules []}
+        shadow {:allowed? false
+                :decisionType "deny"
+                :shadowEvaluation {:enabled true
+                                   :changed true}}]
     (with-redefs [pdp/isAuthorized (fn [_ _] decision)
                   pdp/whoAuthorizedDetailed (fn [_ _] who)
                   pdp/whatAuthorizedDetailed (fn [_ _] what)
                   pdp/explain (fn [_ _] explain)
                   pdp/simulate (fn [_ _] simulate)
+                  pdp/shadowEvaluate (fn [_ _] shadow)
                   features/require-license! (fn [_] nil)]
       (let [decision-body (json/write-value-as-string {:subject {:id "user1"}
                                                        :resource {:class "doc" :id "doc-1"}
@@ -321,7 +326,8 @@
         (is (= who (:data (parse-response-body (handlers/who-authorized (mock-request :body who-body))))))
         (is (= what (:data (parse-response-body (handlers/what-authorized (mock-request :body what-body))))))
         (is (= explain (:data (parse-response-body (handlers/explain-decision (mock-request :body decision-body))))))
-        (is (= simulate (:data (parse-response-body (handlers/simulate-decision (mock-request :body decision-body))))))))))
+        (is (= simulate (:data (parse-response-body (handlers/simulate-decision (mock-request :body decision-body))))))
+        (is (= shadow (:data (parse-response-body (handlers/shadow-decision (mock-request :body decision-body))))))))))
 
 (deftest who-and-what-authorization-handlers-use-endpoint-specific-validation-test
   (with-redefs [pdp/whoAuthorizedDetailed (fn [_ body] {:resourceClass (get-in body [:resource :class])

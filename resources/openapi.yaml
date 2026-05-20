@@ -280,6 +280,28 @@ components:
             policyVersion:
               type: integer
 
+    ShadowDecision:
+      allOf:
+        - $ref: '#/components/schemas/AuthzDecision'
+        - type: object
+          properties:
+            shadowEvaluation:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                changed:
+                  type: boolean
+                changeCategory:
+                  type: string
+                  enum: [deny_to_allow, allow_to_deny, unchanged]
+                production:
+                  type: object
+                  additionalProperties: true
+                shadow:
+                  type: object
+                  additionalProperties: true
+
     PolicyImpactChange:
       type: object
       properties:
@@ -1013,6 +1035,39 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/SimulationDecision'
+
+  /v1/authz/shadow:
+    post:
+      tags: [authorization]
+      summary: Return production decision with candidate policy shadow comparison
+      operationId: shadowDecision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/AuthzRequest'
+                - type: object
+                  properties:
+                    shadowPolicy:
+                      type: object
+                      additionalProperties: true
+                    shadowPolicyVersion:
+                      type: integer
+      responses:
+        '200':
+          description: Production decision with shadow evaluation details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ShadowDecision'
+        '400':
+          description: Missing shadow policy or invalid authorization request
 
   /v1/authz/batch:
     post:

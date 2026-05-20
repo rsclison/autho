@@ -239,6 +239,39 @@ Explain an authorization decision.
 }
 ```
 
+#### POST /v1/authz/shadow
+
+Return the production authorization decision and compare it with a candidate policy in dry-run mode. The production decision remains authoritative; the shadow policy is reported only under `shadowEvaluation`.
+
+**Request:**
+```json
+{
+  "subject": {"id": "user123"},
+  "resource": {"class": "Document", "id": "doc456"},
+  "operation": "read",
+  "shadowPolicyVersion": 12
+}
+```
+
+Use `shadowPolicy` instead of `shadowPolicyVersion` to test an inline candidate policy.
+
+**Response excerpt:**
+```json
+{
+  "status": "success",
+  "data": {
+    "allowed?": false,
+    "decisionType": "deny",
+    "shadowEvaluation": {
+      "changed": true,
+      "changeCategory": "deny_to_allow",
+      "production": {"allowed": false},
+      "shadow": {"allowed": true, "policySource": "version"}
+    }
+  }
+}
+```
+
 #### POST /v1/authz/batch
 
 Make multiple authorization decisions in a single request.
