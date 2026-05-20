@@ -126,6 +126,12 @@ Chantiers :
 
 Critere de succes : Autho couvre les cas ReBAC courants tout en conservant ABAC et time-travel.
 
+Etat d'avancement :
+
+- modele relationnel direct ajoute sous forme de tuples sujet-relation-ressource;
+- predicat de politique `["relation", "$s", "viewer", "$r"]` disponible dans `conditions`;
+- prochaine etape : exposer une API admin pour gerer les tuples et ajouter la resolution parent/heritage.
+
 ## Priorite 5 - Architecture enterprise
 
 Objectif : rendre Autho deployable dans des environnements critiques.

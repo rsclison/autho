@@ -509,6 +509,16 @@ Validate a candidate policy without persisting it. This endpoint runs JSON Schem
 }
 ```
 
+Policy conditions can also use a direct ReBAC predicate:
+
+```json
+{
+  "conditions": [["relation", "$s", "viewer", "$r"]]
+}
+```
+
+This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. The current implementation supports direct subject-relation-resource tuples; recursive relation traversal is a later roadmap item.
+
 **Response:** `200 OK`
 ```json
 {

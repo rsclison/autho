@@ -48,41 +48,68 @@
           "conditions": {
             "type": "array",
             "items": {
-              "type": "array",
-              "minItems": 3,
-              "maxItems": 3,
-              "items": [
+              "oneOf": [
                 {
-                  "type": "string",
-                  "enum": ["=", "diff", "<", ">", "<=", ">=", "in", "notin", "date>"]
-                },
-                {
-                  "oneOf": [
-                    {"type": ["string", "number"]},
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": [
                     {
-                      "type": "array",
-                      "minItems": 3,
-                      "maxItems": 3,
-                      "items": [
-                        {"type": "string", "minLength": 1},
-                        {"type": "string", "enum": ["$s", "$r"]},
-                        {"type": "string", "minLength": 1}
+                      "type": "string",
+                      "enum": ["=", "diff", "<", ">", "<=", ">=", "in", "notin", "date>"]
+                    },
+                    {
+                      "oneOf": [
+                        {"type": ["string", "number"]},
+                        {
+                          "type": "array",
+                          "minItems": 3,
+                          "maxItems": 3,
+                          "items": [
+                            {"type": "string", "minLength": 1},
+                            {"type": "string", "enum": ["$s", "$r"]},
+                            {"type": "string", "minLength": 1}
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "oneOf": [
+                        {"type": ["string", "number"]},
+                        {
+                          "type": "array",
+                          "minItems": 3,
+                          "maxItems": 3,
+                          "items": [
+                            {"type": "string", "minLength": 1},
+                            {"type": "string", "enum": ["$s", "$r"]},
+                            {"type": "string", "minLength": 1}
+                          ]
+                        }
                       ]
                     }
                   ]
                 },
                 {
-                  "oneOf": [
-                    {"type": ["string", "number"]},
+                  "type": "array",
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "items": [
                     {
-                      "type": "array",
-                      "minItems": 3,
-                      "maxItems": 3,
-                      "items": [
-                        {"type": "string", "minLength": 1},
-                        {"type": "string", "enum": ["$s", "$r"]},
-                        {"type": "string", "minLength": 1}
-                      ]
+                      "type": "string",
+                      "enum": ["relation", "related", "has-relation"]
+                    },
+                    {
+                      "type": "string",
+                      "enum": ["$s"]
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "string",
+                      "enum": ["$r"]
                     }
                   ]
                 }

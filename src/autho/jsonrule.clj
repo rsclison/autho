@@ -1,6 +1,7 @@
 (ns autho.jsonrule
   (:require [autho.jsonpath :as js]
-            [autho.attfun :as attfun])
+            [autho.attfun :as attfun]
+            [autho.rebac :as rebac])
   (:use clojure.test))
 
 ;; a context is like {:class :student :name "john" :age 21}
@@ -64,11 +65,38 @@
       (boolean (apply func [opv1 opv2]))
       false)))
 
+(defn- relation-entity
+  [operand ctxt]
+  (case (str operand)
+    "$s" (:subject ctxt)
+    "$r" (:resource ctxt)
+    operand))
+
+(defn- relation-clause?
+  [operator]
+  (contains? #{"relation" "related" "has-relation"} (name operator)))
+
+(defn- eval-relation-clause
+  [[_ subject-op relation-op resource-op] ctxt]
+  (let [subject (relation-entity subject-op ctxt)
+        resource (relation-entity resource-op ctxt)
+        relation (if (keyword? relation-op) (name relation-op) (str relation-op))]
+    (boolean
+     (and (map? subject)
+          (map? resource)
+          (rebac/has-relation? subject relation resource)))))
+
+(defn- eval-policy-clause
+  [[operator :as clause] request]
+  (if (relation-clause? operator)
+    (eval-relation-clause clause request)
+    (eval-clause2 clause request)))
+
 (defn- evaluate-conditions
   "Evalue toutes les conditions d'une règle jrules (format :conditions).
    Retourne true ssi toutes les conditions sont satisfaites."
   [rule request]
-  (every? #(eval-clause2 % request) (:conditions rule)))
+  (every? #(eval-policy-clause % request) (:conditions rule)))
 
 
 
@@ -170,5 +198,4 @@
         (recur (rest conds))
         false)))
   )
-
 

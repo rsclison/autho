@@ -1,6 +1,13 @@
 (ns autho.jsonrule-test
   (:require [clojure.test :refer :all]
-            [autho.jsonrule :as jsonrule]))
+            [autho.jsonrule :as jsonrule]
+            [autho.rebac :as rebac]))
+
+(use-fixtures :each
+  (fn [f]
+    (rebac/clear-relations!)
+    (f)
+    (rebac/clear-relations!)))
 
 ;; ==============================================================================
 ;; Tests pour evalOperand
@@ -209,6 +216,19 @@
                    :resource {:class "Document" :owner "user123"}
                    :operation "write"
                    :context {}}]
+      (is (true? (:value (jsonrule/evaluateRule rule request)))))))
+
+(deftest evaluateRule-relation-condition-test
+  (testing "evaluateRule supports direct ReBAC relation predicates in policy conditions"
+    (let [subject {:class "Person" :id "alice"}
+          resource {:class "Document" :id "doc-1"}
+          rule {:conditions [["relation" "$s" "viewer" "$r"]]}
+          request {:subject subject
+                   :resource resource
+                   :operation "read"
+                   :context {}}]
+      (is (false? (:value (jsonrule/evaluateRule rule request))))
+      (rebac/add-relation! subject "viewer" resource)
       (is (true? (:value (jsonrule/evaluateRule rule request)))))))
 
 (deftest evaluateRule-non-owner-denied-test

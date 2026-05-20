@@ -793,6 +793,9 @@ components:
           default: prod
         rules:
           type: array
+          description: >
+            Policy rules. Rule conditions support standard attribute clauses
+            and direct ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
           items:
             type: object
         tests:
@@ -839,6 +842,9 @@ components:
           default: prod
         rules:
           type: array
+          description: >
+            Candidate policy rules. Rule conditions support standard attribute
+            clauses and direct ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
           items:
             type: object
         tests:
