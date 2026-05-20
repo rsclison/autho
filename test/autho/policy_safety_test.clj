@@ -195,9 +195,27 @@
                                                                 (throw (ex-info "should not invalidate" {})))]
       (let [analysis (prp/validate-policy-submission "Document" payload)]
         (is (= true (:valid analysis)))
+        (is (= "passed" (get-in analysis [:report :status])))
         (is (= [] (:errors analysis)))
         (is (= 1 (get-in analysis [:tests :count])))
-        (is (= 1 (get-in analysis [:tests :passed])))))))
+        (is (= 1 (get-in analysis [:tests :passed])))
+        (is (= 1 (get-in analysis [:report :summary :policyTests :passed])))))))
+
+(deftest validate-policy-submission-reports-warnings-test
+  (let [policy {:resourceClass "Document"
+                :strategy "almost_one_allow_no_deny"
+                :rules [{:name "broad-allow"
+                         :priority 10
+                         :effect "allow"
+                         :resourceClass "Document"
+                         :conditions []}]}
+        analysis (prp/validate-policy-submission "Document"
+                                                 (json/write-value-as-string policy))]
+    (is (= "passed_with_warnings" (get-in analysis [:report :status])))
+    (is (= 2 (get-in analysis [:report :summary :warnings])))
+    (is (= "warning"
+           (some #(when (= "policy-safety" (:name %)) (:status %))
+                 (get-in analysis [:report :gates]))))))
 
 (deftest submit-policy-stores-isolated-policy-environments-test
   (let [base-policy {:resourceClass "Document"

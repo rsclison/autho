@@ -125,6 +125,24 @@ Avec `--format json`, la sortie est exploitable par un job CI :
 {
   "valid": true,
   "resourceClass": "Document",
+  "environment": "prod",
+  "report": {
+    "status": "passed",
+    "summary": {
+      "errors": 0,
+      "warnings": 0,
+      "policyTests": {
+        "count": 2,
+        "passed": 2,
+        "failed": 0
+      }
+    },
+    "gates": [
+      {"name": "schema", "status": "passed"},
+      {"name": "policy-safety", "status": "passed"},
+      {"name": "policy-tests", "status": "passed"}
+    ]
+  },
   "validation": {
     "errors": [],
     "warnings": [],
@@ -136,6 +154,14 @@ Avec `--format json`, la sortie est exploitable par un job CI :
   }
 }
 ```
+
+Le champ `report` est le resume stable pour revue de changement. `status` vaut :
+
+- `passed` : aucun warning ni erreur;
+- `passed_with_warnings` : la politique est deployable mais merite une revue;
+- `failed` : la politique ne doit pas etre promue.
+
+Les `gates` indiquent quelle etape a echoue ou produit un warning : `schema`, `policy-safety`, `policy-tests`.
 
 Exemple :
 

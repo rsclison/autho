@@ -69,8 +69,9 @@ Etat d'avancement :
 - endpoint de validation pre-deploiement `POST /v1/policies/:resourceClass/validate` sans persistence;
 - commande CI/CLI `./lein policy:validate --file candidate-policy.json`;
 - environnements de politique `dev`, `staging`, `prod` avec fallback historique sur `prod`;
+- rapport de validation agrege avec statut, resume et gates `schema`, `policy-safety`, `policy-tests`;
 - documentation du schema, des tests declaratifs et des erreurs dans `docs/POLICY_SAFETY.md`;
-- prochaine etape : produire un rapport de validation agrege exploitable par revue de changement.
+- prochaine etape : preparer la priorite 3 avec comparaison policy courante vs candidate.
 
 ## Priorite 3 - Replay, shadow et impact analysis
 

@@ -1380,6 +1380,21 @@ paths:
                           validation:
                             type: object
                             additionalProperties: true
+                          report:
+                            type: object
+                            description: Aggregate validation report for review workflows.
+                            properties:
+                              status:
+                                type: string
+                                enum: [passed, passed_with_warnings, failed]
+                              summary:
+                                type: object
+                                additionalProperties: true
+                              gates:
+                                type: array
+                                items:
+                                  type: object
+                                  additionalProperties: true
         '400':
           description: Policy failed schema, safety or declarative test validation
 

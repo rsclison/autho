@@ -196,6 +196,71 @@
     (contains? entry :global) (:global entry)
     :else entry))
 
+(defn- validation-gate
+  [name errors warnings & extra]
+  (merge {:name name
+          :status (cond
+                    (seq errors) "failed"
+                    (seq warnings) "warning"
+                    :else "passed")
+          :errors (vec (or errors []))
+          :warnings (vec (or warnings []))}
+         (apply hash-map extra)))
+
+(defn build-validation-report
+  [resource-class environment safety-analysis test-analysis]
+  (let [safety-errors (vec (or (:errors safety-analysis) []))
+        safety-warnings (vec (or (:warnings safety-analysis) []))
+        test-errors (vec (or (:errors test-analysis) []))
+        gates [(validation-gate "schema" [] [])
+               (validation-gate "policy-safety" safety-errors safety-warnings)
+               (validation-gate "policy-tests" test-errors []
+                                :count (or (:count test-analysis) 0)
+                                :passed (or (:passed test-analysis) 0)
+                                :failed (or (:failed test-analysis) 0))]
+        error-count (+ (count safety-errors) (count test-errors))
+        warning-count (count safety-warnings)]
+    {:resourceClass resource-class
+     :environment environment
+     :status (cond
+               (pos? error-count) "failed"
+               (pos? warning-count) "passed_with_warnings"
+               :else "passed")
+     :summary {:errors error-count
+               :warnings warning-count
+               :policyTests {:count (or (:count test-analysis) 0)
+                             :passed (or (:passed test-analysis) 0)
+                             :failed (or (:failed test-analysis) 0)}}
+     :gates gates}))
+
+(defn validation-exception-report
+  [resource-class environment exception]
+  (let [data (ex-data exception)
+        error-code (:error-code data)
+        issues (vec (or (:issues data) []))
+        analysis (:analysis data)
+        safety-analysis (if (= "INVALID_POLICY_SAFETY" error-code)
+                          (or analysis {:errors issues :warnings []})
+                          {:errors [] :warnings []})
+        test-analysis (if (= "POLICY_TESTS_FAILED" error-code)
+                        (or analysis {:count 0 :passed 0 :failed (count issues) :errors issues})
+                        {:count 0 :passed 0 :failed 0 :errors []})
+        report (build-validation-report resource-class
+                                        (normalize-policy-environment environment)
+                                        safety-analysis
+                                        test-analysis)
+        schema-errors (when (contains? #{"INVALID_POLICY_ENVIRONMENT"} error-code)
+                        issues)]
+    (cond-> report
+      (seq schema-errors)
+      (assoc :status "failed"
+             :summary (assoc (:summary report)
+                             :errors (+ (get-in report [:summary :errors] 0)
+                                        (count schema-errors)))
+             :gates (assoc (:gates report)
+                           0
+                           (validation-gate "schema" schema-errors []))))))
+
 (defn insert-policy
   ([resourceClass pol]
    (if (or (contains? pol :global)
@@ -230,14 +295,16 @@
                     (policy-format/normalize-policy))
           pol-map (assoc pol-map :environment environment)
           safety-analysis (policy-safety/validate-policy! resourceClass pol-map)
-          test-analysis (policy-tests/validate-policy-tests! pol-map)]
+          test-analysis (policy-tests/validate-policy-tests! pol-map)
+          report (build-validation-report resourceClass environment safety-analysis test-analysis)]
       {:valid true
        :policy pol-map
        :environment environment
        :errors []
        :warnings (:warnings safety-analysis)
        :safety safety-analysis
-       :tests test-analysis})))
+       :tests test-analysis
+       :report report})))
 
 ;;(defn submit-policy [^String resourceClass ^String policy]
 ;;  (let [js (slurp "resources/policySchema.json")

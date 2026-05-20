@@ -585,6 +585,18 @@ Reponse de succes :
   "data": {
     "valid": true,
     "resourceClass": "Facture",
+    "report": {
+      "status": "passed",
+      "summary": {
+        "errors": 0,
+        "warnings": 0,
+        "policyTests": {
+          "count": 2,
+          "passed": 2,
+          "failed": 0
+        }
+      }
+    },
     "validation": {
       "valid": true,
       "errors": [],
@@ -598,13 +610,16 @@ Reponse de succes :
         "passed": 2,
         "failed": 0,
         "errors": []
+      },
+      "report": {
+        "status": "passed"
       }
     }
   }
 }
 ```
 
-En cas d'echec, la reponse est un `400` avec les issues dans `error.details`.
+En cas d'echec, la reponse est un `400` avec les issues et le rapport agrege dans `error.details`.
 
 Les politiques peuvent etre ciblees par environnement avec le champ `environment` ou avec le query param `?environment=dev|staging|prod`. Sans valeur explicite, Autho utilise `prod`.
 

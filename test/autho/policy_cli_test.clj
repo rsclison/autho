@@ -44,6 +44,8 @@
     (is (= 0 (:exit-code result)))
     (is (= true (:valid body)))
     (is (= "Document" (:resourceClass body)))
+    (is (= "prod" (:environment body)))
+    (is (= "passed" (get-in body [:report :status])))
     (is (= 1 (get-in body [:validation :tests :passed])))))
 
 (deftest run-validates-yaml-policy-test
@@ -81,6 +83,7 @@
     (is (= 1 (:exit-code result)))
     (is (= false (:valid body)))
     (is (= "Document" (:resourceClass body)))
+    (is (= "failed" (get-in body [:report :status])))
     (is (= "POLICY_TESTS_FAILED" (get-in body [:error :code])))))
 
 (deftest run-requires-file-test

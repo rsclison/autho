@@ -45,6 +45,21 @@
       (log/error exception default-prefix))
     (response/error-response code message status)))
 
+(defn- validation-exception->response
+  [resource-class environment exception]
+  (let [data (ex-data exception)
+        status (or (:status data) 500)
+        code (or (:error-code data) "INVALID_POLICY")
+        message (if (< status 500)
+                  (.getMessage exception)
+                  (str "Failed to validate policy: " (.getMessage exception)))
+        report (prp/validation-exception-report resource-class environment exception)
+        details {:issues (or (:issues data) [])
+                 :report report}]
+    (when (>= status 500)
+      (log/error exception "Failed to validate policy: "))
+    (response/error-response code message status details)))
+
 (defn- response-map?
   [value]
   (and (map? value)
@@ -413,9 +428,12 @@
             (response/success-response {:valid true
                                         :resourceClass resource-class
                                         :environment (:environment analysis)
+                                        :report (:report analysis)
                                         :validation (dissoc analysis :policy)}))
           (catch clojure.lang.ExceptionInfo e
-            (policy-exception->response e "INVALID_POLICY" "Failed to validate policy: "))
+            (validation-exception->response resource-class
+                                            (or environment prp/default-policy-environment)
+                                            e))
           (catch Exception e
             (log/error e "Error validating policy")
             (response/error-response "VALIDATE_POLICY_ERROR"

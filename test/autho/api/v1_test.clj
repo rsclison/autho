@@ -453,7 +453,10 @@
                      :errors []
                      :warnings [{:code "MISSING_OPERATION"}]
                      :safety {:errors [] :warnings [{:code "MISSING_OPERATION"}]}
-                     :tests {:count 0 :passed 0 :failed 0 :errors []}})
+                     :tests {:count 0 :passed 0 :failed 0 :errors []}
+                     :report {:status "passed_with_warnings"
+                              :summary {:errors 0 :warnings 1
+                                        :policyTests {:count 0 :passed 0 :failed 0}}}})
                   prp/submit-policy
                   (fn [& _]
                     (throw (ex-info "should not persist" {})))]
@@ -463,6 +466,8 @@
         (is (= true (get-in body [:data :valid])))
         (is (= "Document" (:resourceClass @captured)))
         (is (= "prod" (get-in body [:data :environment])))
+        (is (= "passed_with_warnings" (get-in body [:data :report :status])))
+        (is (= "passed_with_warnings" (get-in body [:data :validation :report :status])))
         (is (str/includes? (:policyJson @captured) "\"resourceClass\":\"Document\""))
         (is (= "MISSING_OPERATION"
                (get-in body [:data :validation :warnings 0 :code])))
@@ -482,7 +487,8 @@
             body (parse-response-body response)]
         (is (= 400 (:status response)))
         (is (= "POLICY_TESTS_FAILED" (get-in body [:error :code])))
-        (is (= "POLICY_TEST_FAILED" (get-in body [:error :details 0 :code])))))))
+        (is (= "POLICY_TEST_FAILED" (get-in body [:error :details :issues 0 :code])))
+        (is (= "failed" (get-in body [:error :details :report :status])))))))
 
 (deftest validate-policy-route-forwards-request-test
   (let [request-body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))

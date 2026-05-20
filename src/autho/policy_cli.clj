@@ -67,13 +67,18 @@
              usage)})
 
 (defn- validation-error-result
-  [format resource-class exception]
+  [format resource-class environment exception]
   (let [data (ex-data exception)
         issues (or (:issues data)
                    (get-in data [:analysis :errors])
                    [])
+        report (prp/validation-exception-report resource-class
+                                                (or environment prp/default-policy-environment)
+                                                exception)
         payload {:valid false
                  :resourceClass resource-class
+                 :environment (:environment report)
+                 :report report
                  :error {:code (or (:error-code data) "POLICY_VALIDATION_FAILED")
                          :message (.getMessage exception)
                          :issues issues}}]
@@ -81,6 +86,7 @@
      :stdout (if (= "json" format)
                (json/write-str payload)
                (str "Policy validation failed for " resource-class "\n"
+                    "Status: " (:status report) "\n"
                     (.getMessage exception) "\n"))}))
 
 (defn- unexpected-error-result
@@ -99,25 +105,30 @@
     (let [{policy-json :json policy-map :map} (parse-policy-file file)
           effective-resource-class (or resource-class
                                        (get policy-map "resourceClass")
-                                       (get policy-map :resourceClass))]
+                                       (get policy-map :resourceClass))
+          environment (or (get policy-map "environment")
+                          (get policy-map :environment))]
       (if (str/blank? effective-resource-class)
         (usage-result 2 "Missing resource class. Provide --resource-class or resourceClass in the policy file.")
         (try
           (let [analysis (prp/validate-policy-submission effective-resource-class policy-json)
                 payload {:valid true
                          :resourceClass effective-resource-class
+                         :environment (:environment analysis)
+                         :report (:report analysis)
                          :validation (dissoc analysis :policy)}]
             {:exit-code 0
              :stdout (if (= "json" format)
                        (json/write-str payload)
                        (str "Policy validation passed for " effective-resource-class "\n"
+                            "Status: " (get-in analysis [:report :status]) "\n"
                             "Warnings: " (count (:warnings analysis)) "\n"
                             "Policy tests: " (get-in analysis [:tests :passed]) "/"
                             (get-in analysis [:tests :count]) " passed\n"))})
           (catch clojure.lang.ExceptionInfo e
-            (validation-error-result format effective-resource-class e)))))
+            (validation-error-result format effective-resource-class environment e)))))
     (catch clojure.lang.ExceptionInfo e
-      (validation-error-result format resource-class e))
+      (validation-error-result format resource-class prp/default-policy-environment e))
     (catch Exception e
       (unexpected-error-result format e))))
 

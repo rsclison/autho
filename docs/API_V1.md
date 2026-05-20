@@ -470,6 +470,18 @@ Validate a candidate policy without persisting it. This endpoint runs JSON Schem
     "valid": true,
     "resourceClass": "Document",
     "environment": "staging",
+    "report": {
+      "status": "passed",
+      "summary": {
+        "errors": 0,
+        "warnings": 0,
+        "policyTests": {
+          "count": 1,
+          "passed": 1,
+          "failed": 0
+        }
+      }
+    },
     "validation": {
       "valid": true,
       "errors": [],
@@ -479,6 +491,9 @@ Validate a candidate policy without persisting it. This endpoint runs JSON Schem
         "passed": 1,
         "failed": 0,
         "errors": []
+      },
+      "report": {
+        "status": "passed"
       }
     }
   }
