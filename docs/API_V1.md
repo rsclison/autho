@@ -648,6 +648,64 @@ DELETE /v1/policies/Document
 
 **Response:** `204 No Content`
 
+### Relationship Endpoints
+
+#### GET /v1/relations
+
+List direct ReBAC tuples currently loaded by the server.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "relations": [
+      {
+        "subject": {"class": "Person", "id": "alice"},
+        "relation": "viewer",
+        "resource": {"class": "Document", "id": "doc-1"}
+      }
+    ]
+  }
+}
+```
+
+#### POST /v1/relations
+
+Create a direct subject-relation-resource tuple. Requires `governance-admin` or `relation-admin`.
+
+**Request:**
+```json
+{
+  "subject": {"class": "Person", "id": "alice"},
+  "relation": "viewer",
+  "resource": {"class": "Document", "id": "doc-1"}
+}
+```
+
+**Response:** `201 Created`
+
+#### DELETE /v1/relations
+
+Delete a direct subject-relation-resource tuple. Requires `governance-admin` or `relation-admin`. The request body has the same shape as `POST /v1/relations`.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "deleted": true,
+    "relation": {
+      "subject": {"class": "Person", "id": "alice"},
+      "relation": "viewer",
+      "resource": {"class": "Document", "id": "doc-1"}
+    }
+  }
+}
+```
+
+Current limitation: relation checks are direct tuple checks only. Parent inheritance, recursive traversal, userset rewrites and durable external storage are not implemented yet.
+
 ### Cache Management Endpoints
 
 #### GET /v1/cache/stats

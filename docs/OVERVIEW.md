@@ -4,6 +4,8 @@
 
 Autho is a **centralised authorisation server** built on the XACML and ABAC (Attribute-Based Access Control) standards. It provides a single, application-independent authorisation decision for all services in an information system, backed by rich, versioned access-control policies.
 
+The current product direction is **Authorization Operations**: Autho should not only answer `allow` or `deny`, but also explain, test, replay, compare, govern and prove authorization decisions before and after policy changes.
+
 The core idea: business applications **fully delegate the authorisation decision** to Autho. They embed no access logic of their own — they ask a question (`Can Alice read invoice FAC-123?`) and receive an answer (`allow` or `deny`) together with the list of rules that drove the decision.
 
 ---
@@ -18,6 +20,26 @@ Unlike RBAC (fixed roles), ABAC evaluates dynamic attributes of the subject, the
 - the clearance level is sufficient
 - the current date falls within the authorisation window
 - the role belongs to a defined list
+
+### ReBAC — Relationship-Based Access Control
+
+Autho now has a first direct ReBAC layer for relationship tuples:
+
+```json
+{
+  "subject": {"class": "Person", "id": "alice"},
+  "relation": "viewer",
+  "resource": {"class": "Document", "id": "doc-1"}
+}
+```
+
+Policies can reference this graph with:
+
+```json
+{"conditions": [["relation", "$s", "viewer", "$r"]]}
+```
+
+This first version checks direct tuples only. Recursive traversal, parent inheritance and durable relation storage are planned follow-up work.
 
 ### XACML Architecture (PDP / PRP / PIP / PAP)
 
@@ -45,6 +67,23 @@ Unlike RBAC (fixed roles), ABAC evaluates dynamic attributes of the subject, the
 - **Automatic versioning** — every change preserves history
 - **Rollback** to any previous version
 - **Diff** between two versions
+- Pre-deployment validation without persistence
+- Impact analysis before rollout
+- Risk profiles with approval gates for high-risk changes
+- Governance RBAC for policy, risk profile, review, deploy and relation mutations
+
+### Policy Change Governance
+- **Shadow evaluation** compares the production decision with a candidate policy in dry-run mode
+- **Audit replay** can build impact batches from recorded decisions
+- **Impact reports** identify grants, revokes, sensitive resources, affected subjects and responsible rules
+- **Rollout gates** block or require approval for risky changes
+- **Policy lifecycle metadata** records direct updates, impact rollouts and rollbacks
+- **Change timeline** combines policy versions, impact analyses, reviews, deployments and risk profile revisions
+
+### Relationship Management
+- `GET /v1/relations` — list direct ReBAC tuples
+- `POST /v1/relations` — add a tuple, protected by `relation-admin` or `governance-admin`
+- `DELETE /v1/relations` — remove a tuple, protected by `relation-admin` or `governance-admin`
 
 ### Time-Travel
 - **`POST /isAuthorized-at-time`** — decision as it would have been at a past instant T
@@ -81,6 +120,8 @@ Autho uses an **open-core** model. The core PDP (decisions) is free; advanced fe
 | Audit trail with HMAC integrity chain | — | ✓ | ✓ |
 | Policy versioning, diff & rollback | — | ✓ | ✓ |
 | `explain` & `simulate` | — | ✓ | ✓ |
+| Shadow evaluation and impact analysis | — | ✓ | ✓ |
+| ReBAC direct relation tuples | — | ✓ | ✓ |
 | Prometheus metrics (`/metrics`) | — | ✓ | ✓ |
 | Kafka PIP / RocksDB | — | — | ✓ |
 | Multi-instance cache synchronisation | — | — | ✓ |

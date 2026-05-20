@@ -172,6 +172,7 @@ Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégra
 | `POST /v1/authz/permissions` | Ressources accessibles à un sujet (avec pagination et fetch Kafka) |
 | `POST /v1/authz/explain` | Trace détaillée règle par règle de la décision |
 | `POST /v1/authz/simulate` | Simulation dry-run (sans cache ni audit) |
+| `POST /v1/authz/shadow` | Décision de production + comparaison shadow avec politique candidate |
 | `POST /v1/authz/batch` | Évaluation en lot de jusqu'à 100 demandes en parallèle |
 
 ### Gestion des politiques
@@ -187,6 +188,22 @@ Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégra
 | `GET  /v1/policies/:rc/versions/:v` | Récupérer la version v |
 | `GET  /v1/policies/:rc/diff?from=1&to=3` | Diff entre deux versions |
 | `POST /v1/policies/:rc/rollback/:v` | Rollback à la version v |
+| `POST /v1/policies/:rc/validate` | Validation pré-déploiement sans persistence |
+| `POST /v1/policies/:rc/impact` | Analyse d'impact d'une politique candidate |
+| `GET  /v1/policies/:rc/impact/history` | Historique des analyses d'impact |
+| `POST /v1/policies/:rc/impact/history/:id/review` | Revue ou approbation d'une analyse d'impact |
+| `POST /v1/policies/:rc/impact/history/:id/rollout` | Promotion contrôlée d'une analyse d'impact |
+| `GET/PUT/DELETE /v1/policies/risk-profiles...` | Profils de risque et seuils de rollout |
+
+### Relations ReBAC
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET  /v1/relations` | Lister les tuples relationnels directs |
+| `POST /v1/relations` | Créer un tuple sujet-relation-ressource |
+| `DELETE /v1/relations` | Supprimer un tuple sujet-relation-ressource |
+
+Les mutations de politiques, profils de risque, reviews, rollouts et relations sont protégées par des rôles de gouvernance (`policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin` ou `governance-admin`). Pour les clients API key, ces rôles sont configurés via `API_CLIENT_ROLES`.
 
 ### Time-Travel (Kafka activé)
 
@@ -245,6 +262,9 @@ Une clause est un vecteur `[opérateur opérande1 opérande2]`.
 
 ; Négation
 [diff [Person $s role] "stagiaire"]
+
+; Relation ReBAC directe
+["relation" "$s" "viewer" "$r"]
 ```
 
 **Syntaxe JSONPath (alternative) :**
@@ -268,6 +288,7 @@ Une clause est un vecteur `[opérateur opérande1 opérande2]`.
 | `>=`      | Sup. ou égal | `[>= [Person $s clearance-level] 3]` |
 | `in`      | Valeur dans ensemble CSV | `["in" "$s.role" "admin,manager,dpo"]` |
 | `notin`   | Valeur hors ensemble | `["notin" "$s.status" "suspended,blocked"]` |
+| `relation` | Relation directe sujet-ressource | `["relation" "$s" "viewer" "$r"]` |
 | `or`      | OU logique | `["or" clause1 clause2]` |
 | `not`     | Négation | `["not" clause]` |
 | `and`     | ET étendu | `["and" clause1 clause2 clause3]` |

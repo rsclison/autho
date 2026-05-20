@@ -754,6 +754,11 @@ La revue d'impact requiert `governance-admin` ou `policy-reviewer`. Le rollout d
 Les tuples relationnels directs sont administrables via `GET/POST/DELETE /v1/relations`. Les mutations requierent `governance-admin` ou `relation-admin`.
 
 ```bash
+curl -H "X-API-Key: key" \
+  http://localhost:8080/v1/relations
+```
+
+```bash
 curl -X POST http://localhost:8080/v1/relations \
   -H "Content-Type: application/json" \
   -H "X-API-Key: key" \
@@ -763,6 +768,25 @@ curl -X POST http://localhost:8080/v1/relations \
     "resource": {"class": "Document", "id": "doc-1"}
   }'
 ```
+
+```bash
+curl -X DELETE http://localhost:8080/v1/relations \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{
+    "subject": {"class": "Person", "id": "alice"},
+    "relation": "viewer",
+    "resource": {"class": "Document", "id": "doc-1"}
+  }'
+```
+
+Une politique peut ensuite utiliser :
+
+```json
+{"conditions": [["relation", "$s", "viewer", "$r"]]}
+```
+
+Limite actuelle : le check relationnel est direct. Autho ne resout pas encore les relations heritees par parent, les rewrites de usersets ni les traversals recursifs.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 

@@ -8,6 +8,26 @@ Autho ne doit pas etre positionne comme un simple moteur ABAC/XACML. Le marche c
 
 L'objectif est de faire d'Autho le produit qui reduit les incidents d'autorisation en production, pas seulement le composant qui repond `allow` ou `deny`.
 
+## Etat d'implementation actuel
+
+Les priorites 1 a 3 disposent maintenant d'un socle operationnel :
+
+- contrat de decision canonique expose par les endpoints de decision principaux;
+- validation pre-deploiement, tests declaratifs de politiques et environnements `dev`, `staging`, `prod`;
+- replay audit initial pour construire des batches d'impact depuis les decisions historiques;
+- shadow evaluation via `POST /v1/authz/shadow`;
+- impact analysis avec profils de risque persistables, revisions append-only, approbations et garde-fous de rollout;
+- lifecycle auditable des politiques : versions, diff, rollback, rollout depuis analyse d'impact et timeline;
+- RBAC de gouvernance sur les mutations critiques via `API_CLIENT_ROLES` ou roles JWT;
+- premier socle ReBAC direct : tuples sujet-relation-ressource, predicat `relation` dans les politiques, API `/v1/relations`.
+
+Les limites connues restent :
+
+- le ReBAC ne fait aujourd'hui que des checks directs, sans expansion recursive ni heritage parent/enfant;
+- les tuples relationnels sont en memoire et doivent etre externalises pour un usage enterprise;
+- le control plane, le data plane et l'evidence plane ne sont pas encore separes;
+- le multi-tenant, les bundles signes et les workflows GRC complets restent a construire.
+
 ## Priorite 1 - Socle de confiance
 
 Objectif : aucune ambiguite sur une decision.
@@ -110,7 +130,8 @@ Etat d'avancement :
 - versions de politique enrichies avec metadata de lifecycle (`lifecycleStatus`, `workflowAction`, `rollbackFromVersion`) pour tracer les deployments directs, rollouts et rollbacks;
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
 - controles RBAC reels sur les endpoints de gouvernance : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, avec bypass explicite `governance-admin`;
-- prochaine etape : demarrer la priorite 4 avec un modele relationnel minimal.
+- role `relation-admin` ajoute pour administrer les tuples relationnels;
+- prochaine etape : poursuivre la priorite 4 avec resolution parent/heritage et stockage durable des relations.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 
@@ -131,7 +152,8 @@ Etat d'avancement :
 - modele relationnel direct ajoute sous forme de tuples sujet-relation-ressource;
 - predicat de politique `["relation", "$s", "viewer", "$r"]` disponible dans `conditions`;
 - API minimale `GET/POST/DELETE /v1/relations` pour administrer les tuples directs;
-- prochaine etape : ajouter la resolution parent/heritage.
+- controle RBAC des mutations relationnelles via `relation-admin` ou `governance-admin`;
+- prochaine etape : ajouter la resolution parent/heritage et persister/indexer les tuples.
 
 ## Priorite 5 - Architecture enterprise
 
@@ -169,13 +191,12 @@ Critere de succes : Autho parle aux equipes securite, conformite, DPO et RSSI, p
 
 ## Plan 90 jours
 
-1. Stabiliser le contrat de decision canonique.
-2. Corriger les divergences legacy/v1.
-3. Ajouter `policy lint`.
-4. Ajouter les tests declaratifs de politiques.
-5. Industrialiser l'impact analysis.
-6. Ajouter une demo commerciale complete : API key application, utilisateur delegue, explain, simulate, audit, replay, rapport d'impact.
-7. Publier une comparaison produit honnete : Autho vs OPA, Cedar, OpenFGA, SpiceDB.
+1. Stabilise : contrat de decision canonique, validation, tests declaratifs et impact analysis initial.
+2. Stabilise : gouvernance RBAC minimale et lifecycle policy auditable.
+3. En cours : moteur hybride ABAC/ReBAC avec tuples directs.
+4. Prochaine tranche : relations hierarchiques, persistence/indexation des tuples et explain relationnel.
+5. Prochaine tranche : demo commerciale complete avec API key application, utilisateur delegue, explain, simulate, audit, replay, rapport d'impact et relation ReBAC.
+6. Prochaine tranche : comparaison produit honnete Autho vs OPA, Cedar, OpenFGA, SpiceDB.
 
 ## Plan 12 mois
 

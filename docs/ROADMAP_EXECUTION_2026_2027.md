@@ -94,6 +94,24 @@ Objectif: augmenter la valeur business en ajoutant des workflows de gouvernance 
 
 ## 5. Roadmap par phases
 
+## Etat courant de la roadmap
+
+Les phases 0, 1 et une partie importante de la phase 2 ont un socle livre :
+
+- contrat de decision canonique sur les endpoints principaux;
+- validation pre-deploiement, tests declaratifs, environnements de politiques et rapport de validation;
+- impact analysis avec replay audit initial, shadow evaluation, profils de risque persistables, approbations et rollout gates;
+- lifecycle policy auditable : versions, diff, timeline, rollback et rollout depuis analyse d'impact;
+- RBAC de gouvernance sur les mutations critiques via roles applicatifs/JWT;
+- demarrage de la phase 3 avec tuples ReBAC directs, predicat `relation` et API `/v1/relations`.
+
+Les prochaines priorites d'execution sont donc :
+
+1. rendre le ReBAC durable et traversable : persistence, indexation, parent/heritage, explain relationnel;
+2. commencer la separation control plane / data plane / evidence plane;
+3. preparer la demonstration produit complete autour de policy lifecycle + impact + ReBAC;
+4. documenter les limites actuelles face a OpenFGA/SpiceDB tant que la resolution recursive n'est pas implementee.
+
 ## Phase 0 - Stabilisation immediate
 
 Horizon: 0 a 6 semaines

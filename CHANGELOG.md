@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Authorization Operations foundations:
+  - canonical decision fields on the main v1 decision endpoints
+  - pre-deployment policy validation endpoint and policy validation CLI
+  - declarative policy tests executed before persistence
+  - policy environments (`dev`, `staging`, `prod`)
+  - policy impact analysis with audit replay input, shadow evaluation, risk profiles, review gates, rollout and timeline metadata
+  - governance RBAC roles for critical mutations (`policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin`, `governance-admin`)
+  - `API_CLIENT_ROLES` for API-key application identities
+  - direct ReBAC relation tuples with `GET/POST/DELETE /v1/relations`
+  - policy predicate `["relation", "$s", "<relation>", "$r"]` for direct relationship checks
 - Rate limiting middleware to prevent DoS attacks (configurable via `RATE_LIMIT_ENABLED` and `RATE_LIMIT_REQUESTS_PER_MINUTE`)
 - Health monitoring endpoints:
   - `/health` - Liveness probe for Kubernetes/Docker

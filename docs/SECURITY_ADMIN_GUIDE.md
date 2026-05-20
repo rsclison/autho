@@ -47,18 +47,20 @@ Trois secrets sont obligatoires au démarrage. Leur absence ou leur longueur ins
 | `API_KEY` | Authentification des applications de confiance via `X-API-Key` | 32 caractères |
 | `AUDIT_HMAC_SECRET` | Chaîne HMAC-SHA256 du journal d'audit (tamper-evident) | 32 caractères (256 bits) |
 
-Deux variables optionnelles lient la clé API à une identité applicative :
+Trois variables optionnelles lient la clé API à une identité applicative et à ses rôles de gouvernance :
 
 | Variable | Usage | Défaut |
 |---|---|---|
 | `API_CLIENT_ID` | Identifiant applicatif utilisé comme sujet PDP pour les appels `X-API-Key` | `trusted-internal-app` |
 | `API_CLIENT_CLASS` | Classe du sujet applicatif | `Application` |
+| `API_CLIENT_ROLES` | Rôles de gouvernance attribués à l'application API key, séparés par des virgules | `governance-admin` |
 
 Exemple :
 
 ```bash
 export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
+export API_CLIENT_ROLES="policy-admin,policy-deployer"
 ```
 
 Avec cette configuration, une requête authentifiée par `X-API-Key` est évaluée comme le sujet :
@@ -66,10 +68,13 @@ Avec cette configuration, une requête authentifiée par `X-API-Key` est évalu�
 ```clojure
 {:id "app-A"
  :class "Application"
- :client-id "app-A"}
+ :client-id "app-A"
+ :roles ["policy-admin" "policy-deployer"]}
 ```
 
 Le champ `subject` du body n'est pas une preuve d'identité et n'est pas utilisé pour déterminer le sujet d'un appel API key standard. Cette règle empêche un utilisateur ou un script d'appeler manuellement une route REST en déclarant `subject.id = app-A`.
+
+Les endpoints de gouvernance qui modifient l'état exigent un rôle applicatif ou JWT. `governance-admin` autorise tout ; en production, préférez des rôles minimaux : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer` ou `relation-admin`.
 
 ### 3.1.1 Variable de licence (optionnelle)
 

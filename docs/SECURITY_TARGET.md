@@ -151,7 +151,7 @@ Ces hypothèses sont des conditions préalables au bon fonctionnement sécurisé
 
 - Toute requête sur les routes protégées doit présenter soit un JWT HS256 valide (header `Authorization: Token <jwt>`), soit une API Key valide (header `X-API-Key: <key>`).
 - Un JWT est valide si : signature HMAC-SHA256 vérifiée avec `JWT_SECRET`, non expiré, algorithme HS256 uniquement.
-- Pour une API Key valide, le sujet PDP est l'identité applicative liée côté serveur (`API_CLIENT_ID`, `API_CLIENT_CLASS`). Le champ `subject` du corps de requête ne peut pas modifier cette identité.
+- Pour une API Key valide, le sujet PDP est l'identité applicative liée côté serveur (`API_CLIENT_ID`, `API_CLIENT_CLASS`) et ses rôles de gouvernance viennent de `API_CLIENT_ROLES`. Le champ `subject` du corps de requête ne peut pas modifier cette identité.
 - Une requête sans identité authentifiée est refusée avec `AUTHENTICATION_REQUIRED`. Une API Key valide mais non liée à un sujet applicatif est refusée avec `UNBOUND_API_KEY_IDENTITY`.
 - Les routes publiques (`/health`, `/metrics`, `/openapi.yaml`) ne requièrent pas d'authentification.
 
@@ -159,6 +159,7 @@ Ces hypothèses sont des conditions préalables au bon fonctionnement sécurisé
 
 - Les routes `/admin/*` requièrent soit une API Key, soit un JWT avec claim `role: admin`.
 - La logique est implémentée dans `wrap-admin-auth` (handler.clj).
+- Les mutations de gouvernance `/v1/policies/*` et `/v1/relations` exigent un rôle de gouvernance : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin` ou le rôle global `governance-admin`.
 
 ### 5.3 Politique d'audit
 
