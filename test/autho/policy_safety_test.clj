@@ -199,6 +199,60 @@
         (is (= 1 (get-in analysis [:tests :count])))
         (is (= 1 (get-in analysis [:tests :passed])))))))
 
+(deftest submit-policy-stores-isolated-policy-environments-test
+  (let [base-policy {:resourceClass "Document"
+                     :strategy "almost_one_allow_no_deny"
+                     :rules [{:name "allow-read"
+                              :priority 10
+                              :effect "allow"
+                              :resourceClass "Document"
+                              :operation "read"
+                              :conditions []}]}
+        dev-policy (assoc base-policy
+                          :environment "dev"
+                          :rules [(assoc (first (:rules base-policy))
+                                         :name "dev-allow-read")])
+        prod-policy (assoc base-policy :environment "prod")]
+    (with-redefs [pv/save-version! (fn [& _] nil)
+                  local-cache/invalidate-decisions-for-class! (fn [& _] nil)]
+      (prp/delete-policy "Document")
+      (try
+        (prp/submit-policy "Document" (json/write-value-as-string dev-policy))
+        (prp/submit-policy "Document" (json/write-value-as-string prod-policy))
+        (is (= "dev"
+               (:environment (prp/getGlobalPolicy "Document" "dev"))))
+        (is (= "prod"
+               (:environment (prp/getGlobalPolicy "Document"))))
+        (is (= "dev-allow-read"
+               (get-in (prp/getGlobalPolicy "Document" "dev") [:rules 0 :name])))
+        (is (= "allow-read"
+               (get-in (prp/getGlobalPolicy "Document" "prod") [:rules 0 :name])))
+        (finally
+          (prp/delete-policy "Document"))))))
+
+(deftest insert-policy-preserves-legacy-global-wrapper-test
+  (let [legacy-policy {:global {:strategy :almost_one_allow_no_deny
+                                :rules [{:name "legacy-rule"}]}}]
+    (prp/delete-policy "LegacyDocument")
+    (try
+      (prp/insert-policy "LegacyDocument" legacy-policy)
+      (is (= {:strategy :almost_one_allow_no_deny
+              :rules [{:name "legacy-rule"}]}
+             (prp/getGlobalPolicy "LegacyDocument")))
+      (finally
+        (prp/delete-policy "LegacyDocument")))))
+
+(deftest validate-policy-submission-rejects-unknown-environment-test
+  (let [policy (assoc valid-policy :environment "qa")
+        payload (json/write-value-as-string policy)]
+    (try
+      (prp/validate-policy-submission "Document" payload)
+      (is false "Expected invalid policy environment")
+      (catch clojure.lang.ExceptionInfo e
+        (is (= "INVALID_POLICY_ENVIRONMENT" (:error-code (ex-data e))))
+        (is (= ["dev" "prod" "staging"]
+               (get-in (ex-data e) [:issues 0 :supported-environments])))))))
+
 
 
 (deftest analyze-policy-emits-warnings-for-broad-and-shadowed-rules-test

@@ -14,6 +14,10 @@
         "only-one-applicable"
       ]
     },
+    "environment": {
+      "type": "string",
+      "enum": ["dev", "staging", "prod"]
+    },
     "rules": {
       "type": "array",
       "items": {

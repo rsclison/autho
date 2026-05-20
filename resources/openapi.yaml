@@ -604,6 +604,10 @@ components:
         strategy:
           type: string
           enum: [almost_one_allow_no_deny, default]
+        environment:
+          type: string
+          enum: [dev, staging, prod]
+          default: prod
         rules:
           type: array
           items:
@@ -646,6 +650,10 @@ components:
         strategy:
           type: string
           enum: [almost_one_allow_no_deny, default]
+        environment:
+          type: string
+          enum: [dev, staging, prod]
+          default: prod
         rules:
           type: array
           items:
@@ -1337,6 +1345,13 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: environment
+          schema:
+            type: string
+            enum: [dev, staging, prod]
+            default: prod
+          description: Policy environment used for validation when the body does not declare one.
       requestBody:
         required: true
         content:
@@ -1359,6 +1374,9 @@ paths:
                             type: boolean
                           resourceClass:
                             type: string
+                          environment:
+                            type: string
+                            enum: [dev, staging, prod]
                           validation:
                             type: object
                             additionalProperties: true
@@ -1376,6 +1394,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: environment
+          schema:
+            type: string
+            enum: [dev, staging, prod]
+            default: prod
       responses:
         '200':
           description: Policy details
@@ -1391,6 +1415,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: environment
+          schema:
+            type: string
+            enum: [dev, staging, prod]
+            default: prod
       requestBody:
         required: true
         content:

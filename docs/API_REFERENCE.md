@@ -606,6 +606,15 @@ Reponse de succes :
 
 En cas d'echec, la reponse est un `400` avec les issues dans `error.details`.
 
+Les politiques peuvent etre ciblees par environnement avec le champ `environment` ou avec le query param `?environment=dev|staging|prod`. Sans valeur explicite, Autho utilise `prod`.
+
+```bash
+curl -X PUT "http://localhost:8080/v1/policies/Facture?environment=staging" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @candidate-policy.json
+```
+
 Pour un usage CI sans serveur HTTP, la meme chaine est disponible via :
 
 ```bash

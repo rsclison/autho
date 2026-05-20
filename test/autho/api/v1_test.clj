@@ -412,13 +412,31 @@
   (let [request (mock-request :body (json/write-value-as-string {:resourceClass "Document"
                                                                  :strategy "almost_one_allow_no_deny"
                                                                  :rules []}))]
-    (with-redefs [prp/submit-policy (fn [& _] {:errors []
+    (with-redefs [prp/submit-policy (fn [& _] {:environment "prod"
+                                               :errors []
                                                :warnings [{:code "UNCONDITIONAL_RULE"
                                                            :message "broad"}]})]
       (let [response (handlers/create-policy request)
             body (parse-response-body response)]
         (is (= 201 (:status response)))
         (is (= "UNCONDITIONAL_RULE" (get-in body [:data :validation :warnings 0 :code])))))))
+
+(deftest create-policy-uses-query-environment-test
+  (let [captured (atom nil)
+        request (mock-request :body (json/write-value-as-string {:resourceClass "Document"
+                                                                 :strategy "almost_one_allow_no_deny"
+                                                                 :rules []})
+                              :params {:environment "staging"})]
+    (with-redefs [prp/submit-policy
+                  (fn [resource-class policy-json & _]
+                    (reset! captured {:resourceClass resource-class
+                                      :policyJson policy-json})
+                    {:environment "staging" :errors [] :warnings []})]
+      (let [response (handlers/create-policy request)
+            body (parse-response-body response)]
+        (is (= 201 (:status response)))
+        (is (= "staging" (get-in body [:data :environment])))
+        (is (str/includes? (:policyJson @captured) "\"environment\":\"staging\""))))))
 
 (deftest validate-policy-handler-runs-predeployment-validation-test
   (let [captured (atom nil)
@@ -431,6 +449,7 @@
                                       :policyJson policy-json})
                     {:valid true
                      :policy {:resourceClass resource-class}
+                     :environment "prod"
                      :errors []
                      :warnings [{:code "MISSING_OPERATION"}]
                      :safety {:errors [] :warnings [{:code "MISSING_OPERATION"}]}
@@ -443,6 +462,7 @@
         (is (= 200 (:status response)))
         (is (= true (get-in body [:data :valid])))
         (is (= "Document" (:resourceClass @captured)))
+        (is (= "prod" (get-in body [:data :environment])))
         (is (str/includes? (:policyJson @captured) "\"resourceClass\":\"Document\""))
         (is (= "MISSING_OPERATION"
                (get-in body [:data :validation :warnings 0 :code])))
@@ -479,6 +499,21 @@
     (is (= 200 (:status response)))
     (is (= "Document" (:resourceClass @captured)))
     (is (= "/policies/Document/validate" (get-in @captured [:request :uri])))))
+
+(deftest get-policy-route-forwards-environment-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/get-policy
+                               (fn [resource-class request]
+                                 (reset! captured {:resourceClass resource-class
+                                                   :params (:params request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes {:request-method :get
+                                      :uri "/policies/Document"
+                                      :params {:environment "dev"}
+                                      :headers {}}))]
+    (is (= 200 (:status response)))
+    (is (= "Document" (:resourceClass @captured)))
+    (is (= "dev" (get-in @captured [:params :environment])))))
 
 (deftest update-policy-returns-validation-details-for-policy-errors-test
   (let [request (mock-request :body (json/write-value-as-string {:resourceClass "Document"

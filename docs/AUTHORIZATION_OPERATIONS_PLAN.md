@@ -68,8 +68,9 @@ Etat d'avancement :
 - tests declaratifs embarques dans les politiques et executes avant persistence via `submit-policy`;
 - endpoint de validation pre-deploiement `POST /v1/policies/:resourceClass/validate` sans persistence;
 - commande CI/CLI `./lein policy:validate --file candidate-policy.json`;
+- environnements de politique `dev`, `staging`, `prod` avec fallback historique sur `prod`;
 - documentation du schema, des tests declaratifs et des erreurs dans `docs/POLICY_SAFETY.md`;
-- prochaine etape : ajouter des environnements de politique `dev`, `staging`, `prod`.
+- prochaine etape : produire un rapport de validation agrege exploitable par revue de changement.
 
 ## Priorite 3 - Replay, shadow et impact analysis
 

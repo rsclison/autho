@@ -52,6 +52,12 @@
        (contains? value :headers)
        (contains? value :body)))
 
+(defn- request-environment
+  [request body]
+  (or (get-in request [:params :environment])
+      (get-in request [:params "environment"])
+      (:environment body)))
+
 (defn require-body
   [request]
   (if-let [body (:body-params request)]
@@ -345,19 +351,27 @@
                                500))))
 
 (defn get-policy
-  [resource-class]
-  (log/debug "Getting policy for" resource-class)
-  (try
-    (if-let [policy (prp/getGlobalPolicy resource-class)]
-      (response/success-response policy)
-      (response/error-response "POLICY_NOT_FOUND"
-                               (str "Policy for resource class " resource-class " not found")
-                               404))
-    (catch Exception e
-      (log/error e "Error getting policy")
-      (response/error-response "GET_POLICY_ERROR"
-                               (str "Failed to get policy: " (.getMessage e))
-                               500))))
+  ([resource-class]
+   (get-policy resource-class nil))
+  ([resource-class request]
+   (log/debug "Getting policy for" resource-class)
+   (try
+     (let [environment (request-environment request nil)
+           policy (if environment
+                    (prp/getGlobalPolicy resource-class environment)
+                    (prp/getGlobalPolicy resource-class))]
+       (if policy
+         (response/success-response policy)
+         (response/error-response "POLICY_NOT_FOUND"
+                                  (str "Policy for resource class " resource-class " not found")
+                                  404)))
+     (catch clojure.lang.ExceptionInfo e
+       (policy-exception->response e "INVALID_POLICY_ENVIRONMENT" "Failed to get policy: "))
+     (catch Exception e
+       (log/error e "Error getting policy")
+       (response/error-response "GET_POLICY_ERROR"
+                                (str "Failed to get policy: " (.getMessage e))
+                                500)))))
 
 (defn create-policy
   [request]
@@ -366,13 +380,16 @@
     (if (response-map? body-or-response)
       body-or-response
       (try
-        (let [policy-json (json/write-value-as-string body-or-response)
+        (let [environment (request-environment request body-or-response)
+              body (cond-> body-or-response environment (assoc :environment environment))
+              policy-json (json/write-value-as-string body)
               author (get-in request [:identity :client-id] "api")
-              analysis (prp/submit-policy (:resourceClass body-or-response) policy-json author "Created via API")]
+              analysis (prp/submit-policy (:resourceClass body) policy-json author "Created via API")]
           (response/created-response {:message "Policy created successfully"
-                                      :resourceClass (:resourceClass body-or-response)
+                                      :resourceClass (:resourceClass body)
+                                      :environment (:environment analysis)
                                       :validation {:warnings (:warnings analysis)}}
-                                     (str "/v1/policies/" (:resourceClass body-or-response))))
+                                     (str "/v1/policies/" (:resourceClass body))))
         (catch clojure.lang.ExceptionInfo e
           (policy-exception->response e "INVALID_POLICY_SAFETY" "Failed to create policy: "))
         (catch Exception e
@@ -387,12 +404,15 @@
   (let [body-or-response (require-body request)]
     (if (response-map? body-or-response)
       body-or-response
-      (let [body (assoc body-or-response :resourceClass resource-class)]
+      (let [environment (request-environment request body-or-response)
+            body (cond-> (assoc body-or-response :resourceClass resource-class)
+                   environment (assoc :environment environment))]
         (try
           (let [policy-json (json/write-value-as-string body)
                 analysis (prp/validate-policy-submission resource-class policy-json)]
             (response/success-response {:valid true
                                         :resourceClass resource-class
+                                        :environment (:environment analysis)
                                         :validation (dissoc analysis :policy)}))
           (catch clojure.lang.ExceptionInfo e
             (policy-exception->response e "INVALID_POLICY" "Failed to validate policy: "))
@@ -408,13 +428,16 @@
   (let [body-or-response (require-body request)]
     (if (response-map? body-or-response)
       body-or-response
-      (let [body (assoc body-or-response :resourceClass resource-class)]
+      (let [environment (request-environment request body-or-response)
+            body (cond-> (assoc body-or-response :resourceClass resource-class)
+                   environment (assoc :environment environment))]
         (try
           (let [policy-json (json/write-value-as-string body)
                 author (get-in request [:identity :client-id] "api")
                 analysis (prp/submit-policy resource-class policy-json author "Updated via API")]
             (response/success-response {:message "Policy updated successfully"
                                         :resourceClass resource-class
+                                        :environment (:environment analysis)
                                         :validation {:warnings (:warnings analysis)}}))
           (catch clojure.lang.ExceptionInfo e
             (policy-exception->response e "INVALID_POLICY_SAFETY" "Failed to update policy: "))

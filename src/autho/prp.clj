@@ -60,6 +60,9 @@
 
 (def ^{:private true} policiesMap (atom {}))
 
+(def supported-policy-environments #{"dev" "staging" "prod"})
+(def default-policy-environment "prod")
+
 (defonce rules-repository-status (atom :not-loaded))
 
 (defn get-rules-repository-status []
@@ -156,26 +159,85 @@
                    (= :kafka-pip (get-in pip [:pip :type])))))
         @pips))
 
-(defn insert-policy [resourceClass pol]
-  (swap! policiesMap assoc resourceClass pol)
+(defn normalize-policy-environment
+  [environment]
+  (cond
+    (nil? environment) default-policy-environment
+    (keyword? environment) (name environment)
+    (string? environment) environment
+    :else (str environment)))
 
-  )
+(defn validate-policy-environment!
+  [environment]
+  (let [env-name (normalize-policy-environment environment)]
+    (when-not (contains? supported-policy-environments env-name)
+      (throw (ex-info
+              (str "Unsupported policy environment '" env-name "'.")
+              {:status 400
+               :error-code "INVALID_POLICY_ENVIRONMENT"
+               :issues [{:code "INVALID_POLICY_ENVIRONMENT"
+                         :message (str "Unsupported policy environment '" env-name "'.")
+                         :environment env-name
+                         :supported-environments (vec (sort supported-policy-environments))}]})))
+    env-name))
+
+(defn- entry->environments
+  [entry]
+  (cond
+    (nil? entry) {}
+    (contains? entry :environments) (:environments entry)
+    (contains? entry :global) {default-policy-environment (:global entry)}
+    :else {default-policy-environment entry}))
+
+(defn- entry->global
+  [entry]
+  (cond
+    (nil? entry) nil
+    (contains? entry :global) (:global entry)
+    :else entry))
+
+(defn insert-policy
+  ([resourceClass pol]
+   (if (or (contains? pol :global)
+           (contains? pol :environments))
+     (swap! policiesMap assoc resourceClass pol)
+     (insert-policy resourceClass default-policy-environment pol)))
+  ([resourceClass environment pol]
+   (let [env-name (validate-policy-environment! environment)
+         stored-policy (assoc pol :environment env-name)]
+     (swap! policiesMap
+            (fn [policies]
+              (let [current-entry (get policies resourceClass)
+                    environments (entry->environments current-entry)
+                    next-environments (assoc environments env-name stored-policy)
+                    current-global (or (entry->global current-entry)
+                                       (get next-environments default-policy-environment))
+                    next-global (if (= env-name default-policy-environment)
+                                  stored-policy
+                                  current-global)]
+                (assoc policies resourceClass
+                       {:global next-global
+                        :environments next-environments})))))))
 
 (defn validate-policy-submission
   "Validate a submitted policy without persisting it.
    Runs JSON Schema validation, policy safety checks and declarative policy tests."
   [^String resourceClass ^String policy]
-  (validjs/validate policySchema policy)
-  (let [pol-map (-> (json/read-str policy :key-fn keyword)
+  (let [raw-policy (json/read-str policy :key-fn keyword)
+        environment (validate-policy-environment! (:environment raw-policy))]
+    (validjs/validate policySchema policy)
+    (let [pol-map (-> raw-policy
                     (policy-format/normalize-policy))
-        safety-analysis (policy-safety/validate-policy! resourceClass pol-map)
-        test-analysis (policy-tests/validate-policy-tests! pol-map)]
-    {:valid true
-     :policy pol-map
-     :errors []
-     :warnings (:warnings safety-analysis)
-     :safety safety-analysis
-     :tests test-analysis}))
+          pol-map (assoc pol-map :environment environment)
+          safety-analysis (policy-safety/validate-policy! resourceClass pol-map)
+          test-analysis (policy-tests/validate-policy-tests! pol-map)]
+      {:valid true
+       :policy pol-map
+       :environment environment
+       :errors []
+       :warnings (:warnings safety-analysis)
+       :safety safety-analysis
+       :tests test-analysis})))
 
 ;;(defn submit-policy [^String resourceClass ^String policy]
 ;;  (let [js (slurp "resources/policySchema.json")
@@ -190,16 +252,30 @@
   ([^String resourceClass ^String policy author comment]
    ;; validate-policy-submission throws clojure.lang.ExceptionInfo on failure.
    (let [{policy-map :policy :as analysis} (validate-policy-submission resourceClass policy)]
-      (insert-policy resourceClass policy-map)
+      (insert-policy resourceClass (:environment policy-map) policy-map)
       (pv/save-version! resourceClass policy-map author comment)
       (local-cache/invalidate-decisions-for-class! resourceClass)
       (dissoc analysis :policy))))
 
 
 
-(defn delete-policy [^String resourceClass]
-  (swap! policiesMap dissoc resourceClass)
-  (local-cache/invalidate-decisions-for-class! resourceClass))
+(defn delete-policy
+  ([^String resourceClass]
+   (swap! policiesMap dissoc resourceClass)
+   (local-cache/invalidate-decisions-for-class! resourceClass))
+  ([^String resourceClass environment]
+   (let [env-name (validate-policy-environment! environment)]
+     (if (= env-name default-policy-environment)
+       (delete-policy resourceClass)
+       (do
+         (swap! policiesMap update resourceClass
+                (fn [entry]
+                  (when entry
+                    (let [next-environments (dissoc (entry->environments entry) env-name)]
+                      (if (seq next-environments)
+                        (assoc entry :environments next-environments)
+                        nil)))))
+         (local-cache/invalidate-decisions-for-class! resourceClass))))))
 
 (defn initf [rulesf]
   (try
@@ -252,12 +328,20 @@
   @policiesMap
   )
 
-(defn getGlobalPolicy [resourceClass]
-  (:global (get @policiesMap resourceClass))
-  )
+(defn getGlobalPolicy
+  ([resourceClass]
+   (getGlobalPolicy resourceClass default-policy-environment))
+  ([resourceClass environment]
+   (let [env-name (validate-policy-environment! environment)
+         entry (get @policiesMap resourceClass)]
+     (or (get-in entry [:environments env-name])
+         (when (= env-name default-policy-environment)
+           (entry->global entry))))))
 
 (defn getGlobalPolicies []
-  (mapcat #(:rules (:global %)) @policiesMap)
+  (mapcat (fn [[_ entry]]
+            (:rules (entry->global entry)))
+          @policiesMap)
   )
 
 (defn getPolicy [resourceClass application]

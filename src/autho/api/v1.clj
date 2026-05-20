@@ -82,8 +82,8 @@
     (POST "/:resource-class/validate" [resource-class :as request]
           (handlers/validate-policy resource-class request))
 
-    (GET "/:resource-class" [resource-class]
-         (handlers/get-policy resource-class))
+    (GET "/:resource-class" [resource-class :as request]
+         (handlers/get-policy resource-class request))
 
     (PUT "/:resource-class" [resource-class :as request]
           (handlers/update-policy resource-class request))

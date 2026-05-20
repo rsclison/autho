@@ -50,6 +50,46 @@ Exemple :
 
 Une politique peut embarquer une liste `tests`. Ces scenarios sont executes par `submit-policy` apres la validation statique et avant la persistence. Une politique dont au moins un scenario echoue est rejetee avec le code `POLICY_TESTS_FAILED`.
 
+## Environnements de politique
+
+Une politique peut declarer `environment` avec l'une des valeurs suivantes :
+
+- `dev`;
+- `staging`;
+- `prod`.
+
+Si `environment` est absent, Autho utilise `prod` pour conserver le comportement historique. Les politiques sont stockees separement par classe de ressource et environnement. Les decisions PDP historiques continuent de lire `prod`.
+
+Exemple :
+
+```json
+{
+  "environment": "staging",
+  "strategy": "almost_one_allow_no_deny",
+  "rules": [
+    {
+      "name": "allow-admin-read",
+      "priority": 10,
+      "effect": "allow",
+      "resourceClass": "Document",
+      "operation": "read",
+      "conditions": [
+        ["=", ["Person", "$s", "role"], "admin"]
+      ]
+    }
+  ]
+}
+```
+
+Les endpoints v1 de policy acceptent aussi `?environment=dev|staging|prod` quand la policy body ne declare pas explicitement l'environnement :
+
+```bash
+curl -X PUT "http://localhost:8080/v1/policies/Document?environment=staging" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @candidate-policy.json
+```
+
 La meme chaine de validation peut etre executee sans persistence avec :
 
 ```bash
@@ -194,6 +234,7 @@ Ces tests sont des tests unitaires de politique candidate. Ils evaluent les regl
 | `POLICY_TESTS_FAILED` | Au moins un test declaratif de politique a echoue |
 | `INVALID_POLICY_TEST` | Un scenario de test declaratif est incomplet ou invalide |
 | `POLICY_TEST_EVALUATION_ERROR` | Un scenario declaratif a declenche une erreur pendant l'evaluation |
+| `INVALID_POLICY_ENVIRONMENT` | La politique reference un environnement different de `dev`, `staging` ou `prod` |
 
 ## Limite actuelle
 

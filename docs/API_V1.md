@@ -402,10 +402,13 @@ Location: /v1/policies/Report
 
 Update an existing policy.
 
+Policies can target `dev`, `staging` or `prod` with the `environment` field or the `?environment=` query parameter. If omitted, Autho uses `prod`.
+
 **Request:**
 ```json
 {
   "resourceClass": "Document",
+  "environment": "staging",
   "version": "1.1",
   "rules": [
     {
@@ -436,6 +439,7 @@ Validate a candidate policy without persisting it. This endpoint runs JSON Schem
 **Request:**
 ```json
 {
+  "environment": "staging",
   "strategy": "almost_one_allow_no_deny",
   "rules": [
     {
@@ -465,6 +469,7 @@ Validate a candidate policy without persisting it. This endpoint runs JSON Schem
   "data": {
     "valid": true,
     "resourceClass": "Document",
+    "environment": "staging",
     "validation": {
       "valid": true,
       "errors": [],
