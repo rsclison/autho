@@ -5,7 +5,7 @@ import type { Condition, ConditionMember } from '@/types/policy'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const OPERATORS = [
+const OPERATORS = [
   { value: '=',      label: '= égal' },
   { value: 'diff',   label: '≠ différent' },
   { value: '<',      label: '< inférieur' },

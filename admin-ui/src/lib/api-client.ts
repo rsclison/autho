@@ -54,7 +54,7 @@ async function request<T>(
       const err = (await response.json()) as { error?: { code?: string; message?: string } }
       code = err?.error?.code ?? code
       message = err?.error?.message ?? message
-    } catch (_) {
+    } catch {
       // ignore parse error
     }
     throw new ApiError(response.status, code, message)

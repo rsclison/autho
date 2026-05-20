@@ -37,7 +37,7 @@ Unlike RBAC (fixed roles), ABAC evaluates dynamic attributes of the subject, the
 - **`POST /explain`** — decision with the full list of evaluated rules and their outcome
 - **`POST /whoAuthorized`** — which subjects can perform an operation on a resource?
 - **`POST /whatAuthorized`** — which resources can a subject access?
-- **Batch evaluation** (`/v1/batch`) — up to 100 requests in a single call
+- **Batch evaluation** (`/v1/authz/batch`) — up to 100 requests in a single call
 
 ### Policy Management
 - Full CRUD per resource class
@@ -179,7 +179,7 @@ Two methods are supported on all protected endpoints:
 
 | Method | Header | Usage |
 |--------|--------|-------|
-| API Key | `Authorization: X-API-Key <key>` | Internal services, machine-to-machine calls |
+| API Key | `X-API-Key: <key>` | Internal services, machine-to-machine calls |
 | JWT Bearer | `Authorization: Token <jwt>` | Applications with a user identity |
 
 The endpoints `/health`, `/readiness`, `/status`, and `/metrics` are public.
@@ -191,10 +191,10 @@ The endpoints `/health`, `/readiness`, `/status`, and `/metrics` are public.
 ```bash
 # Required environment variables
 export JWT_SECRET="secret-key-min-32-characters"
-export API_KEY="internal-api-key"
+export API_KEY="internal-api-key-min-32-characters"
 
 # Start
-lein run
+./lein run
 
 # Health check
 curl http://localhost:8080/health

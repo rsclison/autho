@@ -49,5 +49,6 @@
                    :integration :integration
                    :benchmark :benchmark
                    :all (constantly true)}
-  :profiles {:uberjar {:aot :all
+  :profiles {:test {:jvm-opts ["-Dautho.policy.db.path=mem:autho-policy-test;DB_CLOSE_DELAY=-1"]}
+             :uberjar {:aot :all
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}})

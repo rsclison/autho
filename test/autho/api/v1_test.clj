@@ -12,6 +12,7 @@
             [autho.policy-impact :as policy-impact]
             [autho.policy-versions :as pv]
             [autho.policy-impact-history :as impact-history]
+            [autho.features :as features]
             [jsonista.core :as json]
             [clojure.string :as str])
   (:import (java.io ByteArrayInputStream)))
@@ -306,7 +307,8 @@
                   pdp/whoAuthorizedDetailed (fn [_ _] who)
                   pdp/whatAuthorizedDetailed (fn [_ _] what)
                   pdp/explain (fn [_ _] explain)
-                  pdp/simulate (fn [_ _] simulate)]
+                  pdp/simulate (fn [_ _] simulate)
+                  features/require-license! (fn [_] nil)]
       (let [decision-body (json/write-value-as-string {:subject {:id "user1"}
                                                        :resource {:class "doc" :id "doc-1"}
                                                        :operation "read"})

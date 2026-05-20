@@ -16,6 +16,10 @@
 ;; Must match the key used by policy_versions.clj (shared database).
 ;; See docs/SECURITY_ADMIN_GUIDE.md for migration from unencrypted.
 (def ^:private h2-policy-cipher-key (System/getenv "H2_POLICY_CIPHER_KEY"))
+(def ^:private h2-policy-db-path
+  (or (System/getenv "AUTHO_POLICY_DB_PATH")
+      (System/getProperty "autho.policy.db.path")
+      "./resources/h2db"))
 
 (def h2db
   (merge
@@ -23,9 +27,9 @@
     :subprotocol "h2"
     :user        "sa"}
    (if h2-policy-cipher-key
-     {:subname  "./resources/h2db;CIPHER=AES"
+     {:subname  (str h2-policy-db-path ";CIPHER=AES")
       :password (str h2-policy-cipher-key " ")}
-     {:subname  "./resources/h2db"
+     {:subname  h2-policy-db-path
       :password ""})))
 
 

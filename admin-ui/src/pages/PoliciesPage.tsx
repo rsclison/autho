@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import Editor, { DiffEditor } from '@monaco-editor/react'
 import {
   Plus, Trash2, Upload, History, GitCompare, RotateCcw, Save, X, ChevronDown, ShieldAlert,
@@ -229,10 +229,8 @@ function PolicyEditor({ resourceClass }: { resourceClass: string }) {
   const [editorValue, setEditorValue] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [diffParams, setDiffParams] = useState<{ from: number; to: number } | null>(null)
-  const savedRef = useRef('')
 
   const policyJson = data ? JSON.stringify(data, null, 2) : ''
-  if (!editorValue && policyJson !== savedRef.current) savedRef.current = policyJson
 
   const current = editorValue ?? policyJson
   const isDirty = !!editorValue && editorValue !== policyJson
