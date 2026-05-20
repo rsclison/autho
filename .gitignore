@@ -31,6 +31,7 @@ res.txt
 
 # Environnements Python
 docker/**/.venv/
+venv/
 
 # Outils tiers (cache)
 .serena/
