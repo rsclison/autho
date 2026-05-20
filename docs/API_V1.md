@@ -582,6 +582,7 @@ Persisted profiles are available through:
 
 Inline `riskProfiles` and request-level `thresholds` still override persisted profiles for one-off analyses.
 Every profile change appends a revision with the action, previous profile, new profile, author and timestamp.
+Risk profile revisions are included in `GET /v1/policies/:resource-class/timeline` as `risk_profile_changed` events. `default` and `environment` revisions are visible for every class; `resource_class` revisions are visible only for their class.
 
 Rollout gates are enforced when promoting an impact preview:
 

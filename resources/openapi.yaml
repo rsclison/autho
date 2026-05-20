@@ -898,7 +898,7 @@ components:
       properties:
         eventType:
           type: string
-          enum: [policy_version_created, impact_analysis_created, impact_reviewed, impact_deployed]
+          enum: [policy_version_created, impact_analysis_created, impact_reviewed, impact_deployed, risk_profile_changed]
         resourceClass:
           type: string
         version:
@@ -920,6 +920,21 @@ components:
           type: string
         rollbackFromVersion:
           type: integer
+        riskProfileRevisionId:
+          type: integer
+        scopeType:
+          type: string
+        scopeKey:
+          type: string
+        riskProfileAction:
+          type: string
+          enum: [create, update, delete]
+        previousProfile:
+          type: object
+          additionalProperties: true
+        newProfile:
+          type: object
+          additionalProperties: true
 
     PolicyChangeTimeline:
       type: object

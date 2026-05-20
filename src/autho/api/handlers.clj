@@ -320,14 +320,37 @@
            :deployedBy (:deployedBy analysis-record)
            :rolloutStatus (:rolloutStatus analysis-record)})))
 
+(defn- risk-profile-revision-visible-for-resource?
+  [resource-class revision]
+  (or (not= "resource_class" (:scopeType revision))
+      (= resource-class (:scopeKey revision))))
+
+(defn- risk-profile-revision->timeline-event
+  [revision]
+  {:eventType "risk_profile_changed"
+   :resourceClass (when (= "resource_class" (:scopeType revision))
+                    (:scopeKey revision))
+   :riskProfileRevisionId (:id revision)
+   :scopeType (:scopeType revision)
+   :scopeKey (:scopeKey revision)
+   :riskProfileAction (:action revision)
+   :previousProfile (:previousProfile revision)
+   :newProfile (:newProfile revision)
+   :occurredAt (:changedAt revision)
+   :author (:changedBy revision)})
+
 (defn get-policy-change-timeline
   [resource-class request]
   (log/debug "Building policy change timeline for" resource-class)
   (try
     (let [versions (mapv version-record->api (pv/list-versions resource-class))
           analyses (mapv attach-deployed-versions (impact-history/list-analyses resource-class))
+          risk-profile-events (->> (risk-profiles/list-revisions)
+                                   (filter #(risk-profile-revision-visible-for-resource? resource-class %))
+                                   (map risk-profile-revision->timeline-event))
           events (->> (concat (mapcat analysis->timeline-events analyses)
-                              (map version->timeline-event versions))
+                              (map version->timeline-event versions)
+                              risk-profile-events)
                       (sort-by timeline-sort-key #(compare %2 %1))
                       vec)
           filtered-events (filter-timeline-events request events)]

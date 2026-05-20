@@ -711,6 +711,7 @@ curl -H "X-API-Key: key" \
 
 Endpoints disponibles : `PUT/DELETE /v1/policies/risk-profiles/default`, `PUT/DELETE /v1/policies/risk-profiles/environments/:environment`, `PUT/DELETE /v1/policies/risk-profiles/resource-classes/:resourceClass`.
 Chaque modification de profil produit une revision append-only avec `action`, `previousProfile`, `newProfile`, `changedBy` et `changedAt`.
+Ces revisions apparaissent aussi dans `GET /v1/policies/:resourceClass/timeline` avec `eventType = risk_profile_changed`. Les revisions `default` et `environment` sont visibles pour toutes les classes ; les revisions `resource_class` sont visibles seulement pour la classe concernee.
 
 Le rollout applique ces garde-fous :
 

@@ -714,18 +714,43 @@
                                                  :deployedVersion 6
                                                  :deployedBy "api"
                                                  :deployedAt "2026-03-27T10:10:00Z"}])
+                risk-profiles/list-revisions (fn []
+                                               [{:id 31
+                                                 :scopeType "resource_class"
+                                                 :scopeKey "Document"
+                                                 :action "update"
+                                                 :previousProfile {:maxRevokes 1}
+                                                 :newProfile {:maxRevokes 0}
+                                                 :changedBy "risk-admin"
+                                                 :changedAt "2026-03-27T10:12:00Z"}
+                                                {:id 32
+                                                 :scopeType "resource_class"
+                                                 :scopeKey "Invoice"
+                                                 :action "update"
+                                                 :changedBy "risk-admin"
+                                                 :changedAt "2026-03-27T10:13:00Z"}
+                                                {:id 33
+                                                 :scopeType "default"
+                                                 :scopeKey "*"
+                                                 :action "create"
+                                                 :changedBy "risk-admin"
+                                                 :changedAt "2026-03-27T09:55:00Z"}])
                 pv/list-versions-by-analysis (fn [_ _] [])]
     (let [response (handlers/get-policy-change-timeline "Document" (mock-request))
           body (parse-response-body response)]
       (is (= 200 (:status response)))
       (is (= "Document" (get-in body [:data :resourceClass])))
-      (is (= 4 (get-in body [:data :count])))
+      (is (= 6 (get-in body [:data :count])))
       (is (= "policy_version_created" (get-in body [:data :events 0 :eventType])))
-      (is (= "impact_deployed" (get-in body [:data :events 1 :eventType])))
-      (is (= "impact_reviewed" (get-in body [:data :events 2 :eventType])))
-      (is (= "impact_analysis_created" (get-in body [:data :events 3 :eventType])))
+      (is (= "risk_profile_changed" (get-in body [:data :events 1 :eventType])))
+      (is (= 31 (get-in body [:data :events 1 :riskProfileRevisionId])))
+      (is (= "Document" (get-in body [:data :events 1 :resourceClass])))
+      (is (= "impact_deployed" (get-in body [:data :events 2 :eventType])))
+      (is (= "impact_reviewed" (get-in body [:data :events 3 :eventType])))
+      (is (= "impact_analysis_created" (get-in body [:data :events 4 :eventType])))
+      (is (= "risk_profile_changed" (get-in body [:data :events 5 :eventType])))
       (is (= 7 (get-in body [:data :events 0 :sourceAnalysisId])))
-      (is (= 6 (get-in body [:data :events 1 :deployedVersion]))))))
+      (is (= 6 (get-in body [:data :events 2 :deployedVersion]))))))
 
 (deftest get-policy-change-timeline-handler-filters-events-test
   (with-redefs [pv/list-versions (fn [_]
@@ -755,20 +780,28 @@
                                                  :deployedVersion 6
                                                  :deployedBy "api"
                                                  :deployedAt "2026-03-27T10:10:00Z"}])
+                risk-profiles/list-revisions (fn []
+                                               [{:id 31
+                                                 :scopeType "resource_class"
+                                                 :scopeKey "Document"
+                                                 :action "update"
+                                                 :changedBy "risk-admin"
+                                                 :changedAt "2026-03-27T10:12:00Z"}])
                 pv/list-versions-by-analysis (fn [_ _] [])]
     (let [event-type-response (handlers/get-policy-change-timeline "Document"
-                                                                    (mock-request :params {"event-type" "impact_reviewed,impact_deployed"}))
+                                                                    (mock-request :params {"event-type" "impact_reviewed,impact_deployed,risk_profile_changed"}))
           event-type-body (parse-response-body event-type-response)
           range-response (handlers/get-policy-change-timeline "Document"
                                                               (mock-request :params {"from" "2026-03-27T10:06:00Z"
                                                                                      "to" "2026-03-27T10:15:00Z"}))
           range-body (parse-response-body range-response)]
       (is (= 200 (:status event-type-response)))
-      (is (= 2 (get-in event-type-body [:data :count])))
-      (is (= ["impact_deployed" "impact_reviewed"] (mapv :eventType (get-in event-type-body [:data :events]))))
+      (is (= 3 (get-in event-type-body [:data :count])))
+      (is (= ["risk_profile_changed" "impact_deployed" "impact_reviewed"] (mapv :eventType (get-in event-type-body [:data :events]))))
       (is (= 200 (:status range-response)))
-      (is (= 2 (get-in range-body [:data :count])))
-      (is (= ["policy_version_created" "impact_deployed"] (mapv :eventType (get-in range-body [:data :events])))))))
+      (is (= 3 (get-in range-body [:data :count])))
+      (is (= ["policy_version_created" "risk_profile_changed" "impact_deployed"]
+             (mapv :eventType (get-in range-body [:data :events])))))))
 (deftest diff-policy-versions-handler-returns-detailed-contract-test
   (with-redefs [pv/diff-versions (fn [_ from to]
                                    {:resourceClass "Document"

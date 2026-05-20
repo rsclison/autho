@@ -103,10 +103,11 @@ Etat d'avancement :
 - profils de risque configurables par defaut, environnement et classe de ressource, avec override explicite par requete;
 - profils de risque persistables et administrables via `GET/PUT/DELETE /v1/policies/risk-profiles...`;
 - revisions append-only des changements de profils de risque consultables via `GET /v1/policies/risk-profiles/revisions`;
+- revisions de profils de risque integrees a la timeline globale avec `eventType = risk_profile_changed`;
 - garde-fous de rollout : les analyses `block` sont non deployables, les analyses `review` exigent une approbation, les analyses `approve/no_impact` peuvent etre deployees directement;
 - versions de politique enrichies avec metadata de lifecycle (`lifecycleStatus`, `workflowAction`, `rollbackFromVersion`) pour tracer les deployments directs, rollouts et rollbacks;
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
-- prochaine etape : integrer les revisions de profils de risque dans la timeline globale de gouvernance.
+- prochaine etape : exposer des controles d'approbation plus fins pour les changements de profils de risque critiques.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 
