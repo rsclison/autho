@@ -2,6 +2,7 @@
   "Policy impact analysis over batches of authorization requests.
    Compares the current policy against a candidate, versioned, or provided policy."
   (:require [autho.policy-versions :as pv]
+            [autho.audit :as audit]
             [autho.pdp :as pdp]
             [autho.prp :as prp]
             [clojure.string :as str]))
@@ -212,16 +213,41 @@
      :populationsTouched (:subjects blast-radius)
      :resourcesTouched (:resources blast-radius)}))
 
+(defn- audit-replay-source
+  [resource-class audit-replay]
+  (let [filters (cond-> audit-replay
+                  resource-class (assoc :resource-class resource-class))]
+    (audit/replay-requests filters)))
+
+(defn- request-source
+  [resource-class {:keys [requests auditReplay]}]
+  (cond
+    (vector? requests)
+    {:type "provided"
+     :requests requests}
+
+    auditReplay
+    (let [replay (audit-replay-source resource-class auditReplay)]
+      {:type "audit"
+       :requests (:requests replay)
+       :auditReplay replay})
+
+    :else
+    {:type "provided"
+     :requests requests}))
+
 (defn analyze-impact
-  [request {:keys [resourceClass requests] :as body}]
+  [request {:keys [resourceClass] :as body}]
   (let [resource-class (or resourceClass (get-in body [:resource :class]))
         base-policy (baseline-policy resource-class body)
-        next-policy (candidate-policy resource-class body)]
+        next-policy (candidate-policy resource-class body)
+        source (request-source resource-class body)
+        requests (:requests source)]
     (when-not resource-class
       (throw (ex-info "Impact analysis requires resourceClass"
                       {:status 400 :error-code "MISSING_RESOURCE_CLASS"})))
-    (when-not (vector? requests)
-      (throw (ex-info "Impact analysis requires a non-empty requests vector"
+    (when-not (and (vector? requests) (seq requests))
+      (throw (ex-info "Impact analysis requires a non-empty requests vector or auditReplay source"
                       {:status 400 :error-code "INVALID_IMPACT_REQUESTS"})))
     (when-not base-policy
       (throw (ex-info "Baseline policy not found"
@@ -241,6 +267,7 @@
           blast-radius (build-blast-radius changed)
           impact-report (build-impact-report summary blast-radius (vec changed) (:thresholds body))]
       {:resourceClass resource-class
+       :requestSource (dissoc source :requests)
        :baseline {:version (:baselineVersion body)
                   :strategy (:strategy base-policy)}
        :candidate {:version (:candidateVersion body)

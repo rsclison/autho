@@ -528,6 +528,23 @@ Compare the current or versioned baseline with a candidate policy over a request
 
 `impactReport.status` is one of `no_impact`, `review_required`, `high_risk`, `blocked`; `recommendation` is one of `approve`, `review`, `block`.
 
+The request batch can also come from audit replay:
+
+```json
+{
+  "candidatePolicy": {
+    "strategy": "almost_one_allow_no_deny",
+    "rules": []
+  },
+  "auditReplay": {
+    "decision": "deny",
+    "limit": 100
+  }
+}
+```
+
+Audit replay rebuilds minimal authorization requests from audited identifiers and operation. PIPs may enrich attributes during simulation.
+
 #### DELETE /v1/policies/:resource-class
 
 Delete a policy.

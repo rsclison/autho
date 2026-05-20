@@ -666,6 +666,26 @@ curl -X POST http://localhost:8080/v1/policies/Facture/impact \
 
 `impactReport.status` vaut `no_impact`, `review_required`, `high_risk` ou `blocked`. `recommendation` vaut `approve`, `review` ou `block`. Les blockers standards couvrent les revocations, le volume de decisions changees et les ressources sensibles touchees.
 
+Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
+
+```bash
+curl -X POST http://localhost:8080/v1/policies/Facture/impact \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{
+    "candidatePolicy": {
+      "strategy": "almost_one_allow_no_deny",
+      "rules": []
+    },
+    "auditReplay": {
+      "decision": "deny",
+      "limit": 100
+    }
+  }'
+```
+
+Le replay audit reconstruit des requetes avec les identifiants audites (`subject.id`, `resource.class`, `resource.id`, `operation`) et attache les metadonnees d'audit dans `context`. Les attributs complets peuvent ensuite etre enrichis par les PIP pendant la simulation.
+
 ### DELETE /policies/:resourceClass (legacy)
 
 ```bash

@@ -1,5 +1,6 @@
 (ns autho.policy-impact-test
   (:require [clojure.test :refer :all]
+            [autho.audit :as audit]
             [autho.policy-impact :as impact]
             [autho.pdp :as pdp]
             [autho.prp :as prp]
@@ -147,6 +148,33 @@
         (is (= "high_risk" (get-in result [:impactReport :status])))
         (is (= "review" (get-in result [:impactReport :recommendation])))
         (is (= [] (get-in result [:impactReport :blockers])))))))
+
+(deftest analyze-impact-can-use-audit-replay-source-test
+  (let [current-policy {:strategy "almost_one_allow_no_deny" :id "current"}
+        candidate-policy {:strategy "almost_one_allow_no_deny" :id "candidate"}]
+    (with-redefs [audit/replay-requests (fn [filters]
+                                          {:requests [{:subject {:id "alice"}
+                                                       :resource {:class "Document" :id "doc-1"}
+                                                       :operation "read"
+                                                       :context {:auditReplay true
+                                                                 :auditId 42}}]
+                                           :total 12
+                                           :returned 1
+                                           :filters filters})
+                  prp/getGlobalPolicy (fn [_] current-policy)
+                  pdp/simulate (fn [_ simulate-body]
+                                 (if (= current-policy (:simulatedPolicy simulate-body))
+                                   {:allowed? false :decisionType "deny" :matchedRuleNames ["old"]}
+                                   {:allowed? true :decisionType "allow" :matchedRuleNames ["new"]}))]
+      (let [result (impact/analyze-impact {} {:resourceClass "Document"
+                                              :candidatePolicy candidate-policy
+                                              :auditReplay {:decision "deny"
+                                                            :limit 1}})]
+        (is (= "audit" (get-in result [:requestSource :type])))
+        (is (= 12 (get-in result [:requestSource :auditReplay :total])))
+        (is (= "Document" (get-in result [:requestSource :auditReplay :filters :resource-class])))
+        (is (= 1 (get-in result [:summary :grants])))
+        (is (= true (get-in result [:changes 0 :request :context :auditReplay])))))))
 
 (deftest analyze-impact-blast-radius-ignores-unchanged-decisions-test
   (let [current-policy {:strategy "almost_one_allow_no_deny"}

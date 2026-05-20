@@ -206,6 +206,31 @@
      :page     page
      :pageSize page-size}))
 
+(defn- audit-row->authz-request
+  [row]
+  {:subject {:id (:subject_id row)}
+   :resource {:class (:resource_class row)
+              :id (:resource_id row)}
+   :operation (:operation row)
+   :context {:auditReplay true
+             :auditId (:id row)
+             :auditRequestId (:request_id row)
+             :auditDecision (:decision row)
+             :auditTimestamp (:ts row)
+             :auditMatchedRules (:matched_rules row)}})
+
+(defn replay-requests
+  "Build authorization request bodies from audit rows.
+   These replay requests contain the audited identifiers and operation; PIPs can
+   enrich attributes during simulation."
+  [{:keys [limit] :as filters}]
+  (let [page-size (or limit (:page-size filters) 100)
+        result (search (assoc filters :page 1 :page-size page-size))]
+    {:requests (mapv audit-row->authz-request (:items result))
+     :total (:total result)
+     :returned (count (:items result))
+     :filters (select-keys filters [:subject-id :resource-class :decision :from :to :limit])}))
+
 (defn shutdown!
   "Flush all pending async audit writes before JVM exits.
    Waits up to 10 seconds for the audit agent to drain."

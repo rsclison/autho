@@ -222,6 +222,24 @@
       (is (= 5 (:total result)))
       (is (= 5 (count (:items result)))))))
 
+(deftest replay-requests-builds-authz-requests-from-audit-test
+  (audit/log-decision! {:request-id     "req-replay-1"
+                        :subject-id     "alice"
+                        :resource-class "Document"
+                        :resource-id    "doc-1"
+                        :operation      "read"
+                        :decision       :deny
+                        :matched-rules  ["deny-old"]})
+  (await-agent)
+  (let [result (audit/replay-requests {:resource-class "Document" :limit 10})
+        replay-request (first (:requests result))]
+    (is (= 1 (:returned result)))
+    (is (= {:id "alice"} (:subject replay-request)))
+    (is (= {:class "Document" :id "doc-1"} (:resource replay-request)))
+    (is (= "read" (:operation replay-request)))
+    (is (= true (get-in replay-request [:context :auditReplay])))
+    (is (= "req-replay-1" (get-in replay-request [:context :auditRequestId])))))
+
 (deftest search-filters-by-subject-test
   (testing "search with subject-id filter returns only matching entries"
     (doseq [i (range 4)]

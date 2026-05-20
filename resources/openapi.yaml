@@ -438,6 +438,15 @@ components:
         candidate:
           type: object
           additionalProperties: true
+        requestSource:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [provided, audit]
+            auditReplay:
+              type: object
+              additionalProperties: true
         summary:
           $ref: '#/components/schemas/PolicyImpactSummary'
         blastRadius:
@@ -1056,6 +1065,22 @@ paths:
                 candidatePolicy:
                   type: object
                   additionalProperties: true
+                auditReplay:
+                  type: object
+                  description: Build replay requests from the audit log instead of providing requests manually.
+                  properties:
+                    subject-id:
+                      type: string
+                    decision:
+                      type: string
+                      enum: [permit, deny, allow]
+                    from:
+                      type: string
+                    to:
+                      type: string
+                    limit:
+                      type: integer
+                      default: 100
                 requests:
                   type: array
                   items:
