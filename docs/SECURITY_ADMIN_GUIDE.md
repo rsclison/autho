@@ -47,6 +47,30 @@ Trois secrets sont obligatoires au démarrage. Leur absence ou leur longueur ins
 | `API_KEY` | Authentification des applications de confiance via `X-API-Key` | 32 caractères |
 | `AUDIT_HMAC_SECRET` | Chaîne HMAC-SHA256 du journal d'audit (tamper-evident) | 32 caractères (256 bits) |
 
+Deux variables optionnelles lient la clé API à une identité applicative :
+
+| Variable | Usage | Défaut |
+|---|---|---|
+| `API_CLIENT_ID` | Identifiant applicatif utilisé comme sujet PDP pour les appels `X-API-Key` | `trusted-internal-app` |
+| `API_CLIENT_CLASS` | Classe du sujet applicatif | `Application` |
+
+Exemple :
+
+```bash
+export API_CLIENT_ID="app-A"
+export API_CLIENT_CLASS="Application"
+```
+
+Avec cette configuration, une requête authentifiée par `X-API-Key` est évaluée comme le sujet :
+
+```clojure
+{:id "app-A"
+ :class "Application"
+ :client-id "app-A"}
+```
+
+Le champ `subject` du body n'est pas une preuve d'identité et n'est pas utilisé pour déterminer le sujet d'un appel API key standard. Cette règle empêche un utilisateur ou un script d'appeler manuellement une route REST en déclarant `subject.id = app-A`.
+
 ### 3.1.1 Variable de licence (optionnelle)
 
 `AUTHO_LICENSE_KEY` active les fonctionnalités Pro ou Enterprise. Sans cette variable, le serveur démarre en mode **Free** (décisions de base uniquement).

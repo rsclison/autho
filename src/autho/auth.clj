@@ -31,6 +31,14 @@
                       {:type ::weak-config :length (count key) :minimum 32}))
       :else key)))
 
+(def api-client-id
+  (or (System/getenv "API_CLIENT_ID")
+      "trusted-internal-app"))
+
+(def api-client-class
+  (or (System/getenv "API_CLIENT_CLASS")
+      "Application"))
+
 ;; --- Authentication Backends ---
 
 ;; 1. JWT Backend for end-users
@@ -53,7 +61,10 @@
     {:authfn (fn [req token]
                (when (constant-time-equals? token api-key)
                  {:auth-method :api-key
-                  :client-id :trusted-internal-app}))
+                  :client-id api-client-id
+                  :subject {:id api-client-id
+                            :class api-client-class
+                            :client-id api-client-id}}))
      :token-name "X-API-Key"}))
 
 ;; --- Middleware ---

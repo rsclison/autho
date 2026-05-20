@@ -13,10 +13,31 @@ Tous les endpoints (sauf `/health`, `/readiness`, `/status`, `/metrics`) requiè
 ### API Key (clients de confiance)
 
 ```
-Authorization: X-API-Key <votre-api-key>
+X-API-Key: <votre-api-key>
 ```
 
-Le sujet est lu depuis le corps de la requête. L'identité est `: {auth-method: api-key, client-id: trusted-internal-app}`.
+La clé API identifie une application de confiance. Le sujet effectif n'est pas lu depuis le champ `subject` du corps de la requête : il est dérivé côté serveur depuis la clé API.
+
+Par défaut, l'identité applicative est :
+
+```clojure
+{:auth-method :api-key
+ :client-id "trusted-internal-app"
+ :subject {:id "trusted-internal-app"
+           :class "Application"
+           :client-id "trusted-internal-app"}}
+```
+
+Les variables d'environnement `API_CLIENT_ID` et `API_CLIENT_CLASS` permettent de changer cette identité sans modifier le code :
+
+```bash
+export API_CLIENT_ID="app-A"
+export API_CLIENT_CLASS="Application"
+```
+
+Conséquence de sécurité : un appelant ne peut pas envoyer `{"subject": {"id": "app-A"}}` dans le body pour se faire passer pour `app-A`. Pour une API key standard, `body.subject` est ignoré lors de la résolution du sujet.
+
+Le mode où un composant backend de confiance fournit explicitement un sujet dans le body n'est possible que si l'identité Ring interne contient `:allow-subject-delegation true`. Ce mode doit rester réservé à un composant serveur authentifié, jamais à un client public.
 
 ### JWT Bearer
 
@@ -29,6 +50,10 @@ L'identité est dérivée des claims du JWT.
 ---
 
 ## Format standard des réponses
+
+## Politique d'API
+
+Les nouvelles intégrations doivent utiliser les endpoints `/v1/*`, documentés dans `resources/openapi.yaml` et servis par `GET /openapi.yaml`. Les endpoints historiques (`/isAuthorized`, `/whoAuthorized`, `/whatAuthorized`, `/policy/:resourceClass`) restent disponibles pour compatibilité et sont indiqués comme legacy lorsqu'ils apparaissent ci-dessous.
 
 ### Succès
 
@@ -75,6 +100,8 @@ L'identité est dérivée des claims du JWT.
 | 400 | `BATCH_TOO_LARGE` | Dépasse `MAX_BATCH_SIZE` (défaut 100) |
 | 400 | `YAML_IMPORT_FAILED` | YAML invalide ou erreur d'import |
 | 401 | `UNAUTHORIZED` | Authentification manquante ou invalide |
+| 401 | `AUTHENTICATION_REQUIRED` | Aucun sujet authentifié ne peut être établi |
+| 401 | `UNBOUND_API_KEY_IDENTITY` | La clé API est valide mais aucune identité applicative n'est liée |
 | 403 | `FORBIDDEN` | Accès admin requis |
 | 404 | `POLICY_NOT_FOUND` | Politique inexistante |
 | 404 | `VERSION_NOT_FOUND` | Version de politique inexistante |
@@ -132,9 +159,11 @@ Renvoie 503 si le dépôt de règles n'est pas chargé.
 
 ## Décisions d'autorisation
 
-### POST /isAuthorized
+### POST /isAuthorized (legacy)
 
 Évalue si un sujet peut effectuer une opération sur une ressource.
+
+Avec `X-API-Key`, le sujet évalué est l'application liée à la clé API. Avec JWT, le sujet évalué est dérivé de l'identité JWT vérifiée. Le champ `subject` ci-dessous peut être requis par le format de requête ou servir aux appels internes explicitement autorisés à déléguer le sujet, mais il ne doit pas être traité comme une preuve d'identité. Pour évaluer un utilisateur final `U` derrière une application `A`, l'application métier `B` doit authentifier `A`, puis appeler Autho avec une identité serveur sûre ou construire un sujet composite validé côté serveur, par exemple `DelegatedPrincipal`.
 
 **Requête :**
 
@@ -158,6 +187,46 @@ Renvoie 503 si le dépôt de règles n'est pas chargé.
     "userAgent": "MyApp/1.0"
   }
 }
+```
+
+**Requête application-à-application avec API key :**
+
+Si Autho est démarré avec :
+
+```bash
+export API_CLIENT_ID="app-A"
+export API_CLIENT_CLASS="Application"
+```
+
+alors une requête comme celle-ci évalue les droits de `app-A`. Le champ `subject` peut rester requis par le format de requête, mais il n'est pas utilisé comme preuve d'identité avec `X-API-Key` :
+
+```json
+{
+  "subject": {
+    "id": "client-declared-value",
+    "class": "Application"
+  },
+  "resource": {
+    "class": "InformationB",
+    "id": "info-123"
+  },
+  "operation": "lire",
+  "context": {
+    "on-behalf-of": "user-U"
+  }
+}
+```
+
+Exemple de règle correspondante :
+
+```clojure
+{:name "APP-A-CAN-READ-B"
+ :resourceClass "InformationB"
+ :operation "lire"
+ :conditions [[= [Application $s client-id] "app-A"]
+              [= [InformationB $r id] "info-123"]]
+ :effect "allow"
+ :priority 0}
 ```
 
 **Réponse — Autorisé :**
@@ -415,12 +484,12 @@ En cas d'erreur sur un élément du batch :
 
 ## Gestion des politiques
 
-### GET /policies
+### GET /policies (legacy)
 
 Liste toutes les politiques chargées.
 
 ```bash
-curl -H "Authorization: X-API-Key key" http://localhost:8080/policies
+curl -H "X-API-Key: key" http://localhost:8080/policies
 ```
 
 ```json
@@ -435,20 +504,20 @@ curl -H "Authorization: X-API-Key key" http://localhost:8080/policies
 }
 ```
 
-### GET /policies/:resourceClass
+### GET /policies/:resourceClass (legacy)
 
 ```bash
-curl -H "Authorization: X-API-Key key" http://localhost:8080/policies/Facture
+curl -H "X-API-Key: key" http://localhost:8080/policies/Facture
 ```
 
-### PUT /policies/:resourceClass
+### PUT /policies/:resourceClass (legacy)
 
 Crée ou met à jour une politique. Valide contre `policySchema.json`, sauvegarde une version.
 
 ```bash
 curl -X PUT http://localhost:8080/policies/Facture \
   -H "Content-Type: application/json" \
-  -H "Authorization: X-API-Key key" \
+  -H "X-API-Key: key" \
   -d '{
     "resourceClass": "Facture",
     "strategy": "almost_one_allow_no_deny",
@@ -464,10 +533,10 @@ curl -X PUT http://localhost:8080/policies/Facture \
   }'
 ```
 
-### DELETE /policies/:resourceClass
+### DELETE /policies/:resourceClass (legacy)
 
 ```bash
-curl -X DELETE -H "Authorization: X-API-Key key" http://localhost:8080/policies/Facture
+curl -X DELETE -H "X-API-Key: key" http://localhost:8080/policies/Facture
 ```
 
 ### POST /v1/policies/import
@@ -477,7 +546,7 @@ Import depuis YAML.
 ```bash
 curl -X POST http://localhost:8080/v1/policies/import \
   -H "Content-Type: text/yaml" \
-  -H "Authorization: X-API-Key key" \
+  -H "X-API-Key: key" \
   --data-binary @ma-politique.yaml
 ```
 
@@ -494,7 +563,7 @@ curl -X POST http://localhost:8080/v1/policies/import \
 ### GET /v1/policies/:rc/versions
 
 ```bash
-curl -H "Authorization: X-API-Key key" \
+curl -H "X-API-Key: key" \
   http://localhost:8080/v1/policies/Facture/versions
 ```
 
@@ -508,7 +577,7 @@ curl -H "Authorization: X-API-Key key" \
 ### GET /v1/policies/:rc/versions/:v
 
 ```bash
-curl -H "Authorization: X-API-Key key" \
+curl -H "X-API-Key: key" \
   http://localhost:8080/v1/policies/Facture/versions/3
 ```
 
@@ -517,7 +586,7 @@ Retourne le corps complet de la politique à la version 3.
 ### GET /v1/policies/:rc/diff?from=3&to=5
 
 ```bash
-curl -H "Authorization: X-API-Key key" \
+curl -H "X-API-Key: key" \
   "http://localhost:8080/v1/policies/Facture/diff?from=3&to=5"
 ```
 
@@ -532,7 +601,7 @@ curl -H "Authorization: X-API-Key key" \
 ### POST /v1/policies/:rc/rollback/:v
 
 ```bash
-curl -X POST -H "Authorization: X-API-Key key" \
+curl -X POST -H "X-API-Key: key" \
   http://localhost:8080/v1/policies/Facture/rollback/3
 ```
 
@@ -551,7 +620,7 @@ curl -X POST -H "Authorization: X-API-Key key" \
 ### GET /v1/cache/stats
 
 ```bash
-curl -H "Authorization: X-API-Key key" http://localhost:8080/v1/cache/stats
+curl -H "X-API-Key: key" http://localhost:8080/v1/cache/stats
 ```
 
 ```json
@@ -576,7 +645,7 @@ curl -H "Authorization: X-API-Key key" http://localhost:8080/v1/cache/stats
 Vide tous les caches.
 
 ```bash
-curl -X DELETE -H "Authorization: X-API-Key key" http://localhost:8080/v1/cache
+curl -X DELETE -H "X-API-Key: key" http://localhost:8080/v1/cache
 ```
 
 ```json
@@ -588,7 +657,7 @@ curl -X DELETE -H "Authorization: X-API-Key key" http://localhost:8080/v1/cache
 Invalide une entrée précise.
 
 ```bash
-curl -X DELETE -H "Authorization: X-API-Key key" \
+curl -X DELETE -H "X-API-Key: key" \
   http://localhost:8080/v1/cache/subject/alice
 ```
 
@@ -649,7 +718,7 @@ Tous les endpoints `/admin/*` requièrent un rôle `admin` dans le JWT ou une au
 Réinitialise entièrement le PDP (recharge règles, personnes, délégations).
 
 ```bash
-curl -X POST -H "Authorization: X-API-Key key" http://localhost:8080/admin/reinit
+curl -X POST -H "X-API-Key: key" http://localhost:8080/admin/reinit
 ```
 
 ### POST /admin/reload_rules

@@ -81,17 +81,21 @@
 ### Prérequis
 
 - Java 11+
-- Leiningen 2.x
+- Le wrapper Leiningen fourni par le dépôt (`./lein`)
 
 ### Lancement
 
 ```bash
 export JWT_SECRET="my-strong-secret-key-32-chars-min"
-export API_KEY="my-api-key"
+export API_KEY="my-strong-api-key-32-chars-min"
+export API_CLIENT_ID="app-A"
+export API_CLIENT_CLASS="Application"
 
-lein ring server-headless
+./lein ring server-headless
 # Serveur démarré sur http://localhost:8080
 ```
+
+`API_KEY` authentifie une application cliente de confiance. L'identité applicative exposée au PDP est configurée par `API_CLIENT_ID` et `API_CLIENT_CLASS`. Avec une API key standard, Autho ignore le champ `subject` fourni dans le body : un appelant ne peut donc pas se faire passer pour une autre application en postant manuellement `{"subject": {"id": "app-A"}}`.
 
 ### Premier appel
 
@@ -99,12 +103,44 @@ lein ring server-headless
 # Vérifier que le serveur est prêt
 curl http://localhost:8080/health
 
-# Décision d'autorisation (avec API Key)
+# Décision d'autorisation application-à-application (avec API Key)
 curl -X POST http://localhost:8080/isAuthorized \
   -H "Content-Type: application/json" \
-  -H "Authorization: X-API-Key my-api-key" \
+  -H "X-API-Key: my-strong-api-key-32-chars-min" \
   -d '{
-    "subject":   {"id": "alice", "role": "chef_de_service", "service": "comptabilite"},
+    "subject":   {"id": "client-declared-value", "class": "Application"},
+    "resource":  {"class": "InformationB", "id": "info-123"},
+    "operation": "lire",
+    "context":   {"on-behalf-of": "user-U"}
+  }'
+
+# Le sujet évalué est l'application liée à la clé API :
+# {"id": "app-A", "class": "Application", "client-id": "app-A"}
+# Le champ subject du body peut être requis par le format de requête,
+# mais il n'est pas utilisé comme preuve d'identité avec X-API-Key.
+```
+
+Une politique correspondante peut cibler l'application comme sujet :
+
+```clojure
+{:name "APP-A-CAN-READ-B"
+ :resourceClass "InformationB"
+ :operation "lire"
+ :conditions [[= [Application $s client-id] "app-A"]]
+ :effect "allow"
+ :priority 0}
+```
+
+Pour évaluer un utilisateur final, utilisez un JWT utilisateur ou un composant backend de confiance qui construit le sujet après avoir authentifié l'application appelante. Le champ `subject` du body ne doit pas être considéré comme une preuve d'identité.
+
+```bash
+# Exemple d'évaluation utilisateur avec JWT.
+# Le JWT doit porter les claims nécessaires au sujet effectif
+# (id, class, role, service, etc.) ou permettre leur enrichissement par PIP.
+curl -X POST http://localhost:8080/isAuthorized \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Token <jwt>" \
+  -d '{
     "resource":  {"class": "Facture", "id": "INV-001", "service": "comptabilite", "montant": 500},
     "operation": "lire"
   }'
@@ -113,9 +149,8 @@ curl -X POST http://localhost:8080/isAuthorized \
 # Décision refusée
 curl -X POST http://localhost:8080/isAuthorized \
   -H "Content-Type: application/json" \
-  -H "Authorization: X-API-Key my-api-key" \
+  -H "Authorization: Token <jwt>" \
   -d '{
-    "subject":   {"id": "bob", "role": "stagiaire"},
     "resource":  {"class": "Facture", "id": "INV-001"},
     "operation": "lire"
   }'
@@ -128,12 +163,14 @@ curl -X POST http://localhost:8080/isAuthorized \
 
 ### Décisions d'autorisation
 
+Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégrations. Les endpoints historiques restent disponibles pour compatibilité.
+
 | Endpoint | Description |
 |----------|-------------|
-| `POST /isAuthorized` | Décision binaire allow/deny pour un triplet sujet-ressource-opération |
-| `POST /whoAuthorized` | Sujets autorisés pour une ressource et une opération |
-| `POST /whatAuthorized` | Ressources accessibles à un sujet (avec pagination et fetch Kafka) |
-| `POST /explain` | Trace détaillée règle par règle de la décision |
+| `POST /v1/authz/decisions` | Décision binaire allow/deny pour un triplet sujet-ressource-opération |
+| `POST /v1/authz/subjects` | Sujets autorisés pour une ressource et une opération |
+| `POST /v1/authz/permissions` | Ressources accessibles à un sujet (avec pagination et fetch Kafka) |
+| `POST /v1/authz/explain` | Trace détaillée règle par règle de la décision |
 | `POST /v1/authz/simulate` | Simulation dry-run (sans cache ni audit) |
 | `POST /v1/authz/batch` | Évaluation en lot de jusqu'à 100 demandes en parallèle |
 
@@ -141,10 +178,10 @@ curl -X POST http://localhost:8080/isAuthorized \
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET  /policies` | Lister toutes les politiques |
-| `GET  /policies/:rc` | Lire une politique |
-| `PUT  /policies/:rc` | Créer ou mettre à jour une politique |
-| `DELETE /policies/:rc` | Supprimer une politique |
+| `GET  /v1/policies` | Lister toutes les politiques |
+| `GET  /v1/policies/:rc` | Lire une politique |
+| `PUT  /v1/policies/:rc` | Créer ou mettre à jour une politique |
+| `DELETE /v1/policies/:rc` | Supprimer une politique |
 | `POST /v1/policies/import` | Import depuis YAML |
 | `GET  /v1/policies/:rc/versions` | Historique des versions |
 | `GET  /v1/policies/:rc/versions/:v` | Récupérer la version v |

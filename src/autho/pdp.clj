@@ -37,9 +37,24 @@
 
 (defn- get-subject [request body]
   (let [identity (:identity request)]
-    (if (= :api-key (:auth-method identity))
+    (cond
+      (and (= :api-key (:auth-method identity))
+           (:allow-subject-delegation identity))
       (:subject body)
-      identity)))
+
+      (= :api-key (:auth-method identity))
+      (or (:subject identity)
+          (throw (ex-info "API key identity has no bound subject"
+                          {:status 401
+                           :error-code "UNBOUND_API_KEY_IDENTITY"})))
+
+      identity
+      identity
+
+      :else
+      (throw (ex-info "Authentication required"
+                      {:status 401
+                       :error-code "AUTHENTICATION_REQUIRED"})))))
 
 (defn get-rules-repository-path []
   (getProperty :rules.repository))

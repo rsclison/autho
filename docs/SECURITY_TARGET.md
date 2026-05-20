@@ -151,6 +151,8 @@ Ces hypothèses sont des conditions préalables au bon fonctionnement sécurisé
 
 - Toute requête sur les routes protégées doit présenter soit un JWT HS256 valide (header `Authorization: Token <jwt>`), soit une API Key valide (header `X-API-Key: <key>`).
 - Un JWT est valide si : signature HMAC-SHA256 vérifiée avec `JWT_SECRET`, non expiré, algorithme HS256 uniquement.
+- Pour une API Key valide, le sujet PDP est l'identité applicative liée côté serveur (`API_CLIENT_ID`, `API_CLIENT_CLASS`). Le champ `subject` du corps de requête ne peut pas modifier cette identité.
+- Une requête sans identité authentifiée est refusée avec `AUTHENTICATION_REQUIRED`. Une API Key valide mais non liée à un sujet applicatif est refusée avec `UNBOUND_API_KEY_IDENTITY`.
 - Les routes publiques (`/health`, `/metrics`, `/openapi.yaml`) ne requièrent pas d'authentification.
 
 ### 5.2 Politique d'autorisation administrative

@@ -104,7 +104,8 @@
 (deftest whoAuthorized-test
   (testing "whoAuthorized function"
     (let [request {:resource {:class "doc"}}
-          ring-req {:identity {:auth-method :api-key}}]
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}]
       (testing "when a rule allows the request"
         (with-redefs [prp/getGlobalPolicy (fn [resource-class]
                                             {:rules [{:name "allow-rule"
@@ -140,7 +141,8 @@
 (deftest whatAuthorized-test
   (testing "whatAuthorized function"
     (let [request {:subject {:id "user1"}}
-          ring-req {:identity {:auth-method :api-key}}]
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}]
       (testing "when a rule allows the request"
         (with-redefs [prp/getGlobalPolicy (fn [resource-class]
                                             {:rules [{:name "allow-rule"
@@ -250,7 +252,8 @@
     (let [body {:subject {:id "user1"}
                 :resource {:class "doc" :id "doc-1"}
                 :operation "read"}
-          ring-req {:identity {:auth-method :api-key}}]
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}]
       (with-redefs [prp/getGlobalPolicy (fn [_]
                                           {:rules [{:name "allow-rule" :effect "allow" :priority 1 :operation "read"}
                                                    {:name "deny-rule" :effect "deny" :priority 5 :operation "read"}]
@@ -270,12 +273,60 @@
           (is (= "doc-1" (:resourceId result)))
           (is (= "read" (:operation result))))))))
 
+(deftest api-key-bound-subject-test
+  (testing "API key authorization uses the authenticated application subject, not the request body subject"
+    (let [body {:subject {:id "spoofed-app" :class "Application"}
+                :resource {:class "doc" :id "doc-1"}
+                :operation "read"}
+          ring-req {:identity {:auth-method :api-key
+                               :client-id "app-A"
+                               :subject {:id "app-A"
+                                         :class "Application"
+                                         :client-id "app-A"}}}
+          seen-subject (atom nil)]
+      (with-redefs [prp/getGlobalPolicy (fn [_]
+                                          {:rules [{:name "allow-app-A"
+                                                    :effect "allow"
+                                                    :priority 1
+                                                    :operation "read"}]
+                                           :strategy :almost_one_allow_no_deny})
+                    deleg/findDelegation (fn [_] [])
+                    local-cache/get-cached-decision (fn [& _] nil)
+                    local-cache/cache-decision! (fn [& _] nil)
+                    metrics/record-decision! (fn [& _] nil)
+                    audit/log-decision! (fn [& _] nil)
+                    rule/evaluateRule (fn [_ req]
+                                        (reset! seen-subject (:subject req))
+                                        {:value (= "app-A" (get-in req [:subject :id]))})]
+        (let [result (isAuthorized ring-req body)]
+          (is (= true (:allowed result)))
+          (is (= {:id "app-A" :class "Application" :client-id "app-A"}
+                 @seen-subject)))))))
+
+(deftest api-key-unbound-subject-test
+  (testing "API key identities must be bound to an application subject unless explicit delegation is enabled"
+    (let [body {:subject {:id "spoofed-app" :class "Application"}
+                :resource {:class "doc" :id "doc-1"}
+                :operation "read"}
+          ring-req {:identity {:auth-method :api-key}}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"API key identity has no bound subject"
+                            (isAuthorized ring-req body))))))
+
+(deftest unauthenticated-request-subject-test
+  (testing "Unauthenticated requests cannot self-declare a subject in the body"
+    (let [body {:subject {:id "app-A" :class "Application"}
+                :resource {:class "doc" :id "doc-1"}
+                :operation "read"}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Authentication required"
+                            (isAuthorized {} body))))))
+
 (deftest explain-and-simulate-share-canonical-evaluation-test
   (testing "explain and simulate project the same canonical decision"
     (let [body {:subject {:id "user1"}
                 :resource {:class "doc" :id "doc-1"}
                 :operation "read"}
-          ring-req {:identity {:auth-method :api-key}}
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}
           policy {:rules [{:name "allow-rule" :effect "allow" :priority 10 :operation "read"}
                           {:name "deny-rule" :effect "deny" :priority 1 :operation "read"}]
                   :strategy :almost_one_allow_no_deny}]
@@ -300,7 +351,8 @@
 (deftest whoAuthorizedDetailed-test
   (testing "whoAuthorizedDetailed exposes allow and deny candidates"
     (let [request {:resource {:class "doc"}}
-          ring-req {:identity {:auth-method :api-key}}]
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}]
       (with-redefs [prp/getGlobalPolicy (fn [_]
                                           {:rules [{:name "allow-rule"
                                                     :effect "allow"
@@ -331,7 +383,8 @@
   (testing "whatAuthorizedDetailed preserves strategy alongside allow and deny projections"
     (let [request {:subject {:id "user1"}
                    :resource {:class "doc"}}
-          ring-req {:identity {:auth-method :api-key}}]
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}]
       (with-redefs [prp/getGlobalPolicy (fn [_]
                                           {:rules [{:name "allow-rule"
                                                     :effect "allow"
@@ -368,7 +421,8 @@
           what-request {:subject {:id "user1"}
                         :resource {:class "doc"}
                         :operation "read"}
-          ring-req {:identity {:auth-method :api-key}}]
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}]
       (with-redefs [prp/getGlobalPolicy (fn [_]
                                           {:rules [{:name "allow-rule"
                                                     :effect "allow"

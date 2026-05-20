@@ -14,9 +14,41 @@ All endpoints require authentication via JWT token or API key.
 
 **Headers:**
 ```
-Authorization: Bearer <jwt-token>
+Authorization: Token <jwt-token>
 X-API-Key: <api-key>
 ```
+
+### Subject Resolution
+
+Autho does not trust an arbitrary `subject` value sent by an unauthenticated caller.
+
+With `Authorization: Token <jwt-token>`, the effective subject is derived from the verified JWT identity.
+
+With `X-API-Key`, the effective subject is the application bound to the API key on the server side. The body field `subject` is ignored for normal API-key calls, so a caller cannot impersonate another application by posting:
+
+```json
+{"subject": {"id": "app-A", "class": "Application"}}
+```
+
+The API-key application identity is configured with:
+
+```bash
+API_CLIENT_ID=app-A
+API_CLIENT_CLASS=Application
+```
+
+For service-to-service authorization, write policies against that application subject:
+
+```clojure
+{:name "APP-A-CAN-READ-B"
+ :resourceClass "InformationB"
+ :operation "read"
+ :conditions [[= [Application $s client-id] "app-A"]]
+ :effect "allow"
+ :priority 0}
+```
+
+If a trusted backend must evaluate permissions for a user on behalf of an application, the backend must authenticate the application first and then use a server-side delegated/composite subject. The internal compatibility flag `:allow-subject-delegation true` is reserved for trusted Ring identities and must not be exposed as a client-controlled parameter.
 
 ## Response Format
 
@@ -80,6 +112,8 @@ All responses follow a standard format:
 
 Make an authorization decision.
 
+For API-key calls, `subject` in this example is not the source of truth. The evaluated subject is the application identity bound to the API key. For JWT calls, the evaluated subject is derived from the JWT identity.
+
 **Request:**
 ```json
 {
@@ -98,7 +132,7 @@ Make an authorization decision.
       "classification": "internal"
     }
   },
-  "action": "write"
+  "operation": "write"
 }
 ```
 
@@ -107,8 +141,9 @@ Make an authorization decision.
 {
   "status": "success",
   "data": {
+    "allowed": true,
     "decision": "allow",
-    "matchingPolicies": ["pol-001"]
+    "results": ["pol-001"]
   },
   "timestamp": "2026-03-18T10:30:00Z"
 }
@@ -128,7 +163,7 @@ List all subjects authorized for a resource.
       "owner": "user123"
     }
   },
-  "action": "read"
+  "operation": "read"
 }
 ```
 
@@ -169,10 +204,8 @@ List all permissions for a subject.
 {
   "status": "success",
   "data": {
-    "permissions": [
-      {"action": "read", "resourceClass": "Document"},
-      {"action": "write", "resourceClass": "Document"}
-    ]
+    "allow": [],
+    "deny": []
   }
 }
 ```
@@ -186,7 +219,7 @@ Explain an authorization decision.
 {
   "subject": {"id": "user123", "attributes": {"role": "user"}},
   "resource": {"class": "Document", "id": "doc456"},
-  "action": "write"
+  "operation": "write"
 }
 ```
 
@@ -195,10 +228,11 @@ Explain an authorization decision.
 {
   "status": "success",
   "data": {
-    "decision": "deny",
-    "reason": "Insufficient permissions",
-    "matchingPolicies": ["pol-002"],
-    "explanation": "Subject role 'user' is not authorized for action 'write' on resource class 'Document'"
+    "decision": false,
+    "allowed?": false,
+    "decisionType": "deny",
+    "matchedRuleNames": ["pol-002"],
+    "rules": []
   }
 }
 ```
@@ -214,12 +248,12 @@ Make multiple authorization decisions in a single request.
     {
       "subject": {"id": "user123"},
       "resource": {"class": "Document", "id": "doc1"},
-      "action": "read"
+      "operation": "read"
     },
     {
       "subject": {"id": "user123"},
       "resource": {"class": "Document", "id": "doc2"},
-      "action": "write"
+      "operation": "write"
     }
   ]
 }
@@ -777,32 +811,34 @@ When rate limit is exceeded:
 ```bash
 curl -X POST http://localhost:8080/v1/authz/decisions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
+  -H "Authorization: Token <token>" \
   -d '{
     "subject": {"id": "user123", "attributes": {"role": "admin"}},
     "resource": {"class": "Document", "id": "doc456"},
-    "action": "write"
+    "operation": "write"
   }'
 ```
 
 **List Policies:**
 ```bash
 curl http://localhost:8080/v1/policies?page=1&per-page=20 \
-  -H "Authorization: Bearer <token>"
+  -H "Authorization: Token <token>"
 ```
 
 **Create Policy:**
 ```bash
 curl -X POST http://localhost:8080/v1/policies \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
+  -H "Authorization: Token <token>" \
   -d '{
     "resourceClass": "Report",
-    "version": "1.0",
+    "strategy": "almost_one_allow_no_deny",
     "rules": [{
+      "name": "report-read",
+      "priority": 10,
+      "operation": "read",
       "effect": "allow",
-      "subject": {"role": "analyst"},
-      "actions": ["read", "generate"]
+      "conditions": [["=", ["Person", "$s", "role"], "analyst"]]
     }]
   }'
 ```
@@ -811,11 +847,11 @@ curl -X POST http://localhost:8080/v1/policies \
 ```bash
 curl -X POST http://localhost:8080/v1/authz/batch \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
+  -H "Authorization: Token <token>" \
   -d '{
     "requests": [
-      {"subject": {"id": "user123"}, "resource": {"class": "Document", "id": "doc1"}, "action": "read"},
-      {"subject": {"id": "user123"}, "resource": {"class": "Document", "id": "doc2"}, "action": "write"}
+      {"subject": {"id": "user123"}, "resource": {"class": "Document", "id": "doc1"}, "operation": "read"},
+      {"subject": {"id": "user123"}, "resource": {"class": "Document", "id": "doc2"}, "operation": "write"}
     ]
   }'
 ```

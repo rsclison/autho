@@ -19,8 +19,8 @@ info:
     name: EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0
 
 servers:
-  - url: /v1
-    description: v1 API
+  - url: /
+    description: Autho server root; stable API paths are prefixed with /v1
 
 tags:
   - name: authorization
@@ -33,6 +33,12 @@ tags:
     description: Subject entity endpoints
   - name: resources
     description: Resource entity endpoints
+  - name: admin
+    description: Administration endpoints
+  - name: audit
+    description: Audit log endpoints
+  - name: time-travel
+    description: Historical authorization endpoints
 
 security:
   - ApiKeyAuth: []
@@ -44,6 +50,11 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
+      description: >
+        Authenticates a trusted client application. For standard API-key
+        calls, the effective PDP subject is the server-side application
+        identity bound to the key via API_CLIENT_ID/API_CLIENT_CLASS; the
+        request body subject is not trusted as an identity proof.
     BearerAuth:
       type: http
       scheme: bearer
@@ -77,9 +88,19 @@ components:
     AuthzRequest:
       type: object
       required: [subject, resource, operation]
+      description: >
+        Authorization request. The effective subject depends on the
+        authentication method: JWT calls use the verified JWT identity, while
+        API-key calls use the application identity bound server-side to the
+        API key. For standard API-key calls, this body subject is ignored for
+        identity resolution and must not be used as a proof of caller identity.
       properties:
         subject:
           $ref: '#/components/schemas/Subject'
+          description: >
+            Subject attributes for compatibility and delegated/internal
+            evaluation. This field is not trusted for normal API-key identity
+            resolution.
         resource:
           $ref: '#/components/schemas/Resource'
         operation:
@@ -563,6 +584,99 @@ components:
           items:
             type: object
 
+    PolicyVersionRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        resourceClass:
+          type: string
+        version:
+          type: integer
+        author:
+          type: string
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        policy:
+          type: object
+          additionalProperties: true
+        sourceAnalysisId:
+          type: integer
+        deploymentKind:
+          type: string
+        sourceCandidateVersion:
+          type: integer
+
+    PolicyTimelineEvent:
+      type: object
+      properties:
+        eventType:
+          type: string
+          enum: [policy_version_created, impact_analysis_created, impact_reviewed, impact_deployed]
+        resourceClass:
+          type: string
+        version:
+          type: integer
+        analysisId:
+          type: integer
+        occurredAt:
+          type: string
+          format: date-time
+        author:
+          type: string
+        reviewStatus:
+          type: string
+        rolloutStatus:
+          type: string
+
+    PolicyChangeTimeline:
+      type: object
+      properties:
+        resourceClass:
+          type: string
+        count:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyTimelineEvent'
+
+    AuditSearchResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+
+    AuditVerifyResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        total:
+          type: integer
+        error:
+          type: string
+
+    AdminActionResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+
     ErrorResponse:
       type: object
       properties:
@@ -590,7 +704,7 @@ components:
           format: date-time
 
 paths:
-  /authz/decisions:
+  /v1/authz/decisions:
     post:
       tags: [authorization]
       summary: Evaluate authorization decision
@@ -621,7 +735,7 @@ paths:
         '429':
           description: Rate limit exceeded
 
-  /authz/subjects:
+  /v1/authz/subjects:
     post:
       tags: [authorization]
       summary: List subjects authorized for a resource
@@ -662,7 +776,7 @@ paths:
                   denyCandidates: []
                 timestamp: "2026-03-26T10:00:00Z"
 
-  /authz/permissions:
+  /v1/authz/permissions:
     post:
       tags: [authorization]
       summary: List permissions for a subject
@@ -705,7 +819,7 @@ paths:
                   deny: []
                 timestamp: "2026-03-26T10:00:00Z"
 
-  /authz/explain:
+  /v1/authz/explain:
     post:
       tags: [authorization]
       summary: Explain authorization decision
@@ -728,7 +842,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/DecisionExplanation'
 
-  /authz/simulate:
+  /v1/authz/simulate:
     post:
       tags: [authorization]
       summary: Simulate authorization decision against current, versioned, or provided policy
@@ -751,7 +865,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/SimulationDecision'
 
-  /authz/batch:
+  /v1/authz/batch:
     post:
       tags: [authorization]
       summary: Batch authorization evaluation (parallel, max 100)
@@ -776,7 +890,7 @@ paths:
         '400':
           description: Batch too large or invalid
 
-  /policies/{resource-class}/impact:
+  /v1/policies/{resource-class}/impact:
     post:
       tags: [policies]
       summary: Analyze decision impact of a candidate policy against a batch of requests
@@ -818,7 +932,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/PolicyImpactAnalysis'
 
-  /policies/{resource-class}/impact/history:
+  /v1/policies/{resource-class}/impact/history:
     get:
       tags: [policies]
       summary: List persisted policy impact previews for a resource class
@@ -843,7 +957,7 @@ paths:
                         items:
                           $ref: '#/components/schemas/PolicyImpactHistoryEntry'
 
-  /policies/{resource-class}/impact/history/{analysis-id}:
+  /v1/policies/{resource-class}/impact/history/{analysis-id}:
     get:
       tags: [policies]
       summary: Get a persisted policy impact preview
@@ -871,7 +985,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/PolicyImpactHistoryEntry'
 
-  /policies/{resource-class}/impact/history/{analysis-id}/review:
+  /v1/policies/{resource-class}/impact/history/{analysis-id}/review:
     post:
       tags: [policies]
       summary: Update review status for a persisted policy impact preview
@@ -912,7 +1026,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/PolicyImpactHistoryEntry'
 
-  /policies/{resource-class}/impact/history/{analysis-id}/rollout:
+  /v1/policies/{resource-class}/impact/history/{analysis-id}/rollout:
     post:
       tags: [policies]
       summary: Promote an approved impact preview into a deployed policy version
@@ -942,7 +1056,7 @@ paths:
         '409':
           description: Preview is not approved, not promotable, or already deployed
 
-  /policies/{resource-class}/timeline:
+  /v1/policies/{resource-class}/timeline:
     get:
       tags: [policies]
       summary: Get an audit-ready chronological timeline of policy changes
@@ -964,7 +1078,7 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/PolicyChangeTimeline'
-  /policies/{resource-class}/diff:
+  /v1/policies/{resource-class}/diff:
     get:
       tags: [policies]
       summary: Compare two stored policy versions
@@ -999,7 +1113,7 @@ paths:
         '404':
           description: One or both versions not found
 
-  /policies:
+  /v1/policies:
     get:
       tags: [policies]
       summary: List all policies (paginated)
@@ -1038,7 +1152,7 @@ paths:
         '400':
           description: Invalid policy
 
-  /policies/import:
+  /v1/policies/import:
     post:
       tags: [policies]
       summary: Import a policy from YAML
@@ -1063,7 +1177,7 @@ paths:
         '400':
           description: Invalid YAML or missing resourceClass
 
-  /policies/{resource-class}/versions:
+  /v1/policies/{resource-class}/versions:
     get:
       tags: [policies]
       summary: List stored policy versions with rollout lineage metadata
@@ -1088,7 +1202,7 @@ paths:
                         items:
                           $ref: '#/components/schemas/PolicyVersionRecord'
 
-  /policies/{resource-class}/versions/{version}:
+  /v1/policies/{resource-class}/versions/{version}:
     get:
       tags: [policies]
       summary: Get a stored policy version with rollout lineage metadata
@@ -1118,7 +1232,7 @@ paths:
         '404':
           description: Version not found
 
-  /policies/{resourceClass}:
+  /v1/policies/{resourceClass}:
     get:
       tags: [policies]
       summary: Get a specific policy
@@ -1167,7 +1281,7 @@ paths:
         '204':
           description: Policy deleted
 
-  /cache/stats:
+  /v1/cache/stats:
     get:
       tags: [cache]
       summary: Get cache statistics
@@ -1176,7 +1290,7 @@ paths:
         '200':
           description: Cache statistics including hit ratio and sizes
 
-  /cache:
+  /v1/cache:
     delete:
       tags: [cache]
       summary: Clear all caches
@@ -1185,7 +1299,7 @@ paths:
         '200':
           description: Caches cleared
 
-  /cache/{type}/{key}:
+  /v1/cache/{type}/{key}:
     delete:
       tags: [cache]
       summary: Invalidate a specific cache entry
@@ -1206,6 +1320,232 @@ paths:
         '200':
           description: Cache entry invalidated
 
+  /admin/audit/search:
+    get:
+      tags: [audit]
+      summary: Search the licensed audit log
+      operationId: searchAudit
+      parameters:
+        - in: query
+          name: subjectId
+          schema:
+            type: string
+        - in: query
+          name: resourceClass
+          schema:
+            type: string
+        - in: query
+          name: decision
+          schema:
+            type: string
+            enum: [allow, deny, permit]
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Audit search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditSearchResult'
+        '402':
+          description: Pro or Enterprise licence required
+
+  /admin/audit/verify:
+    get:
+      tags: [audit]
+      summary: Verify the audit HMAC chain
+      operationId: verifyAuditChain
+      responses:
+        '200':
+          description: Audit chain verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditVerifyResult'
+        '402':
+          description: Pro or Enterprise licence required
+
+  /admin/reinit:
+    post:
+      tags: [admin]
+      summary: Reinitialize the PDP
+      operationId: reinitPdp
+      responses:
+        '200':
+          description: PDP reinitialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminActionResponse'
+
+  /admin/reload_rules:
+    post:
+      tags: [admin]
+      summary: Reload rule repository from disk
+      operationId: reloadRules
+      responses:
+        '200':
+          description: Rules reloaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminActionResponse'
+
+  /admin/reload_persons:
+    post:
+      tags: [admin]
+      summary: Reload person attributes from the configured source
+      operationId: reloadPersons
+      responses:
+        '200':
+          description: Persons reloaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminActionResponse'
+
+  /admin/pips/schema:
+    get:
+      tags: [admin]
+      summary: List known PIP attributes by entity class
+      operationId: getPipSchema
+      responses:
+        '200':
+          description: Entity class to attribute names map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+
+  /isAuthorized-at-time:
+    post:
+      tags: [time-travel]
+      summary: Evaluate authorization at a historical timestamp
+      operationId: isAuthorizedAtTime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/AuthzRequest'
+                - type: object
+                  required: [timestamp]
+                  properties:
+                    timestamp:
+                      type: string
+                      format: date-time
+      responses:
+        '200':
+          description: Historical decision result
+        '503':
+          description: Kafka is disabled
+
+  /who-was-authorized-at:
+    post:
+      tags: [time-travel]
+      summary: List subjects authorized for a resource at a historical timestamp
+      operationId: whoWasAuthorizedAt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceClass, resourceId, action, timestamp]
+              properties:
+                resourceClass:
+                  type: string
+                resourceId:
+                  type: string
+                action:
+                  type: string
+                timestamp:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Historical subject authorization result
+        '503':
+          description: Kafka is disabled
+
+  /what-could-access-at:
+    post:
+      tags: [time-travel]
+      summary: List resources accessible to a subject at a historical timestamp
+      operationId: whatCouldAccessAt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subjectId, action, timestamp]
+              properties:
+                subjectId:
+                  type: string
+                action:
+                  type: string
+                timestamp:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Historical resource access result
+        '503':
+          description: Kafka is disabled
+
+  /audit-trail:
+    post:
+      tags: [time-travel]
+      summary: Return the authorization change history for a resource
+      operationId: auditTrail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceClass, resourceId, startTime, endTime]
+              properties:
+                resourceClass:
+                  type: string
+                resourceId:
+                  type: string
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Resource authorization history
+        '503':
+          description: Kafka is disabled
 
 
 
