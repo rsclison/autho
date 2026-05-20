@@ -222,6 +222,23 @@
            :matched-rule-names (mapv :name matched-rule-objs)
            :conflict-strategy (:strategy policy))))
 
+(defn- decision-contract
+  "Common additive decision fields shared by public decision endpoints.
+   Historical fields are kept by each endpoint for compatibility."
+  [{:keys [allowed? decision subject resource operation strategy matched-rule-names
+           policy-source policy-version]}]
+  (cond-> {:allowed? allowed?
+           :decisionType (name decision)
+           :subjectId (:id subject)
+           :effectiveSubject subject
+           :resourceClass (:class resource)
+           :resourceId (:id resource)
+           :operation operation
+           :strategy strategy
+           :matchedRuleNames (vec matched-rule-names)
+           :policySource (or policy-source :current)}
+    policy-version (assoc :policyVersion policy-version)))
+
 (defn- who-authorized-matches
   [policy body]
   (let [op (:operation body)
@@ -377,8 +394,9 @@
           subject-id (:id (:subject authz-request))
           resource-class (:class (:resource authz-request))
           resource-id (:id (:resource authz-request))
-          operation (:operation authz-request)]
-      (if-not (prp/getGlobalPolicy resource-class)
+          operation (:operation authz-request)
+          globalPolicy (prp/getGlobalPolicy resource-class)]
+      (if-not globalPolicy
         (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
 
       (or (when-not (:timestamp (:context body))
@@ -386,13 +404,22 @@
           (let [decision-result (evalRequest authz-request)
                 allowed? (:result decision-result)
                 matched-rules (mapv :name (:rules decision-result))
-                result {:allowed allowed?
-                        :decision (if allowed? "allow" "deny")
-                        :results matched-rules
-                        :matchedRules matched-rules
-                        :resourceClass resource-class
-                        :resourceId resource-id
-                        :operation operation}]
+                decision-key (if allowed? :allow :deny)
+                result (merge
+                        (decision-contract {:allowed? allowed?
+                                            :decision decision-key
+                                            :subject (:subject authz-request)
+                                            :resource (:resource authz-request)
+                                            :operation operation
+                                            :strategy (:strategy globalPolicy)
+                                            :matched-rule-names matched-rules})
+                        {:allowed allowed?
+                         :decision (name decision-key)
+                         :results matched-rules
+                         :matchedRules matched-rules
+                         :resourceClass resource-class
+                         :resourceId resource-id
+                         :operation operation})]
             (local-cache/cache-decision! subject-id resource-class resource-id operation result)
             result)))))
 
@@ -498,18 +525,26 @@
       (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
 
     (let [decision-result (-> (evaluate-policy-rules globalPolicy authz-request)
-                              (canonical-decision))]
-      {:decision (:allowed? decision-result)
-       :allowed? (:allowed? decision-result)
-       :decisionType (name (:decision decision-result))
-       :strategy (:conflict-strategy decision-result)
-       :resourceClass resource-class
-       :resourceId resource-id
-       :operation operation
-       :totalRules (count (:all-rules decision-result))
-       :matchedRules (count (:matched-rule-objs decision-result))
-       :matchedRuleNames (:matched-rule-names decision-result)
-       :rules (:evaluated-rules decision-result)})))
+                              (canonical-decision))
+          contract (decision-contract {:allowed? (:allowed? decision-result)
+                                       :decision (:decision decision-result)
+                                       :subject (:subject authz-request)
+                                       :resource (:resource authz-request)
+                                       :operation operation
+                                       :strategy (:conflict-strategy decision-result)
+                                       :matched-rule-names (:matched-rule-names decision-result)})]
+      (merge contract
+             {:decision (:allowed? decision-result)
+              :allowed? (:allowed? decision-result)
+              :decisionType (name (:decision decision-result))
+              :strategy (:conflict-strategy decision-result)
+              :resourceClass resource-class
+              :resourceId resource-id
+              :operation operation
+              :totalRules (count (:all-rules decision-result))
+              :matchedRules (count (:matched-rule-objs decision-result))
+              :matchedRuleNames (:matched-rule-names decision-result)
+              :rules (:evaluated-rules decision-result)}))))
 
 (defn simulate
   "Dry-run: evaluates an authorization request against a supplied (unsaved) policy.
@@ -534,24 +569,36 @@
                         {:status 404 :error-code "NO_POLICY"})))
 
       (let [decision-result (-> (evaluate-policy-rules policy authz-request)
-                                (canonical-decision))]
-        {:decision      (:allowed? decision-result)
-         :allowed?      (:allowed? decision-result)
-         :decisionType  (name (:decision decision-result))
-         :strategy      (:conflict-strategy decision-result)
-         :resourceClass resource-class
-         :resourceId    (:id (:resource authz-request))
-         :operation     (:operation authz-request)
-         :simulated     true
-         :policySource  (cond (:simulatedPolicy body) :provided
-                              (:policyVersion body)   :version
-                              :else                   :current)
-         :policyVersion (or (:policyVersion body)
-                            (pv/latest-version-number resource-class))
-         :totalRules    (count (:all-rules decision-result))
-         :matchedRules  (count (:matched-rule-objs decision-result))
-         :matchedRuleNames (:matched-rule-names decision-result)
-         :rules         (:evaluated-rules decision-result)}))))
+                                (canonical-decision))
+            policy-source (cond (:simulatedPolicy body) :provided
+                                (:policyVersion body)   :version
+                                :else                   :current)
+            policy-version (or (:policyVersion body)
+                               (pv/latest-version-number resource-class))
+            contract (decision-contract {:allowed? (:allowed? decision-result)
+                                         :decision (:decision decision-result)
+                                         :subject (:subject authz-request)
+                                         :resource (:resource authz-request)
+                                         :operation (:operation authz-request)
+                                         :strategy (:conflict-strategy decision-result)
+                                         :matched-rule-names (:matched-rule-names decision-result)
+                                         :policy-source policy-source
+                                         :policy-version policy-version})]
+        (merge contract
+               {:decision      (:allowed? decision-result)
+                :allowed?      (:allowed? decision-result)
+                :decisionType  (name (:decision decision-result))
+                :strategy      (:conflict-strategy decision-result)
+                :resourceClass resource-class
+                :resourceId    (:id (:resource authz-request))
+                :operation     (:operation authz-request)
+                :simulated     true
+                :policySource  policy-source
+                :policyVersion policy-version
+                :totalRules    (count (:all-rules decision-result))
+                :matchedRules  (count (:matched-rule-objs decision-result))
+                :matchedRuleNames (:matched-rule-names decision-result)
+                :rules         (:evaluated-rules decision-result)})))))
 
 (defn- load-props
   [file-name]

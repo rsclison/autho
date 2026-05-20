@@ -267,8 +267,15 @@
         (let [result (isAuthorized ring-req body)]
           (is (= false (:allowed result)))
           (is (= "deny" (:decision result)))
+          (is (= false (:allowed? result)))
+          (is (= "deny" (:decisionType result)))
+          (is (= :almost_one_allow_no_deny (:strategy result)))
+          (is (= "user1" (:subjectId result)))
+          (is (= {:id "user1"} (:effectiveSubject result)))
+          (is (= :current (:policySource result)))
           (is (= ["allow-rule" "deny-rule"] (:results result)))
           (is (= ["allow-rule" "deny-rule"] (:matchedRules result)))
+          (is (= ["allow-rule" "deny-rule"] (:matchedRuleNames result)))
           (is (= "doc" (:resourceClass result)))
           (is (= "doc-1" (:resourceId result)))
           (is (= "read" (:operation result))))))))
@@ -341,11 +348,43 @@
           (is (= true (:decision explain-result)))
           (is (= true (:allowed? explain-result)))
           (is (= "allow" (:decisionType explain-result)))
+          (is (= "user1" (:subjectId explain-result)))
+          (is (= {:id "user1"} (:effectiveSubject explain-result)))
+          (is (= :current (:policySource explain-result)))
           (is (= true (:decision simulate-result)))
           (is (= true (:allowed? simulate-result)))
           (is (= "allow" (:decisionType simulate-result)))
+          (is (= "user1" (:subjectId simulate-result)))
+          (is (= {:id "user1"} (:effectiveSubject simulate-result)))
           (is (= (:matchedRuleNames explain-result)
                  (:matchedRuleNames simulate-result))))))))
+
+(deftest decision-endpoints-share-canonical-contract-test
+  (testing "isAuthorized, explain and simulate expose common decision contract fields"
+    (let [body {:subject {:id "user1"}
+                :resource {:class "doc" :id "doc-1"}
+                :operation "read"}
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true}}
+          policy {:rules [{:name "allow-rule" :effect "allow" :priority 10 :operation "read"}]
+                  :strategy :almost_one_allow_no_deny}]
+      (with-redefs [prp/getGlobalPolicy (fn [_] policy)
+                    deleg/findDelegation (fn [_] [])
+                    local-cache/get-cached-decision (fn [& _] nil)
+                    local-cache/cache-decision! (fn [& _] nil)
+                    metrics/record-decision! (fn [& _] nil)
+                    audit/log-decision! (fn [& _] nil)
+                    rule/evaluateRule (fn [rule _] {:value (= "allow-rule" (:name rule))})
+                    pv/latest-version-number (fn [_] 7)]
+        (let [decision (isAuthorized ring-req body)
+              explanation (explain ring-req body)
+              simulation (simulate ring-req body)
+              shared-keys [:allowed? :decisionType :subjectId :effectiveSubject
+                           :resourceClass :resourceId :operation :strategy
+                           :matchedRuleNames :policySource]]
+          (doseq [k shared-keys]
+            (is (= (get decision k) (get explanation k)) (str "decision/explain differ on " k))
+            (is (= (get explanation k) (get simulation k)) (str "explain/simulate differ on " k))))))))
 
 
 (deftest whoAuthorizedDetailed-test
