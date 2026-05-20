@@ -61,6 +61,42 @@ curl -X POST http://localhost:8080/v1/policies/Document/validate \
 
 Cet endpoint execute le schema JSON, la policy safety et les tests declaratifs, puis retourne le detail de validation sans modifier la politique active, sans creer de version et sans invalider le cache.
 
+La meme validation est aussi disponible en CLI pour les pipelines CI/CD :
+
+```bash
+./lein policy:validate --resource-class Document --file candidate-policy.json
+```
+
+La commande accepte JSON, YAML et YML :
+
+```bash
+./lein policy:validate --file candidate-policy.yaml --format json
+```
+
+Codes de sortie :
+
+- `0` : politique valide;
+- `1` : politique lue correctement mais validation echouee;
+- `2` : erreur d'utilisation, fichier illisible ou erreur inattendue.
+
+Avec `--format json`, la sortie est exploitable par un job CI :
+
+```json
+{
+  "valid": true,
+  "resourceClass": "Document",
+  "validation": {
+    "errors": [],
+    "warnings": [],
+    "tests": {
+      "count": 2,
+      "passed": 2,
+      "failed": 0
+    }
+  }
+}
+```
+
 Exemple :
 
 ```json

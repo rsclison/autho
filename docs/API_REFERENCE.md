@@ -606,6 +606,12 @@ Reponse de succes :
 
 En cas d'echec, la reponse est un `400` avec les issues dans `error.details`.
 
+Pour un usage CI sans serveur HTTP, la meme chaine est disponible via :
+
+```bash
+./lein policy:validate --resource-class Facture --file candidate-policy.json --format json
+```
+
 ### DELETE /policies/:resourceClass (legacy)
 
 ```bash
