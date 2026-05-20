@@ -572,6 +572,8 @@
                                      :source_analysis_id 7
                                      :deployment_kind "impact_rollout"
                                      :source_candidate_version 5
+                                     :lifecycle_status "deployed"
+                                     :workflow_action "rollout"
                                      :created_at "2026-03-27T10:00:00Z"}])]
     (let [response (handlers/list-policy-versions "Document")
           body (parse-response-body response)]
@@ -579,7 +581,9 @@
       (is (= "Document" (get-in body [:data 0 :resourceClass])))
       (is (= 7 (get-in body [:data 0 :sourceAnalysisId])))
       (is (= "impact_rollout" (get-in body [:data 0 :deploymentKind])))
-      (is (= 5 (get-in body [:data 0 :sourceCandidateVersion]))))))
+      (is (= 5 (get-in body [:data 0 :sourceCandidateVersion])))
+      (is (= "deployed" (get-in body [:data 0 :lifecycleStatus])))
+      (is (= "rollout" (get-in body [:data 0 :workflowAction]))))))
 
 (deftest get-policy-version-handler-returns-lineage-metadata-test
   (with-redefs [pv/get-version-details (fn [_ _]
@@ -591,6 +595,8 @@
                                           :sourceAnalysisId 7
                                           :deploymentKind "impact_rollout"
                                           :sourceCandidateVersion 5
+                                          :lifecycleStatus "deployed"
+                                          :workflowAction "rollout"
                                           :createdAt "2026-03-27T10:00:00Z"
                                           :policy {:resourceClass "Document"
                                                    :strategy "almost_one_allow_no_deny"
@@ -606,6 +612,8 @@
       (is (= 6 (get-in body [:data :version])))
       (is (= 7 (get-in body [:data :sourceAnalysisId])))
       (is (= "impact_rollout" (get-in body [:data :deploymentKind])))
+      (is (= "deployed" (get-in body [:data :lifecycleStatus])))
+      (is (= "rollout" (get-in body [:data :workflowAction])))
       (is (= "almost_one_allow_no_deny" (get-in body [:data :policy :strategy])))
       (is (= 7 (get-in body [:data :sourceAnalysis :id])))
       (is (= "approved" (get-in body [:data :sourceAnalysis :reviewStatus])))
@@ -825,7 +833,9 @@
                                          {:version version
                                           :source_analysis_id (:sourceAnalysisId payload)
                                           :deployment_kind (:deploymentKind payload)
-                                          :source_candidate_version (:sourceCandidateVersion payload)})
+                                          :source_candidate_version (:sourceCandidateVersion payload)
+                                          :lifecycle_status (:lifecycleStatus payload)
+                                          :workflow_action (:workflowAction payload)})
                   impact-history/mark-deployed! (fn [_ analysis-id payload]
                                                   {:id analysis-id
                                                    :resourceClass "Document"
@@ -843,6 +853,8 @@
         (is (= false (get-in body [:data :rolloutGate :blocked])))
         (is (= 7 (get-in body [:data :versionLink :source_analysis_id])))
         (is (= "impact_rollout" (get-in body [:data :versionLink :deployment_kind])))
+        (is (= "deployed" (get-in body [:data :versionLink :lifecycle_status])))
+        (is (= "rollout" (get-in body [:data :versionLink :workflow_action])))
         (is (= "deployed" (get-in body [:data :history :rolloutStatus])))))))
 
 (deftest rollout-policy-impact-preview-handler-requires-approved-preview-test
@@ -895,7 +907,9 @@
                   pv/annotate-version! (fn [_ version payload]
                                          {:version version
                                           :source_analysis_id (:sourceAnalysisId payload)
-                                          :deployment_kind (:deploymentKind payload)})
+                                          :deployment_kind (:deploymentKind payload)
+                                          :lifecycle_status (:lifecycleStatus payload)
+                                          :workflow_action (:workflowAction payload)})
                   impact-history/mark-deployed! (fn [_ analysis-id payload]
                                                   {:id analysis-id
                                                    :rolloutStatus "deployed"
@@ -929,7 +943,9 @@
                   pv/annotate-version! (fn [_ version payload]
                                          {:version version
                                           :source_analysis_id (:sourceAnalysisId payload)
-                                          :deployment_kind (:deploymentKind payload)})
+                                          :deployment_kind (:deploymentKind payload)
+                                          :lifecycle_status (:lifecycleStatus payload)
+                                          :workflow_action (:workflowAction payload)})
                   impact-history/mark-deployed! (fn [_ analysis-id payload]
                                                   {:id analysis-id
                                                    :resourceClass "Document"
@@ -942,6 +958,7 @@
         (is (= 11 (get-in body [:data :newVersion])))
         (is (= 9 (get-in body [:data :versionLink :source_analysis_id])))
         (is (= "impact_rollout" (get-in body [:data :versionLink :deployment_kind])))
+        (is (= "rollout" (get-in body [:data :versionLink :workflow_action])))
         (is (str/includes? (:comment @submitted) "stored candidate policy"))
         (is (str/includes? (:policyJson @submitted) "\"deny_unless_allow\""))))))
 
@@ -957,6 +974,37 @@
             body (parse-response-body response)]
         (is (= 409 (:status response)))
         (is (= "POLICY_IMPACT_NOT_PROMOTABLE" (get-in body [:error :code])))))))
+
+(deftest rollback-policy-handler-records-auditable-workflow-link-test
+  (let [submitted (atom nil)]
+    (with-redefs [pv/get-version (fn [_ version]
+                                   {:resourceClass "Document"
+                                    :strategy "almost_one_allow_no_deny"
+                                    :version version
+                                    :rules []})
+                  prp/submit-policy (fn [_ policy-json author comment]
+                                      (reset! submitted {:policyJson policy-json
+                                                         :author author
+                                                         :comment comment})
+                                      {:environment "prod"})
+                  pv/latest-version-number (fn [_] 14)
+                  pv/annotate-version! (fn [_ version payload]
+                                         {:version version
+                                          :deployment_kind (:deploymentKind payload)
+                                          :lifecycle_status (:lifecycleStatus payload)
+                                          :workflow_action (:workflowAction payload)
+                                          :rollback_from_version (:rollbackFromVersion payload)})]
+      (let [response (handlers/rollback-policy "Document" "3" (mock-request))
+            body (parse-response-body response)]
+        (is (= 200 (:status response)))
+        (is (= 3 (get-in body [:data :rolledBackTo])))
+        (is (= 14 (get-in body [:data :newVersion])))
+        (is (= "rollback" (get-in body [:data :workflowAction])))
+        (is (= "rollback" (get-in body [:data :versionLink :deployment_kind])))
+        (is (= "deployed" (get-in body [:data :versionLink :lifecycle_status])))
+        (is (= "rollback" (get-in body [:data :versionLink :workflow_action])))
+        (is (= 3 (get-in body [:data :versionLink :rollback_from_version])))
+        (is (str/includes? (:comment @submitted) "Rollback to version 3"))))))
 
 
 

@@ -202,12 +202,24 @@
     (assoc :deploymentKind (:deploymentKind record))
     (contains? record :sourceCandidateVersion)
     (assoc :sourceCandidateVersion (:sourceCandidateVersion record))
+    (contains? record :lifecycleStatus)
+    (assoc :lifecycleStatus (:lifecycleStatus record))
+    (contains? record :workflowAction)
+    (assoc :workflowAction (:workflowAction record))
+    (contains? record :rollbackFromVersion)
+    (assoc :rollbackFromVersion (:rollbackFromVersion record))
     (contains? record :source_analysis_id)
     (assoc :sourceAnalysisId (:source_analysis_id record))
     (contains? record :deployment_kind)
     (assoc :deploymentKind (:deployment_kind record))
     (contains? record :source_candidate_version)
     (assoc :sourceCandidateVersion (:source_candidate_version record))
+    (contains? record :lifecycle_status)
+    (assoc :lifecycleStatus (:lifecycle_status record))
+    (contains? record :workflow_action)
+    (assoc :workflowAction (:workflow_action record))
+    (contains? record :rollback_from_version)
+    (assoc :rollbackFromVersion (:rollback_from_version record))
     (:policy record)
     (assoc :policy (:policy record))
     (:sourceAnalysis record)
@@ -274,7 +286,10 @@
    :comment (:comment version-record)
    :sourceAnalysisId (:sourceAnalysisId version-record)
    :deploymentKind (:deploymentKind version-record)
-   :sourceCandidateVersion (:sourceCandidateVersion version-record)})
+   :sourceCandidateVersion (:sourceCandidateVersion version-record)
+   :lifecycleStatus (:lifecycleStatus version-record)
+   :workflowAction (:workflowAction version-record)
+   :rollbackFromVersion (:rollbackFromVersion version-record)})
 
 (defn- analysis->timeline-events
   [analysis-record]
@@ -702,9 +717,11 @@
             (prp/submit-policy resource-class candidate-policy-json author comment)
             (let [new-version (pv/latest-version-number resource-class)
                   version-link (pv/annotate-version! resource-class new-version
-                                                     {:sourceAnalysisId analysis-key
-                                                      :deploymentKind "impact_rollout"
-                                                      :sourceCandidateVersion (:candidateVersion entry)})
+                                                      {:sourceAnalysisId analysis-key
+                                                       :deploymentKind "impact_rollout"
+                                                       :sourceCandidateVersion (:candidateVersion entry)
+                                                       :lifecycleStatus "deployed"
+                                                       :workflowAction "rollout"})
                   rollout-entry (impact-history/mark-deployed! resource-class analysis-key
                                                                {:deployedVersion new-version
                                                                 :deployedBy author})]
@@ -744,9 +761,17 @@
               comment (str "Rollback to version " v)
               pol-str (json/write-value-as-string pol)]
           (prp/submit-policy resource-class pol-str author comment)
-          (response/success-response {:resourceClass resource-class
-                                      :rolledBackTo v
-                                      :newVersion (pv/latest-version-number resource-class)}))))
+          (let [new-version (pv/latest-version-number resource-class)
+                version-link (pv/annotate-version! resource-class new-version
+                                                   {:deploymentKind "rollback"
+                                                    :lifecycleStatus "deployed"
+                                                    :workflowAction "rollback"
+                                                    :rollbackFromVersion v})]
+            (response/success-response {:resourceClass resource-class
+                                        :rolledBackTo v
+                                        :newVersion new-version
+                                        :workflowAction "rollback"
+                                        :versionLink version-link})))))
     (catch Exception e
       (log/error e "Error rolling back policy")
       (response/error-response "ROLLBACK_ERROR"

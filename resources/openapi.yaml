@@ -801,7 +801,16 @@ components:
           type: integer
         deploymentKind:
           type: string
+          enum: [direct_update, impact_rollout, rollback]
         sourceCandidateVersion:
+          type: integer
+        lifecycleStatus:
+          type: string
+          enum: [draft, review, approved, deployed]
+        workflowAction:
+          type: string
+          enum: [direct_update, rollout, rollback]
+        rollbackFromVersion:
           type: integer
 
     PolicyTimelineEvent:
@@ -825,6 +834,12 @@ components:
           type: string
         rolloutStatus:
           type: string
+        lifecycleStatus:
+          type: string
+        workflowAction:
+          type: string
+        rollbackFromVersion:
+          type: integer
 
     PolicyChangeTimeline:
       type: object
@@ -1484,6 +1499,48 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/PolicyVersionRecord'
+        '404':
+          description: Version not found
+
+  /v1/policies/{resource-class}/rollback/{version}:
+    post:
+      tags: [policies]
+      summary: Deploy a new policy version by rolling back to a stored version
+      operationId: rollbackPolicy
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Rollback deployed as a new auditable policy version
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          resourceClass:
+                            type: string
+                          rolledBackTo:
+                            type: integer
+                          newVersion:
+                            type: integer
+                          workflowAction:
+                            type: string
+                            enum: [rollback]
+                          versionLink:
+                            $ref: '#/components/schemas/PolicyVersionRecord'
         '404':
           description: Version not found
 

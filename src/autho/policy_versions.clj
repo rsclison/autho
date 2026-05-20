@@ -54,12 +54,18 @@
          source_analysis_id BIGINT,
          deployment_kind VARCHAR(50),
          source_candidate_version INT,
+         lifecycle_status VARCHAR(50) DEFAULT 'deployed',
+         workflow_action VARCHAR(50) DEFAULT 'direct_update',
+         rollback_from_version INT,
          created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
          UNIQUE (resource_class, version)
        )"])
     (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS source_analysis_id BIGINT"])
     (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS deployment_kind VARCHAR(50)"])
     (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS source_candidate_version INT"])
+    (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(50) DEFAULT 'deployed'"])
+    (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS workflow_action VARCHAR(50) DEFAULT 'direct_update'"])
+    (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS rollback_from_version INT"])
     (.info logger "POLICY_VERSIONS table ready")
     (catch Exception e
       (.error logger "Failed to create POLICY_VERSIONS table: {}" (.getMessage e) e))))
@@ -118,6 +124,8 @@
                      :policy_json policy-str
                      :author (or author "system")
                      :comment (or comment "")
+                     :lifecycle_status "deployed"
+                     :workflow_action "direct_update"
                      :created_at (java.sql.Timestamp/from (Instant/now))})
       (u/log ::policy-versioned :resource-class resource-class :version v)
       (.info logger "Saved policy version {} for {}" v resource-class)
@@ -128,15 +136,21 @@
 
 (defn annotate-version!
   "Attach rollout metadata to an existing version row."
-  [resource-class version {:keys [sourceAnalysisId deploymentKind sourceCandidateVersion]}]
+  [resource-class version {:keys [sourceAnalysisId deploymentKind sourceCandidateVersion
+                                  lifecycleStatus workflowAction rollbackFromVersion]}]
   (jdbc/update! db :policy_versions
-                {:source_analysis_id sourceAnalysisId
-                 :deployment_kind deploymentKind
-                 :source_candidate_version sourceCandidateVersion}
+                (cond-> {}
+                  (some? sourceAnalysisId) (assoc :source_analysis_id sourceAnalysisId)
+                  deploymentKind (assoc :deployment_kind deploymentKind)
+                  sourceCandidateVersion (assoc :source_candidate_version sourceCandidateVersion)
+                  lifecycleStatus (assoc :lifecycle_status lifecycleStatus)
+                  workflowAction (assoc :workflow_action workflowAction)
+                  rollbackFromVersion (assoc :rollback_from_version rollbackFromVersion))
                 ["resource_class = ? AND version = ?" resource-class (int version)])
   (first (jdbc/query db
                      ["SELECT id, resource_class, version, author, comment,
-                              source_analysis_id, deployment_kind, source_candidate_version, created_at
+                              source_analysis_id, deployment_kind, source_candidate_version,
+                              lifecycle_status, workflow_action, rollback_from_version, created_at
                          FROM POLICY_VERSIONS
                         WHERE resource_class = ? AND version = ?"
                       resource-class (int version)])))
@@ -147,7 +161,8 @@
   [resource-class]
   (jdbc/query db
               ["SELECT id, resource_class, version, author, comment,
-                       source_analysis_id, deployment_kind, source_candidate_version, created_at
+                       source_analysis_id, deployment_kind, source_candidate_version,
+                       lifecycle_status, workflow_action, rollback_from_version, created_at
         FROM POLICY_VERSIONS
        WHERE resource_class = ?
        ORDER BY version DESC"
@@ -170,7 +185,8 @@
   [resource-class analysis-id]
   (jdbc/query db
               ["SELECT id, resource_class, version, author, comment,
-                       source_analysis_id, deployment_kind, source_candidate_version, created_at
+                       source_analysis_id, deployment_kind, source_candidate_version,
+                       lifecycle_status, workflow_action, rollback_from_version, created_at
                   FROM POLICY_VERSIONS
                  WHERE resource_class = ? AND source_analysis_id = ?
               ORDER BY version DESC"
@@ -180,7 +196,8 @@
   [resource-class version]
   (when-let [row (first (jdbc/query db
                                     ["SELECT id, resource_class, version, policy_json, author, comment,
-                                             source_analysis_id, deployment_kind, source_candidate_version, created_at
+                                             source_analysis_id, deployment_kind, source_candidate_version,
+                                             lifecycle_status, workflow_action, rollback_from_version, created_at
                                         FROM POLICY_VERSIONS
                                        WHERE resource_class = ? AND version = ?"
                                      resource-class (int version)]
@@ -193,6 +210,9 @@
      :sourceAnalysisId (:source_analysis_id row)
      :deploymentKind (:deployment_kind row)
      :sourceCandidateVersion (:source_candidate_version row)
+     :lifecycleStatus (:lifecycle_status row)
+     :workflowAction (:workflow_action row)
+     :rollbackFromVersion (:rollback_from_version row)
      :createdAt (:created_at row)
      :policy (-> (:policy_json row)
                  (json/read-str :key-fn keyword)
@@ -243,5 +263,3 @@
                  :removed removed
                  :changed changed
                  :unchanged (vec unchanged-names)}}))))
-
-

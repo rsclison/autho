@@ -785,9 +785,19 @@ curl -X POST -H "X-API-Key: key" \
 {
   "resourceClass": "Facture",
   "rolledBackTo": 3,
-  "newVersion": 6
+  "newVersion": 6,
+  "workflowAction": "rollback",
+  "versionLink": {
+    "version": 6,
+    "deployment_kind": "rollback",
+    "lifecycle_status": "deployed",
+    "workflow_action": "rollback",
+    "rollback_from_version": 3
+  }
 }
 ```
+
+Le rollback ne remplace pas l'historique : il cree une nouvelle version active marquee `workflowAction = rollback` et reference la version source via `rollbackFromVersion`.
 
 ---
 

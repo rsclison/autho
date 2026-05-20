@@ -567,6 +567,8 @@ Rollout gates are enforced when promoting an impact preview:
 - `review` / `review_required` / `high_risk` reports require `reviewStatus = approved`;
 - `approve` / `no_impact` reports can be deployed without manual review.
 
+Policy versions expose lifecycle metadata: `lifecycleStatus`, `workflowAction`, `deploymentKind`, and rollback lineage through `rollbackFromVersion`. Rollback deploys a new active version instead of rewriting history.
+
 The request batch can also come from audit replay:
 
 ```json
