@@ -582,12 +582,13 @@
                                                  :scopeType "environment"
                                                  :scopeKey "prod"
                                                  :action "update"}])
-                risk-profiles/upsert-profile! (fn [scope-type scope-key profile updated-by]
+                risk-profiles/upsert-profile! (fn [scope-type scope-key profile updated-by approval]
                                                 {:scopeType scope-type
                                                  :scopeKey scope-key
                                                  :profile profile
-                                                 :updatedBy updated-by})
-                risk-profiles/delete-profile! (fn [_ _ _] true)]
+                                                 :updatedBy updated-by
+                                                 :approval approval})
+                risk-profiles/delete-profile! (fn [_ _ _ _] true)]
     (let [list-response (handlers/list-policy-risk-profiles)
           list-body (parse-response-body list-response)
           revisions-response (handlers/list-policy-risk-profile-revisions)
@@ -597,7 +598,10 @@
                            "prod"
                            (mock-request :body (json/write-value-as-string
                                                 {:thresholds {:maxRevokes 2
-                                                              :allowSensitiveResourceChanges true}})))
+                                                              :allowSensitiveResourceChanges true}
+                                                 :approval {:approved true
+                                                            :approvedBy "risk-owner"
+                                                            :note "approved"}})))
           upsert-body (parse-response-body upsert-response)
           delete-response (handlers/delete-policy-risk-profile "environment" "prod" (mock-request))
           delete-body (parse-response-body delete-response)]
@@ -609,6 +613,7 @@
       (is (= "environment" (get-in upsert-body [:data :scopeType])))
       (is (= 2 (get-in upsert-body [:data :profile :maxRevokes])))
       (is (= "api" (get-in upsert-body [:data :updatedBy])))
+      (is (= "risk-owner" (get-in upsert-body [:data :approval :approvedBy])))
       (is (= 200 (:status delete-response)))
       (is (= true (get-in delete-body [:data :deleted]))))))
 

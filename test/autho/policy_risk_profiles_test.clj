@@ -33,21 +33,42 @@
     (is (= 0 (get-in profiles [:default :maxRevokes])))
     (is (= 1 (get-in profiles [:environments "prod" :maxRevokes])))
     (is (= true (get-in profiles [:resourceClasses "Document" :allowSensitiveResourceChanges]))))
-  (is (true? (risk-profiles/delete-profile! "environment" "prod")))
+  (is (true? (risk-profiles/delete-profile! "environment" "prod" "tester"
+                                             {:approved? true
+                                              :approvedBy "approver"
+                                              :approvalNote "cleanup"})))
   (is (nil? (get-in (risk-profiles/list-profiles) [:environments "prod"])))
   (let [revisions (risk-profiles/list-revisions)]
     (is (= ["delete" "create" "create" "create"] (mapv :action revisions)))
     (is (= {:maxRevokes 1} (:previousProfile (first revisions))))
-    (is (nil? (:newProfile (first revisions))))))
+    (is (nil? (:newProfile (first revisions))))
+    (is (= true (:approvalRequired (first revisions))))
+    (is (= "approver" (:approvedBy (first revisions))))))
 
 (deftest upsert-replaces-existing-risk-profile-test
   (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 1} "tester")
-  (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 2} "tester")
+  (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 2} "tester"
+                                 {:approved? true
+                                  :approvedBy "risk-owner"
+                                  :approvalNote "temporary rollout"})
   (is (= 2 (get-in (risk-profiles/list-profiles) [:environments "prod" :maxRevokes])))
   (let [revision (first (risk-profiles/list-revisions))]
     (is (= "update" (:action revision)))
     (is (= {:maxRevokes 1} (:previousProfile revision)))
-    (is (= {:maxRevokes 2} (:newProfile revision)))))
+    (is (= {:maxRevokes 2} (:newProfile revision)))
+    (is (= true (:approvalRequired revision)))
+    (is (= "risk-owner" (:approvedBy revision)))))
+
+(deftest critical-risk-profile-change-requires-approval-test
+  (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 1} "tester")
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"Critical risk profile changes require approval"
+       (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 2} "tester")))
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"Critical risk profile changes require approval"
+       (risk-profiles/delete-profile! "environment" "prod" "tester"))))
 
 (deftest invalid-risk-profile-scope-is-rejected-test
   (is (thrown-with-msg?
