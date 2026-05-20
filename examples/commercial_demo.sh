@@ -3,6 +3,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
 API_KEY="${API_KEY:-test-api-key-32-characters-minimum}"
+API_CLIENT_ID="${API_CLIENT_ID:-trusted-internal-app}"
 
 curl_json() {
   curl -sS "$@" \
@@ -25,7 +26,7 @@ curl_json -X PUT "${BASE_URL}/v1/policies/Facture" -d '{
       "operation": "lire",
       "effect": "allow",
       "conditions": [
-        ["=", ["Person", "$s", "service"], ["Facture", "$r", "service"]]
+        ["=", ["Application", "$s", "client-id"], "'${API_CLIENT_ID}'"]
       ]
     },
     {
@@ -43,7 +44,7 @@ echo
 
 echo "== Allowed decision =="
 curl_json -X POST "${BASE_URL}/v1/authz/decisions" -d '{
-  "subject": {"id": "001", "class": "Person", "service": "comptabilite"},
+  "subject": {"id": "client-declared-value", "class": "Application"},
   "resource": {"id": "FAC-001", "class": "Facture", "service": "comptabilite", "status": "open"},
   "operation": "lire"
 }'
@@ -51,7 +52,7 @@ echo
 
 echo "== Denied decision =="
 curl_json -X POST "${BASE_URL}/v1/authz/decisions" -d '{
-  "subject": {"id": "001", "class": "Person", "service": "comptabilite"},
+  "subject": {"id": "client-declared-value", "class": "Application"},
   "resource": {"id": "FAC-002", "class": "Facture", "service": "comptabilite", "status": "archive"},
   "operation": "lire"
 }'

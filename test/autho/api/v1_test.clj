@@ -347,6 +347,20 @@
       (is (= 200 (:status what-response)))
       (is (= "doc" (get-in what-body [:data :resourceClass]))))))
 
+(deftest authorization-handlers-preserve-pdp-exception-status-test
+  (with-redefs [pdp/isAuthorized (fn [_ _]
+                                   (throw (ex-info "Authentication required"
+                                                   {:status 401
+                                                    :error-code "AUTHENTICATION_REQUIRED"})))]
+    (let [request-body (json/write-value-as-string {:subject {:id "client-declared-value"}
+                                                    :resource {:class "doc" :id "doc-1"}
+                                                    :operation "read"})
+          response (handlers/is-authorized (mock-request :body request-body))
+          body (parse-response-body response)]
+      (is (= 401 (:status response)))
+      (is (= "AUTHENTICATION_REQUIRED" (get-in body [:error :code])))
+      (is (= "Authentication required" (get-in body [:error :message]))))))
+
 (deftest explain-route-forwards-request-test
   (let [captured (atom nil)
         response (with-redefs [handlers/explain-decision

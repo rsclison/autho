@@ -33,6 +33,18 @@
       (log/error exception default-prefix))
     (response/error-response code message status details)))
 
+(defn- exception->response
+  [exception default-code default-prefix]
+  (let [data (ex-data exception)
+        status (or (:status data) 500)
+        code (or (:error-code data) default-code)
+        message (if (< status 500)
+                  (.getMessage exception)
+                  (str default-prefix (.getMessage exception)))]
+    (when (>= status 500)
+      (log/error exception default-prefix))
+    (response/error-response code message status)))
+
 (defn- response-map?
   [value]
   (and (map? value)
@@ -120,10 +132,7 @@
         (try
           (response/success-response (handler-fn request body-or-response))
           (catch Exception e
-            (log/error e error-prefix)
-            (response/error-response error-code
-                                     (str error-prefix (.getMessage e))
-                                     500)))))))
+            (exception->response e error-code error-prefix)))))))
 
 (defn is-authorized
   [request]
