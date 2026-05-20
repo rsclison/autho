@@ -96,10 +96,11 @@ Etat d'avancement :
 
 - comparaison policy courante/versionnee vs policy candidate disponible via `POST /v1/policies/:resourceClass/impact`;
 - replay audit initial disponible comme source de requetes via `auditReplay`;
+- nouvelles entrees d'audit enrichies avec snapshots complets de requete et decision;
 - rapport d'impact ajoute avec recommendation `approve`, `review`, `block`;
 - seuils de blocage configurables : `maxRevokes`, `maxChangedDecisions`, `allowSensitiveResourceChanges`;
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
-- prochaine etape : enrichir l'audit pour conserver le snapshot complet de requete et decision.
+- prochaine etape : ajouter le mode shadow evaluation.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 

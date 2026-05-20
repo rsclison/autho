@@ -240,6 +240,34 @@
     (is (= true (get-in replay-request [:context :auditReplay])))
     (is (= "req-replay-1" (get-in replay-request [:context :auditRequestId])))))
 
+(deftest replay-requests-prefers-full-request-snapshot-test
+  (audit/log-decision! {:request-id     "req-replay-snapshot"
+                        :subject-id     "alice"
+                        :resource-class "Document"
+                        :resource-id    "doc-1"
+                        :operation      "read"
+                        :decision       :allow
+                        :matched-rules  ["allow-new"]
+                        :request-snapshot {:subject {:id "alice"
+                                                     :class "Person"
+                                                     :department "legal"}
+                                           :resource {:class "Document"
+                                                      :id "doc-1"
+                                                      :classification "secret"}
+                                           :operation "read"
+                                           :context {:source "unit-test"}}
+                        :decision-snapshot {:allowed? true
+                                            :decisionType "allow"
+                                            :matchedRuleNames ["allow-new"]}})
+  (await-agent)
+  (let [result (audit/replay-requests {:resource-class "Document" :limit 10})
+        replay-request (first (:requests result))]
+    (is (= "legal" (get-in replay-request [:subject :department])))
+    (is (= "secret" (get-in replay-request [:resource :classification])))
+    (is (= "unit-test" (get-in replay-request [:context :source])))
+    (is (= true (get-in replay-request [:context :auditReplay])))
+    (is (= "allow" (get-in replay-request [:context :auditDecisionSnapshot :decisionType])))))
+
 (deftest search-filters-by-subject-test
   (testing "search with subject-id filter returns only matching entries"
     (doseq [i (range 4)]

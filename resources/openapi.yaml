@@ -1067,7 +1067,7 @@ paths:
                   additionalProperties: true
                 auditReplay:
                   type: object
-                  description: Build replay requests from the audit log instead of providing requests manually.
+                  description: Build replay requests from the audit log instead of providing requests manually. Uses stored request snapshots when available and falls back to audited identifiers for legacy rows.
                   properties:
                     subject-id:
                       type: string

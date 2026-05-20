@@ -358,7 +358,11 @@
                                :resource-id    (:id (:resource request))
                                :operation      (:operation request)
                                :decision       :allow
-                               :matched-rules  (:matched-rule-names decision-result)})
+                               :matched-rules  (:matched-rule-names decision-result)
+                               :request-snapshot request
+                               :decision-snapshot {:allowed? true
+                                                   :decisionType "allow"
+                                                   :matchedRuleNames (:matched-rule-names decision-result)}})
          {:result true :rules (:matched-rule-objs decision-result)})
        (let [deleg (deleg/findDelegation (:subject request))
              safe-deleg (filter #(let [delegate-id (:id (:delegate %))]
@@ -382,7 +386,11 @@
                                    :resource-id    (:id (:resource request))
                                    :operation      (:operation request)
                                    :decision       :deny
-                                   :matched-rules  (:matched-rule-names decision-result)})
+                                   :matched-rules  (:matched-rule-names decision-result)
+                                   :request-snapshot request
+                                   :decision-snapshot {:allowed? false
+                                                       :decisionType "deny"
+                                                       :matchedRuleNames (:matched-rule-names decision-result)}})
              {:result false :rules (:matched-rule-objs decision-result)})))))))
 
 (defn isAuthorized [request body]

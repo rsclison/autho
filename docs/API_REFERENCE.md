@@ -684,7 +684,7 @@ curl -X POST http://localhost:8080/v1/policies/Facture/impact \
   }'
 ```
 
-Le replay audit reconstruit des requetes avec les identifiants audites (`subject.id`, `resource.class`, `resource.id`, `operation`) et attache les metadonnees d'audit dans `context`. Les attributs complets peuvent ensuite etre enrichis par les PIP pendant la simulation.
+Le replay audit utilise le snapshot complet de requete quand l'entree d'audit en contient un. Pour les anciennes entrees, il reconstruit une requete minimale avec les identifiants audites (`subject.id`, `resource.class`, `resource.id`, `operation`) et attache les metadonnees d'audit dans `context`. Les attributs manquants peuvent ensuite etre enrichis par les PIP pendant la simulation.
 
 ### DELETE /policies/:resourceClass (legacy)
 

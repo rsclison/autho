@@ -543,7 +543,7 @@ The request batch can also come from audit replay:
 }
 ```
 
-Audit replay rebuilds minimal authorization requests from audited identifiers and operation. PIPs may enrich attributes during simulation.
+Audit replay uses the full audited request snapshot when available. For older audit rows, it rebuilds a minimal authorization request from audited identifiers and operation. PIPs may enrich missing attributes during simulation.
 
 #### DELETE /v1/policies/:resource-class
 

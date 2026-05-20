@@ -85,10 +85,19 @@
         operation     VARCHAR(100),
         decision      VARCHAR(10),
         matched_rules VARCHAR(2048),
+        request_snapshot CLOB,
+        decision_snapshot CLOB,
         payload_hash  CHAR(64)     NOT NULL,
         previous_hash CHAR(64)     NOT NULL,
         hmac          CHAR(64)     NOT NULL
-      )"]))
+      )"])
+  (doseq [[column ddl] {"request_snapshot" "ALTER TABLE AUDIT_LOG ADD COLUMN request_snapshot CLOB"
+                        "decision_snapshot" "ALTER TABLE AUDIT_LOG ADD COLUMN decision_snapshot CLOB"}]
+    (try
+      (jdbc/execute! audit-db [ddl])
+      (catch Exception e
+        (when-not (str/includes? (str/lower-case (.getMessage e)) "duplicate")
+          (.warn logger "Could not add audit column {}: {}" column (.getMessage e)))))))
 
 ;; Holds the hash of the last inserted row for chain continuity
 (defonce ^:private last-hash (atom "0000000000000000000000000000000000000000000000000000000000000000"))
@@ -125,10 +134,16 @@
     (catch Exception e
       (.error logger "Failed to initialise audit log: {}" (.getMessage e) e))))
 
+(defn- json-safe
+  [value]
+  (when value
+    (json/write-str value)))
+
 (defn log-decision!
   "Asynchronously records an authorization decision in the audit log.
    Non-blocking: returns immediately; actual insert happens via the audit-agent."
-  [{:keys [request-id subject-id resource-class resource-id operation decision matched-rules]}]
+  [{:keys [request-id subject-id resource-class resource-id operation decision matched-rules
+           request-snapshot decision-snapshot]}]
   (send audit-agent
         (fn [_]
           (try
@@ -140,7 +155,9 @@
                                  :resource-id   resource-id
                                  :operation     operation
                                  :decision      decision
-                                 :matched-rules matched-rules})
+                                 :matched-rules matched-rules
+                                 :request-snapshot request-snapshot
+                                 :decision-snapshot decision-snapshot})
                   payload-hash (sha256 payload)
                   prev-hash    @last-hash
                   hmac-secret  (require-hmac-secret!)
@@ -154,6 +171,8 @@
                              :operation      operation
                              :decision       (name decision)
                              :matched_rules  (str matched-rules)
+                             :request_snapshot (json-safe request-snapshot)
+                             :decision_snapshot (json-safe decision-snapshot)
                              :payload_hash   payload-hash
                              :previous_hash  prev-hash
                              :hmac           hmac})
@@ -166,21 +185,34 @@
 (defn- normalize-row
   "Convert JDBC row to a JSON-safe map:
    - java.sql.Timestamp → ISO-8601 string
-   - matched_rules string → vector of rule names"
+   - matched_rules string → vector of rule names
+   - request/decision snapshots → maps when present"
   [row]
-  (-> row
-      (update :ts #(when % (.toString ^java.sql.Timestamp %)))
-      (update :matched_rules
-              (fn [v]
-                (when v
-                  (try (json/read-str (str v))
-                       (catch Exception _
-                         ;; Clojure repr like [R1 R2] — split on whitespace/brackets
-                         (-> (str v)
-                             (str/replace #"[\[\]\"]" "")
-                             (str/split #"\s+")
-                             (->> (remove str/blank?)
-                                  vec)))))))))
+  (letfn [(sql-value->str [v]
+            (cond
+              (nil? v) nil
+              (instance? java.sql.Clob v)
+              (with-open [reader (.getCharacterStream ^java.sql.Clob v)]
+                (slurp reader))
+              :else (str v)))
+          (parse-json-value [v]
+            (when-let [s (sql-value->str v)]
+              (json/read-str s :key-fn keyword)))]
+    (-> row
+        (update :ts #(when % (.toString ^java.sql.Timestamp %)))
+        (update :request_snapshot parse-json-value)
+        (update :decision_snapshot parse-json-value)
+        (update :matched_rules
+                (fn [v]
+                  (when v
+                    (try (json/read-str (str v))
+                         (catch Exception _
+                           ;; Clojure repr like [R1 R2] — split on whitespace/brackets
+                           (-> (str v)
+                               (str/replace #"[\[\]\"]" "")
+                               (str/split #"\s+")
+                               (->> (remove str/blank?)
+                                    vec))))))))))
 
 (defn search
   "Query the audit log with optional filters.
@@ -200,7 +232,7 @@
         data-sql   (str "SELECT * FROM AUDIT_LOG WHERE " where
                         " ORDER BY id DESC LIMIT " page-size " OFFSET " offset)
         total      (or (:n (first (jdbc/query audit-db [count-sql]))) 0)
-        rows       (map normalize-row (jdbc/query audit-db [data-sql]))]
+        rows       (jdbc/query audit-db [data-sql] {:row-fn normalize-row})]
     {:items    (vec rows)
      :total    total
      :page     page
@@ -208,16 +240,21 @@
 
 (defn- audit-row->authz-request
   [row]
-  {:subject {:id (:subject_id row)}
-   :resource {:class (:resource_class row)
-              :id (:resource_id row)}
-   :operation (:operation row)
-   :context {:auditReplay true
-             :auditId (:id row)
-             :auditRequestId (:request_id row)
-             :auditDecision (:decision row)
-             :auditTimestamp (:ts row)
-             :auditMatchedRules (:matched_rules row)}})
+  (let [snapshot (:request_snapshot row)
+        base-request (if (map? snapshot)
+                       snapshot
+                       {:subject {:id (:subject_id row)}
+                        :resource {:class (:resource_class row)
+                                   :id (:resource_id row)}
+                        :operation (:operation row)})
+        audit-context {:auditReplay true
+                       :auditId (:id row)
+                       :auditRequestId (:request_id row)
+                       :auditDecision (:decision row)
+                       :auditTimestamp (:ts row)
+                       :auditMatchedRules (:matched_rules row)
+                       :auditDecisionSnapshot (:decision_snapshot row)}]
+    (update base-request :context merge audit-context)))
 
 (defn replay-requests
   "Build authorization request bodies from audit rows.
