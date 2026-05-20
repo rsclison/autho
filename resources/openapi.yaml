@@ -484,6 +484,31 @@ components:
           type: string
           format: date-time
 
+    PolicyRiskProfileRevision:
+      type: object
+      properties:
+        id:
+          type: integer
+        scopeType:
+          type: string
+          enum: [default, environment, resource_class]
+        scopeKey:
+          type: string
+        action:
+          type: string
+          enum: [create, update, delete]
+        previousProfile:
+          type: object
+          additionalProperties: true
+        newProfile:
+          type: object
+          additionalProperties: true
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+
     PolicyImpactSummary:
       type: object
       properties:
@@ -1296,6 +1321,28 @@ paths:
                             type: array
                             items:
                               $ref: '#/components/schemas/PolicyRiskProfileRecord'
+
+  /v1/policies/risk-profiles/revisions:
+    get:
+      tags: [policies]
+      summary: List audit revisions for policy impact risk profiles
+      operationId: listPolicyRiskProfileRevisions
+      responses:
+        '200':
+          description: Risk profile revisions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          revisions:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PolicyRiskProfileRevision'
 
   /v1/policies/risk-profiles/default:
     put:

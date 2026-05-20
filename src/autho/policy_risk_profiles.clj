@@ -40,6 +40,17 @@
          updated_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
          UNIQUE (scope_type, scope_key)
        )"])
+    (jdbc/execute! db
+                   ["CREATE TABLE IF NOT EXISTS POLICY_RISK_PROFILE_REVISIONS (
+         id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+         scope_type          VARCHAR(50)  NOT NULL,
+         scope_key           VARCHAR(255) NOT NULL,
+         action              VARCHAR(50)  NOT NULL,
+         previous_profile_json CLOB,
+         new_profile_json    CLOB,
+         changed_by          VARCHAR(255),
+         changed_at          TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+       )"])
     (.info logger "POLICY_RISK_PROFILES table ready")
     (catch Exception e
       (.error logger "Failed to create POLICY_RISK_PROFILES table: {}" (.getMessage e) e))))
@@ -70,6 +81,39 @@
    :updatedBy (:updated_by row)
    :updatedAt (:updated_at row)})
 
+(defn- row->revision
+  [row]
+  {:id (:id row)
+   :scopeType (:scope_type row)
+   :scopeKey (:scope_key row)
+   :action (:action row)
+   :previousProfile (when-let [profile-json (:previous_profile_json row)]
+                      (json/read-str profile-json :key-fn keyword))
+   :newProfile (when-let [profile-json (:new_profile_json row)]
+                 (json/read-str profile-json :key-fn keyword))
+   :changedBy (:changed_by row)
+   :changedAt (:changed_at row)})
+
+(defn- current-profile-row
+  [conn scope-type scope-key]
+  (first (jdbc/query conn
+                     ["SELECT scope_type, scope_key, profile_json, updated_by, updated_at
+                         FROM POLICY_RISK_PROFILES
+                        WHERE scope_type = ? AND scope_key = ?"
+                      scope-type scope-key]
+                     {:row-fn #(update % :profile_json jdbc-utils/clob->string)})))
+
+(defn- insert-revision!
+  [conn scope-type scope-key action previous-profile-json new-profile-json changed-by changed-at]
+  (jdbc/insert! conn :policy_risk_profile_revisions
+                {:scope_type scope-type
+                 :scope_key scope-key
+                 :action action
+                 :previous_profile_json previous-profile-json
+                 :new_profile_json new-profile-json
+                 :changed_by (or changed-by "system")
+                 :changed_at changed-at}))
+
 (defn upsert-profile!
   [scope-type scope-key profile updated-by]
   (validate-scope! scope-type scope-key)
@@ -77,6 +121,10 @@
         profile-json (json/write-str (or profile {}))
         updated-at (java.sql.Timestamp/from (Instant/now))]
     (jdbc/with-db-transaction [tx db]
+      (let [previous-profile-json (:profile_json (current-profile-row tx scope-type scope-key))
+            action (if previous-profile-json "update" "create")]
+        (insert-revision! tx scope-type scope-key action
+                          previous-profile-json profile-json updated-by updated-at))
       (jdbc/delete! tx :policy_risk_profiles
                     ["scope_type = ? AND scope_key = ?" scope-type scope-key])
       (jdbc/insert! tx :policy_risk_profiles
@@ -94,12 +142,21 @@
                                   (update % :profile_json jdbc-utils/clob->string))}))))
 
 (defn delete-profile!
-  [scope-type scope-key]
-  (validate-scope! scope-type scope-key)
-  (let [scope-key (normalized-scope-key scope-type scope-key)
-        result (jdbc/delete! db :policy_risk_profiles
-                             ["scope_type = ? AND scope_key = ?" scope-type scope-key])]
-    (pos? (first result))))
+  ([scope-type scope-key]
+   (delete-profile! scope-type scope-key "system"))
+  ([scope-type scope-key deleted-by]
+   (validate-scope! scope-type scope-key)
+   (let [scope-key (normalized-scope-key scope-type scope-key)
+         changed-at (java.sql.Timestamp/from (Instant/now))
+         result (jdbc/with-db-transaction [tx db]
+                  (let [previous-profile-json (:profile_json (current-profile-row tx scope-type scope-key))
+                        delete-result (jdbc/delete! tx :policy_risk_profiles
+                                                    ["scope_type = ? AND scope_key = ?" scope-type scope-key])]
+                    (when previous-profile-json
+                      (insert-revision! tx scope-type scope-key "delete"
+                                        previous-profile-json nil deleted-by changed-at))
+                    delete-result))]
+     (pos? (first result)))))
 
 (defn list-profile-records
   []
@@ -120,3 +177,16 @@
               profiles))
           {}
           (list-profile-records)))
+
+(defn list-revisions
+  []
+  (mapv row->revision
+        (jdbc/query db
+                    ["SELECT id, scope_type, scope_key, action,
+                             previous_profile_json, new_profile_json,
+                             changed_by, changed_at
+                        FROM POLICY_RISK_PROFILE_REVISIONS
+                    ORDER BY changed_at DESC, id DESC"]
+                    {:row-fn #(-> %
+                                  (update :previous_profile_json jdbc-utils/clob->string)
+                                  (update :new_profile_json jdbc-utils/clob->string))})))

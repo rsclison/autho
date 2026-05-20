@@ -704,9 +704,13 @@ curl -X PUT http://localhost:8080/v1/policies/risk-profiles/environments/prod \
 
 curl -H "X-API-Key: key" \
   http://localhost:8080/v1/policies/risk-profiles
+
+curl -H "X-API-Key: key" \
+  http://localhost:8080/v1/policies/risk-profiles/revisions
 ```
 
 Endpoints disponibles : `PUT/DELETE /v1/policies/risk-profiles/default`, `PUT/DELETE /v1/policies/risk-profiles/environments/:environment`, `PUT/DELETE /v1/policies/risk-profiles/resource-classes/:resourceClass`.
+Chaque modification de profil produit une revision append-only avec `action`, `previousProfile`, `newProfile`, `changedBy` et `changedAt`.
 
 Le rollout applique ces garde-fous :
 

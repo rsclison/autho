@@ -575,11 +575,13 @@ Effective thresholds are resolved in this order: `riskProfiles.default`, `riskPr
 Persisted profiles are available through:
 
 - `GET /v1/policies/risk-profiles`
+- `GET /v1/policies/risk-profiles/revisions`
 - `PUT/DELETE /v1/policies/risk-profiles/default`
 - `PUT/DELETE /v1/policies/risk-profiles/environments/:environment`
 - `PUT/DELETE /v1/policies/risk-profiles/resource-classes/:resourceClass`
 
 Inline `riskProfiles` and request-level `thresholds` still override persisted profiles for one-off analyses.
+Every profile change appends a revision with the action, previous profile, new profile, author and timestamp.
 
 Rollout gates are enforced when promoting an impact preview:
 

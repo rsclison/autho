@@ -577,14 +577,21 @@
                                                      [{:scopeType "default"
                                                        :scopeKey "*"
                                                        :profile {:maxRevokes 0}}])
+                risk-profiles/list-revisions (fn []
+                                               [{:id 1
+                                                 :scopeType "environment"
+                                                 :scopeKey "prod"
+                                                 :action "update"}])
                 risk-profiles/upsert-profile! (fn [scope-type scope-key profile updated-by]
                                                 {:scopeType scope-type
                                                  :scopeKey scope-key
                                                  :profile profile
                                                  :updatedBy updated-by})
-                risk-profiles/delete-profile! (fn [_ _] true)]
+                risk-profiles/delete-profile! (fn [_ _ _] true)]
     (let [list-response (handlers/list-policy-risk-profiles)
           list-body (parse-response-body list-response)
+          revisions-response (handlers/list-policy-risk-profile-revisions)
+          revisions-body (parse-response-body revisions-response)
           upsert-response (handlers/upsert-policy-risk-profile
                            "environment"
                            "prod"
@@ -592,10 +599,12 @@
                                                 {:thresholds {:maxRevokes 2
                                                               :allowSensitiveResourceChanges true}})))
           upsert-body (parse-response-body upsert-response)
-          delete-response (handlers/delete-policy-risk-profile "environment" "prod")
+          delete-response (handlers/delete-policy-risk-profile "environment" "prod" (mock-request))
           delete-body (parse-response-body delete-response)]
       (is (= 200 (:status list-response)))
       (is (= 0 (get-in list-body [:data :profiles :default :maxRevokes])))
+      (is (= 200 (:status revisions-response)))
+      (is (= "update" (get-in revisions-body [:data :revisions 0 :action])))
       (is (= 200 (:status upsert-response)))
       (is (= "environment" (get-in upsert-body [:data :scopeType])))
       (is (= 2 (get-in upsert-body [:data :profile :maxRevokes])))

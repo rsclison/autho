@@ -16,6 +16,8 @@
     (fn []
       (try (jdbc/execute! test-db ["DROP TABLE IF EXISTS POLICY_RISK_PROFILES"])
            (catch Exception _))
+      (try (jdbc/execute! test-db ["DROP TABLE IF EXISTS POLICY_RISK_PROFILE_REVISIONS"])
+           (catch Exception _))
       (risk-profiles/init!)
       (f))))
 
@@ -32,12 +34,20 @@
     (is (= 1 (get-in profiles [:environments "prod" :maxRevokes])))
     (is (= true (get-in profiles [:resourceClasses "Document" :allowSensitiveResourceChanges]))))
   (is (true? (risk-profiles/delete-profile! "environment" "prod")))
-  (is (nil? (get-in (risk-profiles/list-profiles) [:environments "prod"]))))
+  (is (nil? (get-in (risk-profiles/list-profiles) [:environments "prod"])))
+  (let [revisions (risk-profiles/list-revisions)]
+    (is (= ["delete" "create" "create" "create"] (mapv :action revisions)))
+    (is (= {:maxRevokes 1} (:previousProfile (first revisions))))
+    (is (nil? (:newProfile (first revisions))))))
 
 (deftest upsert-replaces-existing-risk-profile-test
   (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 1} "tester")
   (risk-profiles/upsert-profile! "environment" "prod" {:maxRevokes 2} "tester")
-  (is (= 2 (get-in (risk-profiles/list-profiles) [:environments "prod" :maxRevokes]))))
+  (is (= 2 (get-in (risk-profiles/list-profiles) [:environments "prod" :maxRevokes])))
+  (let [revision (first (risk-profiles/list-revisions))]
+    (is (= "update" (:action revision)))
+    (is (= {:maxRevokes 1} (:previousProfile revision)))
+    (is (= {:maxRevokes 2} (:newProfile revision)))))
 
 (deftest invalid-risk-profile-scope-is-rejected-test
   (is (thrown-with-msg?

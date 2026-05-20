@@ -69,23 +69,26 @@
     (GET "/risk-profiles" []
          (handlers/list-policy-risk-profiles))
 
+    (GET "/risk-profiles/revisions" []
+         (handlers/list-policy-risk-profile-revisions))
+
     (PUT "/risk-profiles/default" request
          (handlers/upsert-policy-risk-profile "default" "*" request))
 
-    (DELETE "/risk-profiles/default" []
-            (handlers/delete-policy-risk-profile "default" "*"))
+    (DELETE "/risk-profiles/default" request
+            (handlers/delete-policy-risk-profile "default" "*" request))
 
     (PUT "/risk-profiles/environments/:environment" [environment :as request]
          (handlers/upsert-policy-risk-profile "environment" environment request))
 
-    (DELETE "/risk-profiles/environments/:environment" [environment]
-            (handlers/delete-policy-risk-profile "environment" environment))
+    (DELETE "/risk-profiles/environments/:environment" [environment :as request]
+            (handlers/delete-policy-risk-profile "environment" environment request))
 
     (PUT "/risk-profiles/resource-classes/:resource-class" [resource-class :as request]
          (handlers/upsert-policy-risk-profile "resource_class" resource-class request))
 
-    (DELETE "/risk-profiles/resource-classes/:resource-class" [resource-class]
-            (handlers/delete-policy-risk-profile "resource_class" resource-class))
+    (DELETE "/risk-profiles/resource-classes/:resource-class" [resource-class :as request]
+            (handlers/delete-policy-risk-profile "resource_class" resource-class request))
 
     (GET "/:resource-class/impact/history" [resource-class]
          (handlers/list-policy-impact-history resource-class))

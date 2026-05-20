@@ -599,6 +599,17 @@
                                (str "Failed to list policy risk profiles: " (.getMessage e))
                                500))))
 
+(defn list-policy-risk-profile-revisions
+  []
+  (log/debug "Listing policy risk profile revisions")
+  (try
+    (response/success-response {:revisions (risk-profiles/list-revisions)})
+    (catch Exception e
+      (log/error e "Error listing policy risk profile revisions")
+      (response/error-response "POLICY_RISK_PROFILE_REVISIONS_ERROR"
+                               (str "Failed to list policy risk profile revisions: " (.getMessage e))
+                               500))))
+
 (defn upsert-policy-risk-profile
   [scope-type scope-key request]
   (log/debug "Upserting policy risk profile" scope-type scope-key)
@@ -620,16 +631,17 @@
                                    500))))))
 
 (defn delete-policy-risk-profile
-  [scope-type scope-key]
+  [scope-type scope-key request]
   (log/debug "Deleting policy risk profile" scope-type scope-key)
   (try
-    (if (risk-profiles/delete-profile! scope-type scope-key)
+    (let [author (get-in request [:identity :client-id] "api")]
+      (if (risk-profiles/delete-profile! scope-type scope-key author)
       (response/success-response {:deleted true
                                   :scopeType scope-type
                                   :scopeKey (if (= "default" scope-type) "*" scope-key)})
       (response/error-response "POLICY_RISK_PROFILE_NOT_FOUND"
                                "Policy risk profile not found"
-                               404))
+                               404)))
     (catch clojure.lang.ExceptionInfo e
       (policy-exception->response e "POLICY_RISK_PROFILE_ERROR" "Failed to delete policy risk profile: "))
     (catch Exception e
