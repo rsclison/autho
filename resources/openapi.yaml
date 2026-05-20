@@ -54,11 +54,16 @@ components:
         Authenticates a trusted client application. For standard API-key
         calls, the effective PDP subject is the server-side application
         identity bound to the key via API_CLIENT_ID/API_CLIENT_CLASS; the
-        request body subject is not trusted as an identity proof.
+        request body subject is not trusted as an identity proof. Governance
+        write operations also use API_CLIENT_ROLES for role checks.
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  responses:
+    GovernanceForbidden:
+      description: Authenticated identity is missing the required governance role.
 
   schemas:
     Subject:
@@ -1369,6 +1374,7 @@ paths:
     put:
       tags: [policies]
       summary: Upsert the default impact risk profile
+      description: Requires governance-admin or risk-profile-admin.
       operationId: upsertDefaultPolicyRiskProfile
       requestBody:
         required: true
@@ -1380,15 +1386,20 @@ paths:
       responses:
         '200':
           description: Updated risk profile
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
         '409':
           description: Critical profile change requires approval by a different approver
     delete:
       tags: [policies]
       summary: Delete the default impact risk profile
+      description: Requires governance-admin or risk-profile-admin.
       operationId: deleteDefaultPolicyRiskProfile
       responses:
         '200':
           description: Deleted risk profile
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
         '404':
           description: Risk profile not found
         '409':
@@ -1398,6 +1409,7 @@ paths:
     put:
       tags: [policies]
       summary: Upsert an environment impact risk profile
+      description: Requires governance-admin or risk-profile-admin.
       operationId: upsertEnvironmentPolicyRiskProfile
       parameters:
         - in: path
@@ -1415,11 +1427,14 @@ paths:
       responses:
         '200':
           description: Updated risk profile
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
         '409':
           description: Critical profile change requires approval by a different approver
     delete:
       tags: [policies]
       summary: Delete an environment impact risk profile
+      description: Requires governance-admin or risk-profile-admin.
       operationId: deleteEnvironmentPolicyRiskProfile
       parameters:
         - in: path
@@ -1430,6 +1445,8 @@ paths:
       responses:
         '200':
           description: Deleted risk profile
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
         '404':
           description: Risk profile not found
         '409':
@@ -1439,6 +1456,7 @@ paths:
     put:
       tags: [policies]
       summary: Upsert a resource-class impact risk profile
+      description: Requires governance-admin or risk-profile-admin.
       operationId: upsertResourceClassPolicyRiskProfile
       parameters:
         - in: path
@@ -1456,11 +1474,14 @@ paths:
       responses:
         '200':
           description: Updated risk profile
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
         '409':
           description: Critical profile change requires approval by a different approver
     delete:
       tags: [policies]
       summary: Delete a resource-class impact risk profile
+      description: Requires governance-admin or risk-profile-admin.
       operationId: deleteResourceClassPolicyRiskProfile
       parameters:
         - in: path
@@ -1471,6 +1492,8 @@ paths:
       responses:
         '200':
           description: Deleted risk profile
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
         '404':
           description: Risk profile not found
         '409':
@@ -1533,6 +1556,7 @@ paths:
     post:
       tags: [policies]
       summary: Update review status for a persisted policy impact preview
+      description: Requires governance-admin or policy-reviewer.
       operationId: updatePolicyImpactReview
       parameters:
         - in: path
@@ -1569,11 +1593,14 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/PolicyImpactHistoryEntry'
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
 
   /v1/policies/{resource-class}/impact/history/{analysis-id}/rollout:
     post:
       tags: [policies]
       summary: Promote an impact preview into a deployed policy version when rollout gates allow it
+      description: Requires governance-admin or policy-deployer.
       operationId: rolloutPolicyImpactPreview
       parameters:
         - in: path
@@ -1599,6 +1626,8 @@ paths:
                         $ref: '#/components/schemas/PolicyImpactRolloutResponse'
         '409':
           description: Preview is blocked, not approved when review is required, not promotable, or already deployed
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
 
   /v1/policies/{resource-class}/timeline:
     get:
@@ -1683,6 +1712,7 @@ paths:
     post:
       tags: [policies]
       summary: Create a new policy
+      description: Requires governance-admin or policy-admin.
       operationId: createPolicy
       requestBody:
         required: true
@@ -1695,11 +1725,14 @@ paths:
           description: Policy created
         '400':
           description: Invalid policy
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
 
   /v1/policies/import:
     post:
       tags: [policies]
       summary: Import a policy from YAML
+      description: Requires governance-admin or policy-admin.
       operationId: importYamlPolicy
       requestBody:
         required: true
@@ -1720,6 +1753,8 @@ paths:
           description: Policy imported
         '400':
           description: Invalid YAML or missing resourceClass
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
 
   /v1/policies/{resource-class}/versions:
     get:
@@ -1780,6 +1815,7 @@ paths:
     post:
       tags: [policies]
       summary: Deploy a new policy version by rolling back to a stored version
+      description: Requires governance-admin or policy-deployer.
       operationId: rollbackPolicy
       parameters:
         - in: path
@@ -1817,6 +1853,8 @@ paths:
                             $ref: '#/components/schemas/PolicyVersionRecord'
         '404':
           description: Version not found
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
 
   /v1/policies/{resource-class}/validate:
     post:
@@ -1907,6 +1945,7 @@ paths:
     put:
       tags: [policies]
       summary: Update a policy
+      description: Requires governance-admin or policy-admin.
       operationId: updatePolicy
       parameters:
         - in: path
@@ -1929,9 +1968,12 @@ paths:
       responses:
         '200':
           description: Policy updated
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
     delete:
       tags: [policies]
       summary: Delete a policy
+      description: Requires governance-admin or policy-admin.
       operationId: deletePolicy
       parameters:
         - in: path
@@ -1942,6 +1984,8 @@ paths:
       responses:
         '204':
           description: Policy deleted
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
 
   /v1/cache/stats:
     get:

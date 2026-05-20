@@ -14,6 +14,7 @@
             [autho.policy-versions :as pv]
             [autho.features :as features]
             [jsonista.core :as json]
+            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
   (:import (org.slf4j LoggerFactory)))
@@ -73,6 +74,36 @@
   (or (get-in request [:params :environment])
       (get-in request [:params "environment"])
       (:environment body)))
+
+(defn- identity-roles
+  [request]
+  (let [identity (:identity request)
+        subject (:subject identity)]
+    (->> [(:role identity)
+          (:roles identity)
+          (:role subject)
+          (:roles subject)]
+         (mapcat (fn [roles]
+                   (cond
+                     (nil? roles) []
+                     (string? roles) [roles]
+                     (keyword? roles) [(name roles)]
+                     (sequential? roles) (map name roles)
+                     (set? roles) (map name roles)
+                     :else [(str roles)])))
+         set)))
+
+(defn- require-governance-role!
+  [request allowed-roles]
+  (let [roles (identity-roles request)
+        allowed (set (map name allowed-roles))]
+    (when-not (or (contains? roles "governance-admin")
+                  (seq (set/intersection roles allowed)))
+      (throw (ex-info "Governance endpoint access denied"
+                      {:status 403
+                       :error-code "GOVERNANCE_FORBIDDEN"
+                       :requiredRoles (sort (conj allowed "governance-admin"))
+                       :roles (sort roles)})))))
 
 (defn require-body
   [request]
@@ -440,6 +471,7 @@
     (if (response-map? body-or-response)
       body-or-response
       (try
+        (require-governance-role! request #{"policy-admin"})
         (let [environment (request-environment request body-or-response)
               body (cond-> body-or-response environment (assoc :environment environment))
               policy-json (json/write-value-as-string body)
@@ -495,6 +527,7 @@
             body (cond-> (assoc body-or-response :resourceClass resource-class)
                    environment (assoc :environment environment))]
         (try
+          (require-governance-role! request #{"policy-admin"})
           (let [policy-json (json/write-value-as-string body)
                 author (get-in request [:identity :client-id] "api")
                 analysis (prp/submit-policy resource-class policy-json author "Updated via API")]
@@ -511,15 +544,18 @@
                                      500)))))))
 
 (defn delete-policy
-  [resource-class]
+  [resource-class request]
   (log/debug "Deleting policy for" resource-class)
   (try
+    (require-governance-role! request #{"policy-admin"})
     (if (prp/delete-policy resource-class)
       (response/success-response {:message "Policy deleted successfully"
                                   :resourceClass resource-class})
       (response/error-response "POLICY_NOT_FOUND"
                                (str "Policy for resource class " resource-class " not found")
                                404))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "DELETE_POLICY_ERROR" "Failed to delete policy: "))
     (catch Exception e
       (log/error e "Error deleting policy")
       (response/error-response "DELETE_POLICY_ERROR"
@@ -530,9 +566,12 @@
   [request]
   (log/debug "Importing YAML policy")
   (try
+    (require-governance-role! request #{"policy-admin"})
     (let [yaml-content (slurp (:body request))
           result (policy-yaml/import-yaml-policy! yaml-content)]
       (response/created-response result))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "IMPORT_YAML_ERROR" "Failed to import YAML policy: "))
     (catch Exception e
       (log/error e "Error importing YAML policy")
       (response/error-response "IMPORT_YAML_ERROR"
@@ -647,6 +686,7 @@
     (if (response-map? body-or-response)
       body-or-response
       (try
+        (require-governance-role! request #{"risk-profile-admin"})
         (let [author (get-in request [:identity :client-id] "api")
               row (risk-profiles/upsert-profile! scope-type scope-key
                                                  (risk-profile-payload body-or-response)
@@ -665,6 +705,7 @@
   [scope-type scope-key request]
   (log/debug "Deleting policy risk profile" scope-type scope-key)
   (try
+    (require-governance-role! request #{"risk-profile-admin"})
     (let [author (get-in request [:identity :client-id] "api")
           body (or (parse-json-body request) {})]
       (if (risk-profiles/delete-profile! scope-type scope-key author
@@ -717,6 +758,7 @@
     (if (response-map? body-or-response)
       body-or-response
       (try
+        (require-governance-role! request #{"policy-reviewer"})
         (let [review-status (:status body-or-response)
               reviewer (or (get-in request [:identity :client-id]) (:reviewedBy body-or-response) "api")
               review-note (:reviewNote body-or-response)
@@ -768,6 +810,7 @@
   [resource-class analysis-id request]
   (log/info "Promoting policy impact preview" analysis-id "for" resource-class)
   (try
+    (require-governance-role! request #{"policy-deployer"})
     (let [analysis-key (Long/parseLong (str analysis-id))
           entry (impact-history/get-analysis resource-class analysis-key)
           stored-candidate-policy (:candidatePolicy entry)
@@ -857,6 +900,7 @@
   [resource-class version request]
   (log/info "Rolling back" resource-class "to version" version)
   (try
+    (require-governance-role! request #{"policy-deployer"})
     (let [v (Long/parseLong (str version))
           pol (pv/get-version resource-class v)]
       (if-not pol
@@ -877,6 +921,8 @@
                                         :newVersion new-version
                                         :workflowAction "rollback"
                                         :versionLink version-link})))))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "ROLLBACK_ERROR" "Failed to rollback: "))
     (catch Exception e
       (log/error e "Error rolling back policy")
       (response/error-response "ROLLBACK_ERROR"

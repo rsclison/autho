@@ -24,10 +24,19 @@
 
 (defn- mock-request
   "Create a mock request map with optional body and params."
-  [& {:keys [body params headers]}]
+  [& {:keys [body params headers identity]}]
   {:body (when body (ByteArrayInputStream. (.getBytes body "UTF-8")))
    :params (or params {})
-   :headers (or headers {})})
+   :headers (or headers {})
+   :identity identity})
+
+(def ^:private governance-identity
+  {:client-id "test-admin"
+   :roles ["governance-admin"]})
+
+(defn- governance-request
+  [& args]
+  (apply mock-request (concat args [:identity governance-identity])))
 
 (defn- parse-response-body
   "Parse response body JSON string to Clojure map."
@@ -416,9 +425,9 @@
 
 
 (deftest create-policy-returns-validation-warnings-test
-  (let [request (mock-request :body (json/write-value-as-string {:resourceClass "Document"
-                                                                 :strategy "almost_one_allow_no_deny"
-                                                                 :rules []}))]
+  (let [request (governance-request :body (json/write-value-as-string {:resourceClass "Document"
+                                                                       :strategy "almost_one_allow_no_deny"
+                                                                       :rules []}))]
     (with-redefs [prp/submit-policy (fn [& _] {:environment "prod"
                                                :errors []
                                                :warnings [{:code "UNCONDITIONAL_RULE"
@@ -430,10 +439,10 @@
 
 (deftest create-policy-uses-query-environment-test
   (let [captured (atom nil)
-        request (mock-request :body (json/write-value-as-string {:resourceClass "Document"
-                                                                 :strategy "almost_one_allow_no_deny"
-                                                                 :rules []})
-                              :params {:environment "staging"})]
+        request (governance-request :body (json/write-value-as-string {:resourceClass "Document"
+                                                                       :strategy "almost_one_allow_no_deny"
+                                                                       :rules []})
+                                    :params {:environment "staging"})]
     (with-redefs [prp/submit-policy
                   (fn [resource-class policy-json & _]
                     (reset! captured {:resourceClass resource-class
@@ -444,6 +453,29 @@
         (is (= 201 (:status response)))
         (is (= "staging" (get-in body [:data :environment])))
         (is (str/includes? (:policyJson @captured) "\"environment\":\"staging\""))))))
+
+(deftest governance-mutation-requires-authorized-role-test
+  (let [viewer {:client-id "viewer"
+                :roles ["policy-viewer"]}
+        policy-body (json/write-value-as-string {:resourceClass "Document"
+                                                 :strategy "almost_one_allow_no_deny"
+                                                 :rules []})
+        risk-body (json/write-value-as-string {:thresholds {:maxRevokes 1}})
+        review-body (json/write-value-as-string {:status "approved"})
+        yaml-body "resourceClass: Document\nstrategy: almost_one_allow_no_deny\nrules: []"
+        denied-responses [(handlers/create-policy (mock-request :body policy-body :identity viewer))
+                          (handlers/update-policy "Document" (mock-request :body policy-body :identity viewer))
+                          (handlers/delete-policy "Document" (mock-request :identity viewer))
+                          (handlers/import-yaml-policies (mock-request :body yaml-body :identity viewer))
+                          (handlers/upsert-policy-risk-profile "environment" "prod" (mock-request :body risk-body :identity viewer))
+                          (handlers/delete-policy-risk-profile "environment" "prod" (mock-request :identity viewer))
+                          (handlers/update-policy-impact-review "Document" "7" (mock-request :body review-body :identity viewer))
+                          (handlers/rollout-policy-impact-preview "Document" "7" (mock-request :identity viewer))
+                          (handlers/rollback-policy "Document" "1" (mock-request :identity viewer))]]
+    (doseq [response denied-responses]
+      (let [body (parse-response-body response)]
+        (is (= 403 (:status response)))
+        (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code])))))))
 
 (deftest validate-policy-handler-runs-predeployment-validation-test
   (let [captured (atom nil)
@@ -529,9 +561,9 @@
     (is (= "dev" (get-in @captured [:params :environment])))))
 
 (deftest update-policy-returns-validation-details-for-policy-errors-test
-  (let [request (mock-request :body (json/write-value-as-string {:resourceClass "Document"
-                                                                 :strategy "almost_one_allow_no_deny"
-                                                                 :rules []}))]
+  (let [request (governance-request :body (json/write-value-as-string {:resourceClass "Document"
+                                                                       :strategy "almost_one_allow_no_deny"
+                                                                       :rules []}))]
     (with-redefs [prp/submit-policy (fn [& _]
                                       (throw (ex-info "Policy safety validation failed"
                                                       {:status 400
@@ -596,14 +628,14 @@
           upsert-response (handlers/upsert-policy-risk-profile
                            "environment"
                            "prod"
-                           (mock-request :body (json/write-value-as-string
-                                                {:thresholds {:maxRevokes 2
-                                                              :allowSensitiveResourceChanges true}
-                                                 :approval {:approved true
-                                                            :approvedBy "risk-owner"
-                                                            :note "approved"}})))
+                           (governance-request :body (json/write-value-as-string
+                                                      {:thresholds {:maxRevokes 2
+                                                                    :allowSensitiveResourceChanges true}
+                                                       :approval {:approved true
+                                                                  :approvedBy "risk-owner"
+                                                                  :note "approved"}})))
           upsert-body (parse-response-body upsert-response)
-          delete-response (handlers/delete-policy-risk-profile "environment" "prod" (mock-request))
+          delete-response (handlers/delete-policy-risk-profile "environment" "prod" (governance-request))
           delete-body (parse-response-body delete-response)]
       (is (= 200 (:status list-response)))
       (is (= 0 (get-in list-body [:data :profiles :default :maxRevokes])))
@@ -612,7 +644,7 @@
       (is (= 200 (:status upsert-response)))
       (is (= "environment" (get-in upsert-body [:data :scopeType])))
       (is (= 2 (get-in upsert-body [:data :profile :maxRevokes])))
-      (is (= "api" (get-in upsert-body [:data :updatedBy])))
+        (is (= "test-admin" (get-in upsert-body [:data :updatedBy])))
       (is (= "risk-owner" (get-in upsert-body [:data :approval :approvedBy])))
       (is (nil? (get-in upsert-body [:data :approval :changedBy])))
       (is (= 200 (:status delete-response)))
@@ -907,8 +939,8 @@
       (is (= "impact_rollout" (get-in body [:data :deployedVersions 0 :deploymentKind]))))))
 
 (deftest update-policy-impact-review-handler-updates-status-test
-  (let [request (mock-request :body (json/write-value-as-string {:status "approved"
-                                                                 :reviewNote "Looks good"}))]
+  (let [request (governance-request :body (json/write-value-as-string {:status "approved"
+                                                                       :reviewNote "Looks good"}))]
     (with-redefs [impact-history/update-review! (fn [_ _ payload]
                                                   {:id 7
                                                    :resourceClass "Document"
@@ -919,11 +951,11 @@
             body (parse-response-body response)]
         (is (= 200 (:status response)))
         (is (= "approved" (get-in body [:data :reviewStatus])))
-        (is (= "api" (get-in body [:data :reviewedBy])))
+        (is (= "test-admin" (get-in body [:data :reviewedBy])))
         (is (= "Looks good" (get-in body [:data :reviewNote])))))))
 
 (deftest rollout-policy-impact-preview-handler-promotes-approved-preview-test
-  (let [request (mock-request)]
+  (let [request (governance-request)]
     (with-redefs [impact-history/get-analysis (fn [_ _]
                                                 {:id 7
                                                  :resourceClass "Document"
@@ -965,7 +997,7 @@
         (is (= "deployed" (get-in body [:data :history :rolloutStatus])))))))
 
 (deftest rollout-policy-impact-preview-handler-requires-approved-preview-test
-  (let [request (mock-request)]
+  (let [request (governance-request)]
     (with-redefs [impact-history/get-analysis (fn [_ _]
                                                 {:id 7
                                                  :resourceClass "Document"
@@ -978,7 +1010,7 @@
         (is (= "POLICY_IMPACT_NOT_APPROVED" (get-in body [:error :code])))))))
 
 (deftest rollout-policy-impact-preview-handler-blocks-blocked-impact-test
-  (let [request (mock-request)]
+  (let [request (governance-request)]
     (with-redefs [impact-history/get-analysis (fn [_ _]
                                                 {:id 7
                                                  :resourceClass "Document"
@@ -997,7 +1029,7 @@
                (get-in body [:error :details :blockers 0 :code])))))))
 
 (deftest rollout-policy-impact-preview-handler-allows-no-impact-without-review-test
-  (let [request (mock-request)]
+  (let [request (governance-request)]
     (with-redefs [impact-history/get-analysis (fn [_ _]
                                                 {:id 8
                                                  :resourceClass "Document"
@@ -1029,7 +1061,7 @@
         (is (= "deployed" (get-in body [:data :rolloutStatus])))))))
 
 (deftest rollout-policy-impact-preview-handler-promotes-stored-candidate-policy-test
-  (let [request (mock-request)
+  (let [request (governance-request)
         submitted (atom nil)]
     (with-redefs [impact-history/get-analysis (fn [_ _]
                                                 {:id 9
@@ -1070,7 +1102,7 @@
         (is (str/includes? (:policyJson @submitted) "\"deny_unless_allow\""))))))
 
 (deftest rollout-policy-impact-preview-handler-rejects-non-promotable-preview-test
-  (let [request (mock-request)]
+  (let [request (governance-request)]
     (with-redefs [impact-history/get-analysis (fn [_ _]
                                                 {:id 7
                                                  :resourceClass "Document"
@@ -1101,7 +1133,7 @@
                                           :lifecycle_status (:lifecycleStatus payload)
                                           :workflow_action (:workflowAction payload)
                                           :rollback_from_version (:rollbackFromVersion payload)})]
-      (let [response (handlers/rollback-policy "Document" "3" (mock-request))
+      (let [response (handlers/rollback-policy "Document" "3" (governance-request))
             body (parse-response-body response)]
         (is (= 200 (:status response)))
         (is (= 3 (get-in body [:data :rolledBackTo])))

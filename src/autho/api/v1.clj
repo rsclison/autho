@@ -115,8 +115,8 @@
     (PUT "/:resource-class" [resource-class :as request]
           (handlers/update-policy resource-class request))
 
-    (DELETE "/:resource-class" [resource-class]
-            (handlers/delete-policy resource-class)))
+    (DELETE "/:resource-class" [resource-class :as request]
+            (handlers/delete-policy resource-class request)))
 
   ;; ===================================================================
   ;; Cache Management Endpoints

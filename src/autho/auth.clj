@@ -1,7 +1,8 @@
 (ns autho.auth
   (:require [buddy.auth :as auth]
             [buddy.auth.backends :as backends]
-            [buddy.auth.middleware :as middleware])
+            [buddy.auth.middleware :as middleware]
+            [clojure.string :as str])
   (:import (java.security MessageDigest)))
 
 ;; --- Secrets ---
@@ -39,6 +40,14 @@
   (or (System/getenv "API_CLIENT_CLASS")
       "Application"))
 
+(def api-client-roles
+  (let [roles (or (System/getenv "API_CLIENT_ROLES")
+                  "governance-admin")]
+    (->> (.split roles ",")
+         (map str/trim)
+         (remove empty?)
+         vec)))
+
 ;; --- Authentication Backends ---
 
 ;; 1. JWT Backend for end-users
@@ -62,9 +71,11 @@
                (when (constant-time-equals? token api-key)
                  {:auth-method :api-key
                   :client-id api-client-id
+                  :roles api-client-roles
                   :subject {:id api-client-id
                             :class api-client-class
-                            :client-id api-client-id}}))
+                            :client-id api-client-id
+                            :roles api-client-roles}}))
      :token-name "X-API-Key"}))
 
 ;; --- Middleware ---

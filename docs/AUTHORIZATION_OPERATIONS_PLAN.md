@@ -109,7 +109,8 @@ Etat d'avancement :
 - garde-fous de rollout : les analyses `block` sont non deployables, les analyses `review` exigent une approbation, les analyses `approve/no_impact` peuvent etre deployees directement;
 - versions de politique enrichies avec metadata de lifecycle (`lifecycleStatus`, `workflowAction`, `rollbackFromVersion`) pour tracer les deployments directs, rollouts et rollbacks;
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
-- prochaine etape : ajouter des controles RBAC reels sur les endpoints de gouvernance.
+- controles RBAC reels sur les endpoints de gouvernance : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, avec bypass explicite `governance-admin`;
+- prochaine etape : demarrer la priorite 4 avec un modele relationnel minimal.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 

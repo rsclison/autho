@@ -35,6 +35,7 @@ The API-key application identity is configured with:
 ```bash
 API_CLIENT_ID=app-A
 API_CLIENT_CLASS=Application
+API_CLIENT_ROLES=policy-admin,policy-deployer
 ```
 
 For service-to-service authorization, write policies against that application subject:
@@ -49,6 +50,19 @@ For service-to-service authorization, write policies against that application su
 ```
 
 If a trusted backend must evaluate permissions for a user on behalf of an application, the backend must authenticate the application first and then use a server-side delegated/composite subject. The internal compatibility flag `:allow-subject-delegation true` is reserved for trusted Ring identities and must not be exposed as a client-controlled parameter.
+
+### Governance Roles
+
+Policy governance write endpoints require an authenticated identity with a governance role. `governance-admin` grants every governance operation. More specific roles are:
+
+| Role | Allows |
+|------|--------|
+| `policy-admin` | Create, update, delete, and import policies |
+| `risk-profile-admin` | Upsert and delete policy impact risk profiles |
+| `policy-reviewer` | Review persisted policy impact analyses |
+| `policy-deployer` | Roll out approved impact analyses and perform rollbacks |
+
+For API-key clients, roles are loaded from `API_CLIENT_ROLES` as a comma-separated list. The default is `governance-admin` for compatibility; production deployments should set least-privilege roles explicitly.
 
 ## Response Format
 

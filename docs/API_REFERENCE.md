@@ -33,11 +33,25 @@ Les variables d'environnement `API_CLIENT_ID` et `API_CLIENT_CLASS` permettent d
 ```bash
 export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
+export API_CLIENT_ROLES="policy-admin,policy-deployer"
 ```
 
 Conséquence de sécurité : un appelant ne peut pas envoyer `{"subject": {"id": "app-A"}}` dans le body pour se faire passer pour `app-A`. Pour une API key standard, `body.subject` est ignoré lors de la résolution du sujet.
 
 Le mode où un composant backend de confiance fournit explicitement un sujet dans le body n'est possible que si l'identité Ring interne contient `:allow-subject-delegation true`. Ce mode doit rester réservé à un composant serveur authentifié, jamais à un client public.
+
+### Rôles de gouvernance
+
+Les endpoints de gouvernance qui modifient l'état exigent aussi un rôle applicatif ou JWT. `governance-admin` autorise toutes les opérations de gouvernance. Les rôles plus fins sont :
+
+| Rôle | Autorise |
+|------|----------|
+| `policy-admin` | Créer, mettre à jour, supprimer ou importer des politiques |
+| `risk-profile-admin` | Modifier ou supprimer les profils de risque d'impact |
+| `policy-reviewer` | Approuver ou rejeter une analyse d'impact |
+| `policy-deployer` | Déployer une analyse d'impact approuvée ou faire un rollback |
+
+Pour une clé API, les rôles viennent de `API_CLIENT_ROLES` sous forme de liste séparée par des virgules. Par défaut, l'identité applicative reçoit `governance-admin` pour préserver la compatibilité des installations existantes ; en production, configurez explicitement les rôles minimaux nécessaires.
 
 ### JWT Bearer
 
@@ -103,6 +117,7 @@ Les nouvelles intégrations doivent utiliser les endpoints `/v1/*`, documentés 
 | 401 | `AUTHENTICATION_REQUIRED` | Aucun sujet authentifié ne peut être établi |
 | 401 | `UNBOUND_API_KEY_IDENTITY` | La clé API est valide mais aucune identité applicative n'est liée |
 | 403 | `FORBIDDEN` | Accès admin requis |
+| 403 | `GOVERNANCE_FORBIDDEN` | Rôle de gouvernance manquant |
 | 404 | `POLICY_NOT_FOUND` | Politique inexistante |
 | 404 | `VERSION_NOT_FOUND` | Version de politique inexistante |
 | 413 | `REQUEST_TOO_LARGE` | Body dépasse `MAX_REQUEST_SIZE` |
@@ -554,6 +569,7 @@ curl -H "X-API-Key: key" http://localhost:8080/policies/Facture
 ### PUT /policies/:resourceClass (legacy)
 
 Crée ou met à jour une politique. Autho valide le JSON contre `policySchema.json`, execute la validation statique de policy safety, execute les tests declaratifs embarques dans `tests` s'ils existent, puis sauvegarde une version. Voir `docs/POLICY_SAFETY.md`.
+Requiert `governance-admin` ou `policy-admin`.
 
 ```bash
 curl -X PUT http://localhost:8080/policies/Facture \
@@ -586,6 +602,7 @@ curl -X PUT http://localhost:8080/policies/Facture \
 ### POST /v1/policies/:resourceClass/validate
 
 Valide une politique candidate sans la persister. Cet endpoint applique les memes controles que la soumission de politique : schema JSON, validation statique de policy safety et tests declaratifs embarques.
+Comme il ne persiste aucun etat, il ne requiert pas de role de gouvernance en plus de l'authentification.
 
 ```bash
 curl -X POST http://localhost:8080/v1/policies/Facture/validate \
@@ -718,6 +735,7 @@ curl -H "X-API-Key: key" \
 ```
 
 Endpoints disponibles : `PUT/DELETE /v1/policies/risk-profiles/default`, `PUT/DELETE /v1/policies/risk-profiles/environments/:environment`, `PUT/DELETE /v1/policies/risk-profiles/resource-classes/:resourceClass`.
+Les mutations de profils de risque requierent `governance-admin` ou `risk-profile-admin`.
 Chaque modification de profil produit une revision append-only avec `action`, `previousProfile`, `newProfile`, `changedBy` et `changedAt`.
 Les changements critiques, comme augmenter `maxRevokes`, augmenter `maxChangedDecisions`, autoriser les changements de ressources sensibles ou supprimer un profil existant, exigent `approval.approved = true` et un `approval.approvedBy` different de l'auteur.
 Ces revisions apparaissent aussi dans `GET /v1/policies/:resourceClass/timeline` avec `eventType = risk_profile_changed`. Les revisions `default` et `environment` sont visibles pour toutes les classes ; les revisions `resource_class` sont visibles seulement pour la classe concernee.
@@ -727,6 +745,8 @@ Le rollout applique ces garde-fous :
 - `recommendation = block` ou `status = blocked` : rollout refuse avec `POLICY_IMPACT_BLOCKED`;
 - `recommendation = review`, `status = review_required` ou `status = high_risk` : rollout autorise seulement apres `reviewStatus = approved`;
 - `recommendation = approve` et `status = no_impact` : rollout possible sans revue manuelle.
+
+La revue d'impact requiert `governance-admin` ou `policy-reviewer`. Le rollout d'impact et le rollback requierent `governance-admin` ou `policy-deployer`.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 
