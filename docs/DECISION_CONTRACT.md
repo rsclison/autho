@@ -48,3 +48,13 @@ Ils ne doivent pas etre utilises comme base de nouveaux developpements. Les nouv
 3. `effectiveSubject` est le sujet authentifie ou delegue par le serveur, pas une valeur client non fiable.
 4. `policySource` vaut `current` pour une decision normale, `provided` pour une simulation inline, `version` pour une simulation sur version archivee.
 5. Le batch v1 renvoie une liste de decisions canoniques dans `data.results`.
+
+## Strategie de conflit supportee
+
+Le PDP supporte actuellement une strategie de conflit en production :
+
+| Strategie | Semantique |
+|---|---|
+| `almost_one_allow_no_deny` | Autorise si au moins une regle `allow` matche et si aucune regle `deny` de priorite strictement superieure ne gagne. |
+
+Les autres noms de strategie ne doivent pas etre persistes via l'API tant que leur semantique n'est pas implementee et testee dans le PDP. La validation statique des politiques rejette donc les strategies absentes ou non supportees.

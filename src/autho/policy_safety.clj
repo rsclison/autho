@@ -7,6 +7,9 @@
 (def ^:private supported-operators
   #{"=" "diff" "<" ">" "<=" ">=" "in" "notin" "date>"})
 
+(def ^:private supported-strategies
+  #{"almost_one_allow_no_deny"})
+
 (defn- mapcat-indexed
   [f coll]
   (mapcat (fn [[idx item]] (f idx item)) (map-indexed vector coll)))
@@ -25,6 +28,13 @@
     (keyword? operator) (name operator)
     (symbol? operator) (name operator)
     (string? operator) operator
+    :else nil))
+
+(defn- strategy-name
+  [strategy]
+  (cond
+    (keyword? strategy) (name strategy)
+    (string? strategy) strategy
     :else nil))
 
 (defn- non-blank-ident?
@@ -243,6 +253,24 @@
                           :field :resourceClass)))))
        vec))
 
+(defn- strategy-issues
+  [policy]
+  (let [strategy (strategy-name (:strategy policy))]
+    (cond
+      (str/blank? strategy)
+      [(issue "MISSING_STRATEGY"
+              "Policy must declare an explicit conflict resolution strategy."
+              :field :strategy)]
+
+      (not (contains? supported-strategies strategy))
+      [(issue "UNSUPPORTED_STRATEGY"
+              (str "Policy uses unsupported conflict resolution strategy '" strategy "'.")
+              :field :strategy
+              :strategy strategy
+              :supported-strategies (vec (sort supported-strategies)))]
+
+      :else [])))
+
 (defn- normalized-condition-signature
   [rule]
   {:operation (:operation rule)
@@ -305,6 +333,7 @@
                      (validate-legacy-field rule-name :resourceCond (:resourceCond rule) :resource))))
                 rules)]
     {:errors (vec (concat (duplicate-name-issues rules)
+                          (strategy-issues policy)
                           (resource-class-issues submitted-resource-class rules)
                           per-rule-issues))
      :warnings (warning-issues rules)}))

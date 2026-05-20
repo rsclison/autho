@@ -51,6 +51,24 @@
       (catch clojure.lang.ExceptionInfo e
         (is (= "RESOURCE_CLASS_MISMATCH" (get-in (ex-data e) [:issues 0 :code])))))))
 
+(deftest validate-policy-rejects-missing-strategy-test
+  (let [policy (dissoc valid-policy :strategy)]
+    (try
+      (safety/validate-policy! "Document" policy)
+      (is false "Expected missing strategy validation failure")
+      (catch clojure.lang.ExceptionInfo e
+        (is (= "MISSING_STRATEGY" (get-in (ex-data e) [:issues 0 :code])))))))
+
+(deftest validate-policy-rejects-unsupported-strategy-test
+  (let [policy (assoc valid-policy :strategy "permit-unless-deny")]
+    (try
+      (safety/validate-policy! "Document" policy)
+      (is false "Expected unsupported strategy validation failure")
+      (catch clojure.lang.ExceptionInfo e
+        (is (= "UNSUPPORTED_STRATEGY" (get-in (ex-data e) [:issues 0 :code])))
+        (is (= ["almost_one_allow_no_deny"]
+               (get-in (ex-data e) [:issues 0 :supported-strategies])))))))
+
 (deftest validate-policy-detects-contradictory-equality-test
   (let [policy {:strategy "almost_one_allow_no_deny"
                 :rules [{:name "contradictory"
