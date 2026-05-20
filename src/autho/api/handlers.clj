@@ -10,6 +10,7 @@
             [autho.policy-yaml :as policy-yaml]
             [autho.policy-impact :as policy-impact]
             [autho.policy-impact-history :as impact-history]
+            [autho.policy-risk-profiles :as risk-profiles]
             [autho.policy-versions :as pv]
             [autho.features :as features]
             [jsonista.core :as json]
@@ -579,6 +580,63 @@
           (response/error-response "POLICY_IMPACT_ERROR"
                                    (str "Failed to analyze policy impact: " (.getMessage e))
                                    500))))))
+
+(defn- risk-profile-payload
+  [body]
+  (if (contains? body :thresholds)
+    (:thresholds body)
+    body))
+
+(defn list-policy-risk-profiles
+  []
+  (log/debug "Listing policy risk profiles")
+  (try
+    (response/success-response {:profiles (risk-profiles/list-profiles)
+                                :records (risk-profiles/list-profile-records)})
+    (catch Exception e
+      (log/error e "Error listing policy risk profiles")
+      (response/error-response "POLICY_RISK_PROFILES_ERROR"
+                               (str "Failed to list policy risk profiles: " (.getMessage e))
+                               500))))
+
+(defn upsert-policy-risk-profile
+  [scope-type scope-key request]
+  (log/debug "Upserting policy risk profile" scope-type scope-key)
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (let [author (get-in request [:identity :client-id] "api")
+              row (risk-profiles/upsert-profile! scope-type scope-key
+                                                 (risk-profile-payload body-or-response)
+                                                 author)]
+          (response/success-response row))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "POLICY_RISK_PROFILE_ERROR" "Failed to update policy risk profile: "))
+        (catch Exception e
+          (log/error e "Error upserting policy risk profile")
+          (response/error-response "POLICY_RISK_PROFILE_ERROR"
+                                   (str "Failed to update policy risk profile: " (.getMessage e))
+                                   500))))))
+
+(defn delete-policy-risk-profile
+  [scope-type scope-key]
+  (log/debug "Deleting policy risk profile" scope-type scope-key)
+  (try
+    (if (risk-profiles/delete-profile! scope-type scope-key)
+      (response/success-response {:deleted true
+                                  :scopeType scope-type
+                                  :scopeKey (if (= "default" scope-type) "*" scope-key)})
+      (response/error-response "POLICY_RISK_PROFILE_NOT_FOUND"
+                               "Policy risk profile not found"
+                               404))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "POLICY_RISK_PROFILE_ERROR" "Failed to delete policy risk profile: "))
+    (catch Exception e
+      (log/error e "Error deleting policy risk profile")
+      (response/error-response "POLICY_RISK_PROFILE_ERROR"
+                               (str "Failed to delete policy risk profile: " (.getMessage e))
+                               500))))
 
 (defn list-policy-impact-history
   [resource-class]

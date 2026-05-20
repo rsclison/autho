@@ -572,6 +572,15 @@ Compare the current or versioned baseline with a candidate policy over a request
 
 Effective thresholds are resolved in this order: `riskProfiles.default`, `riskProfiles.environments[environment]`, `riskProfiles.resourceClasses[resourceClass]`, then request-level `thresholds`. The response includes `riskProfile` so reviewers can audit which sources were applied.
 
+Persisted profiles are available through:
+
+- `GET /v1/policies/risk-profiles`
+- `PUT/DELETE /v1/policies/risk-profiles/default`
+- `PUT/DELETE /v1/policies/risk-profiles/environments/:environment`
+- `PUT/DELETE /v1/policies/risk-profiles/resource-classes/:resourceClass`
+
+Inline `riskProfiles` and request-level `thresholds` still override persisted profiles for one-off analyses.
+
 Rollout gates are enforced when promoting an impact preview:
 
 - `block` or `blocked` impact reports cannot be deployed;

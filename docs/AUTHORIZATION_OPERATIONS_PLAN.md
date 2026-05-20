@@ -101,10 +101,11 @@ Etat d'avancement :
 - rapport d'impact ajoute avec recommendation `approve`, `review`, `block`;
 - seuils de blocage configurables : `maxRevokes`, `maxChangedDecisions`, `allowSensitiveResourceChanges`;
 - profils de risque configurables par defaut, environnement et classe de ressource, avec override explicite par requete;
+- profils de risque persistables et administrables via `GET/PUT/DELETE /v1/policies/risk-profiles...`;
 - garde-fous de rollout : les analyses `block` sont non deployables, les analyses `review` exigent une approbation, les analyses `approve/no_impact` peuvent etre deployees directement;
 - versions de politique enrichies avec metadata de lifecycle (`lifecycleStatus`, `workflowAction`, `rollbackFromVersion`) pour tracer les deployments directs, rollouts et rollbacks;
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
-- prochaine etape : rendre ces profils persistables et administrables via API.
+- prochaine etape : ajouter une revision auditable des changements de profils de risque.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 

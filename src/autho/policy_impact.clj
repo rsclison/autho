@@ -5,6 +5,7 @@
             [autho.audit :as audit]
             [autho.pdp :as pdp]
             [autho.prp :as prp]
+            [autho.policy-risk-profiles :as risk-profiles]
             [clojure.string :as str]))
 
 (defn- candidate-policy
@@ -165,9 +166,18 @@
     (get thresholds key)
     default))
 
+(defn- merge-risk-profiles
+  [persisted inline]
+  {:default (merge (:default persisted) (:default inline))
+   :environments (merge-with merge (:environments persisted) (:environments inline))
+   :resourceClasses (merge-with merge (:resourceClasses persisted) (:resourceClasses inline))})
+
 (defn- risk-profile-thresholds
   [resource-class {:keys [environment riskProfiles thresholds]}]
-  (let [profiles (or riskProfiles {})
+  (let [persisted-profiles (try
+                             (risk-profiles/list-profiles)
+                             (catch Exception _ {}))
+        profiles (merge-risk-profiles persisted-profiles (or riskProfiles {}))
         default-profile (:default profiles)
         environment-profile (get-in profiles [:environments environment])
         resource-profile (get-in profiles [:resourceClasses resource-class])

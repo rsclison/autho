@@ -9,6 +9,7 @@
             [autho.policy-yaml :as policy-yaml]
             [autho.policy-versions :as pv]
             [autho.policy-impact-history :as pih]
+            [autho.policy-risk-profiles :as risk-profiles]
             [autho.otel :as otel]
             [autho.delegation :as deleg]
             [autho.features :as features]
@@ -671,7 +672,8 @@
     (audit/init!))
   (when (features/licensed? :versioning)
     (pv/init!)
-    (pih/init!))
+    (pih/init!)
+    (risk-profiles/init!))
 
   ;; Only register Kafka shutdown hook if Kafka is enabled
   (when (kafka-enabled?)

@@ -694,6 +694,20 @@ curl -X POST http://localhost:8080/v1/policies/Facture/impact \
 
 Les seuils effectifs sont resolus dans cet ordre : profil `default`, profil `environments[environment]`, profil `resourceClasses[resourceClass]`, puis `thresholds` de la requete. Le resultat expose `riskProfile` pour auditer les sources appliquees.
 
+Ces profils peuvent etre persistés :
+
+```bash
+curl -X PUT http://localhost:8080/v1/policies/risk-profiles/environments/prod \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{"maxRevokes": 0, "maxChangedDecisions": 25, "allowSensitiveResourceChanges": false}'
+
+curl -H "X-API-Key: key" \
+  http://localhost:8080/v1/policies/risk-profiles
+```
+
+Endpoints disponibles : `PUT/DELETE /v1/policies/risk-profiles/default`, `PUT/DELETE /v1/policies/risk-profiles/environments/:environment`, `PUT/DELETE /v1/policies/risk-profiles/resource-classes/:resourceClass`.
+
 Le rollout applique ces garde-fous :
 
 - `recommendation = block` ou `status = blocked` : rollout refuse avec `POLICY_IMPACT_BLOCKED`;

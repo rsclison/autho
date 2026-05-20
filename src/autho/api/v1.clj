@@ -66,6 +66,27 @@
     (POST "/:resource-class/impact" [resource-class :as request]
           (handlers/analyze-policy-impact resource-class request))
 
+    (GET "/risk-profiles" []
+         (handlers/list-policy-risk-profiles))
+
+    (PUT "/risk-profiles/default" request
+         (handlers/upsert-policy-risk-profile "default" "*" request))
+
+    (DELETE "/risk-profiles/default" []
+            (handlers/delete-policy-risk-profile "default" "*"))
+
+    (PUT "/risk-profiles/environments/:environment" [environment :as request]
+         (handlers/upsert-policy-risk-profile "environment" environment request))
+
+    (DELETE "/risk-profiles/environments/:environment" [environment]
+            (handlers/delete-policy-risk-profile "environment" environment))
+
+    (PUT "/risk-profiles/resource-classes/:resource-class" [resource-class :as request]
+         (handlers/upsert-policy-risk-profile "resource_class" resource-class request))
+
+    (DELETE "/risk-profiles/resource-classes/:resource-class" [resource-class]
+            (handlers/delete-policy-risk-profile "resource_class" resource-class))
+
     (GET "/:resource-class/impact/history" [resource-class]
          (handlers/list-policy-impact-history resource-class))
 

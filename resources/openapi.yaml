@@ -450,6 +450,40 @@ components:
           items:
             type: string
 
+    PolicyRiskProfiles:
+      type: object
+      properties:
+        default:
+          type: object
+          additionalProperties: true
+        environments:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+        resourceClasses:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+
+    PolicyRiskProfileRecord:
+      type: object
+      properties:
+        scopeType:
+          type: string
+          enum: [default, environment, resource_class]
+        scopeKey:
+          type: string
+        profile:
+          type: object
+          additionalProperties: true
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+
     PolicyImpactSummary:
       type: object
       properties:
@@ -1238,6 +1272,129 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/PolicyImpactAnalysis'
+
+  /v1/policies/risk-profiles:
+    get:
+      tags: [policies]
+      summary: List persisted policy impact risk profiles
+      operationId: listPolicyRiskProfiles
+      responses:
+        '200':
+          description: Persisted risk profiles
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          profiles:
+                            $ref: '#/components/schemas/PolicyRiskProfiles'
+                          records:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PolicyRiskProfileRecord'
+
+  /v1/policies/risk-profiles/default:
+    put:
+      tags: [policies]
+      summary: Upsert the default impact risk profile
+      operationId: upsertDefaultPolicyRiskProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated risk profile
+    delete:
+      tags: [policies]
+      summary: Delete the default impact risk profile
+      operationId: deleteDefaultPolicyRiskProfile
+      responses:
+        '200':
+          description: Deleted risk profile
+        '404':
+          description: Risk profile not found
+
+  /v1/policies/risk-profiles/environments/{environment}:
+    put:
+      tags: [policies]
+      summary: Upsert an environment impact risk profile
+      operationId: upsertEnvironmentPolicyRiskProfile
+      parameters:
+        - in: path
+          name: environment
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated risk profile
+    delete:
+      tags: [policies]
+      summary: Delete an environment impact risk profile
+      operationId: deleteEnvironmentPolicyRiskProfile
+      parameters:
+        - in: path
+          name: environment
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted risk profile
+        '404':
+          description: Risk profile not found
+
+  /v1/policies/risk-profiles/resource-classes/{resource-class}:
+    put:
+      tags: [policies]
+      summary: Upsert a resource-class impact risk profile
+      operationId: upsertResourceClassPolicyRiskProfile
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated risk profile
+    delete:
+      tags: [policies]
+      summary: Delete a resource-class impact risk profile
+      operationId: deleteResourceClassPolicyRiskProfile
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted risk profile
+        '404':
+          description: Risk profile not found
 
   /v1/policies/{resource-class}/impact/history:
     get:

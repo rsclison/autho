@@ -12,6 +12,7 @@
             [autho.policy-impact :as policy-impact]
             [autho.policy-versions :as pv]
             [autho.policy-impact-history :as impact-history]
+            [autho.policy-risk-profiles :as risk-profiles]
             [autho.features :as features]
             [jsonista.core :as json]
             [clojure.string :as str])
@@ -567,6 +568,58 @@
         (is (= "staging" (get-in body [:data :environment])))
         (is (= "staging" (:environment @captured)))
         (is (= 1 (get-in body [:data :summary :grants])))))))
+
+(deftest policy-risk-profile-handlers-manage-persisted-profiles-test
+  (with-redefs [risk-profiles/list-profiles (fn []
+                                              {:default {:maxRevokes 0}
+                                               :environments {"prod" {:maxRevokes 1}}})
+                risk-profiles/list-profile-records (fn []
+                                                     [{:scopeType "default"
+                                                       :scopeKey "*"
+                                                       :profile {:maxRevokes 0}}])
+                risk-profiles/upsert-profile! (fn [scope-type scope-key profile updated-by]
+                                                {:scopeType scope-type
+                                                 :scopeKey scope-key
+                                                 :profile profile
+                                                 :updatedBy updated-by})
+                risk-profiles/delete-profile! (fn [_ _] true)]
+    (let [list-response (handlers/list-policy-risk-profiles)
+          list-body (parse-response-body list-response)
+          upsert-response (handlers/upsert-policy-risk-profile
+                           "environment"
+                           "prod"
+                           (mock-request :body (json/write-value-as-string
+                                                {:thresholds {:maxRevokes 2
+                                                              :allowSensitiveResourceChanges true}})))
+          upsert-body (parse-response-body upsert-response)
+          delete-response (handlers/delete-policy-risk-profile "environment" "prod")
+          delete-body (parse-response-body delete-response)]
+      (is (= 200 (:status list-response)))
+      (is (= 0 (get-in list-body [:data :profiles :default :maxRevokes])))
+      (is (= 200 (:status upsert-response)))
+      (is (= "environment" (get-in upsert-body [:data :scopeType])))
+      (is (= 2 (get-in upsert-body [:data :profile :maxRevokes])))
+      (is (= "api" (get-in upsert-body [:data :updatedBy])))
+      (is (= 200 (:status delete-response)))
+      (is (= true (get-in delete-body [:data :deleted]))))))
+
+(deftest policy-risk-profile-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/upsert-policy-risk-profile
+                               (fn [scope-type scope-key request]
+                                 (reset! captured {:scopeType scope-type
+                                                   :scopeKey scope-key
+                                                   :uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :put
+                     :uri "/policies/risk-profiles/resource-classes/Document"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= "resource_class" (:scopeType @captured)))
+    (is (= "Document" (:scopeKey @captured)))
+    (is (= "/policies/risk-profiles/resource-classes/Document" (:uri @captured)))))
 
 (deftest list-policy-versions-handler-returns-lineage-metadata-test
   (with-redefs [pv/list-versions (fn [_]
