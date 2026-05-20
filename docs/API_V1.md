@@ -561,6 +561,12 @@ Compare the current or versioned baseline with a candidate policy over a request
 
 `impactReport.status` is one of `no_impact`, `review_required`, `high_risk`, `blocked`; `recommendation` is one of `approve`, `review`, `block`.
 
+Rollout gates are enforced when promoting an impact preview:
+
+- `block` or `blocked` impact reports cannot be deployed;
+- `review` / `review_required` / `high_risk` reports require `reviewStatus = approved`;
+- `approve` / `no_impact` reports can be deployed without manual review.
+
 The request batch can also come from audit replay:
 
 ```json

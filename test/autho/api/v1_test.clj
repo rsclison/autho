@@ -840,6 +840,7 @@
         (is (= 5 (get-in body [:data :sourceCandidateVersion])))
         (is (= 6 (get-in body [:data :newVersion])))
         (is (= "deployed" (get-in body [:data :rolloutStatus])))
+        (is (= false (get-in body [:data :rolloutGate :blocked])))
         (is (= 7 (get-in body [:data :versionLink :source_analysis_id])))
         (is (= "impact_rollout" (get-in body [:data :versionLink :deployment_kind])))
         (is (= "deployed" (get-in body [:data :history :rolloutStatus])))))))
@@ -856,6 +857,55 @@
             body (parse-response-body response)]
         (is (= 409 (:status response)))
         (is (= "POLICY_IMPACT_NOT_APPROVED" (get-in body [:error :code])))))))
+
+(deftest rollout-policy-impact-preview-handler-blocks-blocked-impact-test
+  (let [request (mock-request)]
+    (with-redefs [impact-history/get-analysis (fn [_ _]
+                                                {:id 7
+                                                 :resourceClass "Document"
+                                                 :candidateVersion 5
+                                                 :reviewStatus "approved"
+                                                 :rolloutStatus "not_deployed"
+                                                 :analysis {:impactReport {:status "blocked"
+                                                                           :recommendation "block"
+                                                                           :blockers [{:code "REVOKE_THRESHOLD_EXCEEDED"}]}}})]
+      (let [response (handlers/rollout-policy-impact-preview "Document" "7" request)
+            body (parse-response-body response)]
+        (is (= 409 (:status response)))
+        (is (= "POLICY_IMPACT_BLOCKED" (get-in body [:error :code])))
+        (is (= true (get-in body [:error :details :blocked])))
+        (is (= "REVOKE_THRESHOLD_EXCEEDED"
+               (get-in body [:error :details :blockers 0 :code])))))))
+
+(deftest rollout-policy-impact-preview-handler-allows-no-impact-without-review-test
+  (let [request (mock-request)]
+    (with-redefs [impact-history/get-analysis (fn [_ _]
+                                                {:id 8
+                                                 :resourceClass "Document"
+                                                 :candidatePolicy {:resourceClass "Document"
+                                                                   :strategy "almost_one_allow_no_deny"
+                                                                   :rules []}
+                                                 :reviewStatus "draft"
+                                                 :rolloutStatus "not_deployed"
+                                                 :analysis {:impactReport {:status "no_impact"
+                                                                           :recommendation "approve"
+                                                                           :blockers []}}})
+                  prp/submit-policy (fn [& _] nil)
+                  pv/latest-version-number (fn [_] 12)
+                  pv/annotate-version! (fn [_ version payload]
+                                         {:version version
+                                          :source_analysis_id (:sourceAnalysisId payload)
+                                          :deployment_kind (:deploymentKind payload)})
+                  impact-history/mark-deployed! (fn [_ analysis-id payload]
+                                                  {:id analysis-id
+                                                   :rolloutStatus "deployed"
+                                                   :deployedVersion (:deployedVersion payload)})]
+      (let [response (handlers/rollout-policy-impact-preview "Document" "8" request)
+            body (parse-response-body response)]
+        (is (= 200 (:status response)))
+        (is (= 12 (get-in body [:data :newVersion])))
+        (is (= false (get-in body [:data :rolloutGate :reviewRequired])))
+        (is (= "deployed" (get-in body [:data :rolloutStatus])))))))
 
 (deftest rollout-policy-impact-preview-handler-promotes-stored-candidate-policy-test
   (let [request (mock-request)

@@ -617,23 +617,65 @@
                                    (str "Failed to update impact review: " (.getMessage e))
                                    500))))))
 
+(defn- rollout-impact-report
+  [entry]
+  (or (get-in entry [:analysis :impactReport])
+      (:impactReport entry)))
+
+(defn- rollout-gate
+  [entry]
+  (let [report (rollout-impact-report entry)
+        recommendation (:recommendation report)
+        status (:status report)
+        blockers (vec (or (:blockers report) []))
+        risk-known? (boolean report)
+        blocked? (boolean (or (= "block" recommendation)
+                              (= "blocked" status)
+                              (seq blockers)))
+        review-required? (or (not risk-known?)
+                             (= "review" recommendation)
+                             (contains? #{"review_required" "high_risk"} status)
+                             (true? (:highRisk entry))
+                             (pos? (or (:revokeCount entry) 0)))]
+    {:riskKnown risk-known?
+     :recommendation recommendation
+     :status status
+     :blockers blockers
+     :blocked blocked?
+     :reviewRequired (boolean review-required?)}))
+
 (defn rollout-policy-impact-preview
   [resource-class analysis-id request]
   (log/info "Promoting policy impact preview" analysis-id "for" resource-class)
   (try
     (let [analysis-key (Long/parseLong (str analysis-id))
           entry (impact-history/get-analysis resource-class analysis-key)
-          stored-candidate-policy (:candidatePolicy entry)]
+          stored-candidate-policy (:candidatePolicy entry)
+          gate (when entry (rollout-gate entry))]
       (cond
         (nil? entry)
         (response/error-response "POLICY_IMPACT_HISTORY_NOT_FOUND"
                                  (str "Impact analysis " analysis-id " not found for " resource-class)
                                  404)
 
-        (not= "approved" (:reviewStatus entry))
+        (= "rejected" (:reviewStatus entry))
+        (response/error-response "POLICY_IMPACT_REJECTED"
+                                 (str "Impact analysis " analysis-id " was rejected and cannot be deployed")
+                                 409
+                                 gate)
+
+        (:blocked gate)
+        (response/error-response "POLICY_IMPACT_BLOCKED"
+                                 (str "Impact analysis " analysis-id " is blocked by rollout gates")
+                                 409
+                                 gate)
+
+        (and (:reviewRequired gate)
+             (not= "approved" (:reviewStatus entry)))
         (response/error-response "POLICY_IMPACT_NOT_APPROVED"
                                  (str "Impact analysis " analysis-id " must be approved before rollout")
-                                 409)
+                                 409
+                                 gate)
 
         (= "deployed" (:rolloutStatus entry))
         (response/error-response "POLICY_IMPACT_ALREADY_DEPLOYED"
@@ -670,6 +712,7 @@
                                                   :analysisId analysis-key
                                                   :newVersion new-version
                                                   :rolloutStatus "deployed"
+                                                  :rolloutGate gate
                                                   :versionLink version-link
                                                   :history rollout-entry}
                                            (:candidateVersion entry)

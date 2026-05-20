@@ -683,6 +683,12 @@ curl -X POST http://localhost:8080/v1/policies/Facture/impact \
 
 `impactReport.status` vaut `no_impact`, `review_required`, `high_risk` ou `blocked`. `recommendation` vaut `approve`, `review` ou `block`. Les blockers standards couvrent les revocations, le volume de decisions changees et les ressources sensibles touchees.
 
+Le rollout applique ces garde-fous :
+
+- `recommendation = block` ou `status = blocked` : rollout refuse avec `POLICY_IMPACT_BLOCKED`;
+- `recommendation = review`, `status = review_required` ou `status = high_risk` : rollout autorise seulement apres `reviewStatus = approved`;
+- `recommendation = approve` et `status = no_impact` : rollout possible sans revue manuelle.
+
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 
 ```bash

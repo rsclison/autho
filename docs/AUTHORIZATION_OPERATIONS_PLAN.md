@@ -100,8 +100,9 @@ Etat d'avancement :
 - shadow evaluation disponible via `POST /v1/authz/shadow` : la decision de production reste authoritative et la politique candidate est comparee en dry-run;
 - rapport d'impact ajoute avec recommendation `approve`, `review`, `block`;
 - seuils de blocage configurables : `maxRevokes`, `maxChangedDecisions`, `allowSensitiveResourceChanges`;
+- garde-fous de rollout : les analyses `block` sont non deployables, les analyses `review` exigent une approbation, les analyses `approve/no_impact` peuvent etre deployees directement;
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
-- prochaine etape : renforcer les garde-fous automatiques de rollout avec approbations obligatoires selon le risque.
+- prochaine etape : ajouter un workflow de politique plus explicite avec etats `draft`, `review`, `approved`, `deployed` et rollback auditable.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 

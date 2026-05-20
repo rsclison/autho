@@ -547,6 +547,27 @@ components:
         source_candidate_version:
           type: integer
 
+    PolicyImpactRolloutGate:
+      type: object
+      properties:
+        riskKnown:
+          type: boolean
+        recommendation:
+          type: string
+          enum: [approve, review, block]
+        status:
+          type: string
+          enum: [no_impact, review_required, high_risk, blocked]
+        blockers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        blocked:
+          type: boolean
+        reviewRequired:
+          type: boolean
+
     PolicyImpactRolloutResponse:
       type: object
       properties:
@@ -563,6 +584,8 @@ components:
         rolloutStatus:
           type: string
           enum: [deployed]
+        rolloutGate:
+          $ref: '#/components/schemas/PolicyImpactRolloutGate'
         versionLink:
           $ref: '#/components/schemas/PolicyVersionLink'
         history:
@@ -1261,7 +1284,7 @@ paths:
   /v1/policies/{resource-class}/impact/history/{analysis-id}/rollout:
     post:
       tags: [policies]
-      summary: Promote an approved impact preview into a deployed policy version
+      summary: Promote an impact preview into a deployed policy version when rollout gates allow it
       operationId: rolloutPolicyImpactPreview
       parameters:
         - in: path
@@ -1286,7 +1309,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/PolicyImpactRolloutResponse'
         '409':
-          description: Preview is not approved, not promotable, or already deployed
+          description: Preview is blocked, not approved when review is required, not promotable, or already deployed
 
   /v1/policies/{resource-class}/timeline:
     get:
