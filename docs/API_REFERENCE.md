@@ -671,6 +671,15 @@ curl -X POST http://localhost:8080/v1/policies/Facture/impact \
       "maxChangedDecisions": 50,
       "allowSensitiveResourceChanges": false
     },
+    "riskProfiles": {
+      "default": {"maxRevokes": 0},
+      "environments": {
+        "staging": {"maxRevokes": 2}
+      },
+      "resourceClasses": {
+        "Facture": {"allowSensitiveResourceChanges": false}
+      }
+    },
     "requests": [
       {
         "subject": {"id": "alice"},
@@ -682,6 +691,8 @@ curl -X POST http://localhost:8080/v1/policies/Facture/impact \
 ```
 
 `impactReport.status` vaut `no_impact`, `review_required`, `high_risk` ou `blocked`. `recommendation` vaut `approve`, `review` ou `block`. Les blockers standards couvrent les revocations, le volume de decisions changees et les ressources sensibles touchees.
+
+Les seuils effectifs sont resolus dans cet ordre : profil `default`, profil `environments[environment]`, profil `resourceClasses[resourceClass]`, puis `thresholds` de la requete. Le resultat expose `riskProfile` pour auditer les sources appliquees.
 
 Le rollout applique ces garde-fous :
 

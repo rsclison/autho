@@ -545,12 +545,16 @@
 
 
 (deftest analyze-policy-impact-handler-returns-impact-summary-test
-  (let [request (mock-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
+  (let [captured (atom nil)
+        request (mock-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
                                                                              :resource {:class "Document" :id "doc-1"}
                                                                              :operation "read"}]
-                                                                 :candidatePolicy {:strategy "permit-unless-deny"}}))]
+                                                                 :candidatePolicy {:strategy "permit-unless-deny"}})
+                              :params {:environment "staging"})]
     (with-redefs [policy-impact/analyze-impact (fn [_ body]
+                                                 (reset! captured body)
                                                  {:resourceClass (:resourceClass body)
+                                                  :environment (:environment body)
                                                   :summary {:totalRequests 1
                                                             :changedDecisions 1
                                                             :grants 1
@@ -560,6 +564,8 @@
             body (parse-response-body response)]
         (is (= 200 (:status response)))
         (is (= "Document" (get-in body [:data :resourceClass])))
+        (is (= "staging" (get-in body [:data :environment])))
+        (is (= "staging" (:environment @captured)))
         (is (= 1 (get-in body [:data :summary :grants])))))))
 
 (deftest list-policy-versions-handler-returns-lineage-metadata-test

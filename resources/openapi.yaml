@@ -414,6 +414,8 @@ components:
         thresholds:
           type: object
           additionalProperties: true
+        riskProfile:
+          $ref: '#/components/schemas/PolicyRiskProfileResolution'
         sensitiveResourcesImpacted:
           type: array
           items:
@@ -430,6 +432,23 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/PolicyImpactOperationSummary'
+
+    PolicyRiskProfileResolution:
+      type: object
+      properties:
+        name:
+          type: string
+        environment:
+          type: string
+        resourceClass:
+          type: string
+        thresholds:
+          type: object
+          additionalProperties: true
+        sources:
+          type: array
+          items:
+            type: string
 
     PolicyImpactSummary:
       type: object
@@ -475,6 +494,8 @@ components:
           $ref: '#/components/schemas/PolicyBlastRadius'
         riskSignals:
           $ref: '#/components/schemas/PolicyImpactRiskSignals'
+        riskProfile:
+          $ref: '#/components/schemas/PolicyRiskProfileResolution'
         impactReport:
           $ref: '#/components/schemas/PolicyImpactReport'
         changes:
@@ -1190,6 +1211,22 @@ paths:
                     allowSensitiveResourceChanges:
                       type: boolean
                       default: false
+                riskProfiles:
+                  type: object
+                  properties:
+                    default:
+                      type: object
+                      additionalProperties: true
+                    environments:
+                      type: object
+                      additionalProperties:
+                        type: object
+                        additionalProperties: true
+                    resourceClasses:
+                      type: object
+                      additionalProperties:
+                        type: object
+                        additionalProperties: true
       responses:
         '200':
           description: Policy impact analysis

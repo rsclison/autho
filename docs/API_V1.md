@@ -549,6 +549,15 @@ Compare the current or versioned baseline with a candidate policy over a request
     "maxChangedDecisions": 50,
     "allowSensitiveResourceChanges": false
   },
+  "riskProfiles": {
+    "default": {"maxRevokes": 0},
+    "environments": {
+      "staging": {"maxRevokes": 2}
+    },
+    "resourceClasses": {
+      "Document": {"allowSensitiveResourceChanges": false}
+    }
+  },
   "requests": [
     {
       "subject": {"id": "alice"},
@@ -560,6 +569,8 @@ Compare the current or versioned baseline with a candidate policy over a request
 ```
 
 `impactReport.status` is one of `no_impact`, `review_required`, `high_risk`, `blocked`; `recommendation` is one of `approve`, `review`, `block`.
+
+Effective thresholds are resolved in this order: `riskProfiles.default`, `riskProfiles.environments[environment]`, `riskProfiles.resourceClasses[resourceClass]`, then request-level `thresholds`. The response includes `riskProfile` so reviewers can audit which sources were applied.
 
 Rollout gates are enforced when promoting an impact preview:
 

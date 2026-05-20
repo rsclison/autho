@@ -165,9 +165,33 @@
     (get thresholds key)
     default))
 
+(defn- risk-profile-thresholds
+  [resource-class {:keys [environment riskProfiles thresholds]}]
+  (let [profiles (or riskProfiles {})
+        default-profile (:default profiles)
+        environment-profile (get-in profiles [:environments environment])
+        resource-profile (get-in profiles [:resourceClasses resource-class])
+        resolved-thresholds (merge default-profile
+                                   environment-profile
+                                   resource-profile
+                                   thresholds)]
+    {:name (cond
+             resource-profile (str "resourceClass:" resource-class)
+             environment-profile (str "environment:" environment)
+             default-profile "default"
+             :else "builtin")
+     :environment environment
+     :resourceClass resource-class
+     :thresholds resolved-thresholds
+     :sources (cond-> []
+                default-profile (conj "default")
+                environment-profile (conj "environment")
+                resource-profile (conj "resourceClass")
+                thresholds (conj "request"))}))
+
 (defn- build-impact-report
-  [summary blast-radius changes thresholds]
-  (let [thresholds (or thresholds {})
+  [summary blast-radius changes risk-profile]
+  (let [thresholds (:thresholds risk-profile)
         sensitive-resources (impacted-sensitive-resources changes)
         max-revokes (threshold-value thresholds :maxRevokes 0)
         max-changed (threshold-value thresholds :maxChangedDecisions 50)
@@ -208,6 +232,10 @@
      :thresholds {:maxRevokes max-revokes
                   :maxChangedDecisions max-changed
                   :allowSensitiveResourceChanges allow-sensitive?}
+     :riskProfile (assoc risk-profile
+                         :thresholds {:maxRevokes max-revokes
+                                      :maxChangedDecisions max-changed
+                                      :allowSensitiveResourceChanges allow-sensitive?})
      :sensitiveResourcesImpacted sensitive-resources
      :rulesResponsible (rule-impact changes)
      :populationsTouched (:subjects blast-radius)
@@ -265,8 +293,10 @@
           summary (assoc (summarize-items comparisons)
                          :byOperation (summarize-by comparisons #(or (get-in % [:request :operation]) "*")))
           blast-radius (build-blast-radius changed)
-          impact-report (build-impact-report summary blast-radius (vec changed) (:thresholds body))]
+          risk-profile (risk-profile-thresholds resource-class body)
+          impact-report (build-impact-report summary blast-radius (vec changed) risk-profile)]
       {:resourceClass resource-class
+       :environment (:environment body)
        :requestSource (dissoc source :requests)
        :baseline {:version (:baselineVersion body)
                   :strategy (:strategy base-policy)}
@@ -279,5 +309,6 @@
        :summary summary
        :blastRadius blast-radius
        :riskSignals (build-risk-signals summary blast-radius)
+       :riskProfile risk-profile
        :impactReport impact-report
        :changes (vec changed)})))

@@ -149,6 +149,36 @@
         (is (= "review" (get-in result [:impactReport :recommendation])))
         (is (= [] (get-in result [:impactReport :blockers])))))))
 
+(deftest analyze-impact-resolves-risk-profiles-by-environment-and-resource-test
+  (let [current-policy {:strategy "almost_one_allow_no_deny" :id "current"}
+        candidate-policy {:strategy "almost_one_allow_no_deny" :id "candidate"}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] current-policy)
+                  pdp/simulate (fn [_ simulate-body]
+                                 (if (= current-policy (:simulatedPolicy simulate-body))
+                                   {:allowed? true :decisionType "allow" :matchedRuleNames ["old"]}
+                                   {:allowed? false :decisionType "deny" :matchedRuleNames ["new"]}))]
+      (let [result (impact/analyze-impact {} {:resourceClass "Document"
+                                              :environment "prod"
+                                              :candidatePolicy candidate-policy
+                                              :riskProfiles {:default {:maxRevokes 0
+                                                                       :maxChangedDecisions 50
+                                                                       :allowSensitiveResourceChanges false}
+                                                             :environments {"prod" {:maxRevokes 1}}
+                                                             :resourceClasses {"Document" {:allowSensitiveResourceChanges true}}}
+                                              :requests [{:subject {:id "user1"}
+                                                          :resource {:class "Document"
+                                                                     :id "secret-doc"
+                                                                     :classification "secret"}
+                                                          :operation "read"}]})]
+        (is (= "prod" (:environment result)))
+        (is (= "resourceClass:Document" (get-in result [:riskProfile :name])))
+        (is (= ["default" "environment" "resourceClass"]
+               (get-in result [:riskProfile :sources])))
+        (is (= 1 (get-in result [:impactReport :thresholds :maxRevokes])))
+        (is (= true (get-in result [:impactReport :thresholds :allowSensitiveResourceChanges])))
+        (is (= "high_risk" (get-in result [:impactReport :status])))
+        (is (= [] (get-in result [:impactReport :blockers])))))))
+
 (deftest analyze-impact-can-use-audit-replay-source-test
   (let [current-policy {:strategy "almost_one_allow_no_deny" :id "current"}
         candidate-policy {:strategy "almost_one_allow_no_deny" :id "candidate"}]

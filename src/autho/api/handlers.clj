@@ -560,7 +560,9 @@
     (if (response-map? body-or-response)
       body-or-response
       (try
-        (let [body (assoc body-or-response :resourceClass resource-class)
+        (let [environment (request-environment request body-or-response)
+              body (cond-> (assoc body-or-response :resourceClass resource-class)
+                     environment (assoc :environment environment))
               analysis (policy-impact/analyze-impact request body)
               author (get-in request [:identity :client-id] "api")
               analysis-id (try
