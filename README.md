@@ -91,11 +91,13 @@ export API_KEY="my-strong-api-key-32-chars-min"
 export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
 export API_CLIENT_TENANTS="acme"
+export KAFKA_ENABLED="false"
 
 ./lein run
 # Serveur démarré sur http://localhost:8080
 ```
 
+Pour une démonstration locale sans Kafka/RocksDB, `KAFKA_ENABLED=false` évite de démarrer les PIPs Kafka configurés dans `resources/pips.edn`.
 Le démarrage standard utilise le point d'entrée `autho.core` déclaré dans `project.clj`.
 La tâche `lein ring server-headless` n'est pas disponible dans ce projet, car le plugin
 `lein-ring` n'est pas déclaré.

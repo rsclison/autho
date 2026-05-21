@@ -1,15 +1,16 @@
 (ns autho.person
   (:require [autho.prp :as prp]
-            [autho.ldap :as ldap]))
+            [autho.ldap :as ldap]
+            [clojure.edn :as edn]))
 
 
 (defmulti loadPersons (fn [config] (:type config)))
 
 (defmethod loadPersons :file [config]
-  ;; TODO: Implement file-based person loading
-  ;; Expected to read persons from a file specified in config
-  []
-  )
+  (let [props (:props config)
+        path  (or (:person.file props) "resources/persons.edn")]
+    (reset! prp/personSingleton
+            (vec (edn/read-string (slurp path))))))
 
 (defmethod loadPersons :ldap [config]
   (let [props     (:props config)
@@ -28,3 +29,6 @@
                           persons)]
       (reset! prp/personSingleton (vec person-map)))))
 
+(defmethod loadPersons :default [config]
+  (throw (ex-info (str "Unsupported person source: " (:type config))
+                  {:type (:type config)})))

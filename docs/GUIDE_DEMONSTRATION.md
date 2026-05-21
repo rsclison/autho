@@ -38,6 +38,7 @@ export API_CLIENT_ID="app-demo"
 export API_CLIENT_CLASS="Application"
 export API_CLIENT_ROLES="governance-admin,policy-admin,policy-reviewer,policy-deployer,relation-admin"
 export API_CLIENT_TENANTS="demo"
+export KAFKA_ENABLED="false"
 export AUDIT_HMAC_SECRET="audit-test-hmac-secret-32-chars-min-ok!!"
 export POLICY_BUNDLE_HMAC_SECRET="policy-bundle-hmac-secret-32-chars-min"
 export AUTHO_LICENSE_KEY="<licence-pro-ou-enterprise>"
@@ -52,6 +53,8 @@ Lancer le serveur :
 La commande `./lein ring server-headless` ne s'applique pas a ce projet : `project.clj` ne declare pas le plugin `lein-ring`. Le point d'entree supporte est `autho.core`, lance par `./lein run`.
 
 Si le serveur echoue ensuite avec une erreur `Connection refused` vers `localhost:389`, ce n'est plus un probleme Leiningen : la configuration `resources/pdp-prop.properties` pointe vers un LDAP local. Pour une demonstration sans LDAP, demarrer le LDAP de demonstration avant Autho ou adapter temporairement cette configuration pour ne pas utiliser `person.source = "ldap"`.
+
+Pour une demonstration sans Kafka ni RocksDB, garder `KAFKA_ENABLED=false`. Sinon, Autho tente d'ouvrir les PIPs Kafka/RocksDB declares dans `resources/pips.edn`.
 
 Verifier que le serveur repond :
 
