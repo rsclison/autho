@@ -786,7 +786,9 @@ Une politique peut ensuite utiliser :
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
 
-Limite actuelle : le check relationnel est direct. Autho ne resout pas encore les relations heritees par parent, les rewrites de usersets ni les traversals recursifs.
+Le check relationnel commence par le tuple direct, puis remonte les ressources parentes via des tuples `parent`. Exemple : si `doc-1 parent folder-1` et `alice viewer folder-1`, alors `alice` est aussi `viewer` de `doc-1`.
+
+Limite actuelle : Autho ne resout pas encore les rewrites de usersets, les groupes imbriques, les traversals relationnels arbitraires ni le stockage durable externe des relations.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 

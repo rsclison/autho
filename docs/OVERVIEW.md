@@ -23,7 +23,7 @@ Unlike RBAC (fixed roles), ABAC evaluates dynamic attributes of the subject, the
 
 ### ReBAC — Relationship-Based Access Control
 
-Autho now has a first direct ReBAC layer for relationship tuples:
+Autho now has a first ReBAC layer for relationship tuples:
 
 ```json
 {
@@ -39,7 +39,7 @@ Policies can reference this graph with:
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
 
-This first version checks direct tuples only. Recursive traversal, parent inheritance and durable relation storage are planned follow-up work.
+Autho checks direct tuples and resource-parent inheritance through `parent` tuples. For example, if a document has a parent folder and Alice is `viewer` of that folder, Alice is also treated as `viewer` of the document. Userset rewrites, group nesting and durable relation storage are planned follow-up work.
 
 ### XACML Architecture (PDP / PRP / PIP / PAP)
 
@@ -81,7 +81,7 @@ This first version checks direct tuples only. Recursive traversal, parent inheri
 - **Change timeline** combines policy versions, impact analyses, reviews, deployments and risk profile revisions
 
 ### Relationship Management
-- `GET /v1/relations` — list direct ReBAC tuples
+- `GET /v1/relations` — list ReBAC tuples
 - `POST /v1/relations` — add a tuple, protected by `relation-admin` or `governance-admin`
 - `DELETE /v1/relations` — remove a tuple, protected by `relation-admin` or `governance-admin`
 
@@ -121,7 +121,7 @@ Autho uses an **open-core** model. The core PDP (decisions) is free; advanced fe
 | Policy versioning, diff & rollback | — | ✓ | ✓ |
 | `explain` & `simulate` | — | ✓ | ✓ |
 | Shadow evaluation and impact analysis | — | ✓ | ✓ |
-| ReBAC direct relation tuples | — | ✓ | ✓ |
+| ReBAC relation tuples with parent inheritance | — | ✓ | ✓ |
 | Prometheus metrics (`/metrics`) | — | ✓ | ✓ |
 | Kafka PIP / RocksDB | — | — | ✓ |
 | Multi-instance cache synchronisation | — | — | ✓ |

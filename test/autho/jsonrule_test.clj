@@ -231,6 +231,20 @@
       (rebac/add-relation! subject "viewer" resource)
       (is (true? (:value (jsonrule/evaluateRule rule request)))))))
 
+(deftest evaluateRule-inherited-relation-condition-test
+  (testing "relation predicates inherit grants from parent resources"
+    (let [subject {:class "Person" :id "alice"}
+          document {:class "Document" :id "doc-1"}
+          folder {:class "Folder" :id "folder-1"}
+          rule {:conditions [["relation" "$s" "viewer" "$r"]]}
+          request {:subject subject
+                   :resource document
+                   :operation "read"
+                   :context {}}]
+      (rebac/add-relation! document "parent" folder)
+      (rebac/add-relation! subject "viewer" folder)
+      (is (true? (:value (jsonrule/evaluateRule rule request)))))))
+
 (deftest evaluateRule-non-owner-denied-test
   (testing "evaluateRule denies access when user is not owner"
     (let [rule {:subjectCond [:and ["=" "$.id" "$r.owner"]]

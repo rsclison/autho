@@ -510,7 +510,7 @@ Validate a candidate policy without persisting it. This endpoint runs JSON Schem
 }
 ```
 
-Policy conditions can also use a direct ReBAC predicate:
+Policy conditions can also use a ReBAC predicate:
 
 ```json
 {
@@ -518,7 +518,7 @@ Policy conditions can also use a direct ReBAC predicate:
 }
 ```
 
-This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. The current implementation supports direct subject-relation-resource tuples; recursive relation traversal is a later roadmap item.
+This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. Autho checks the direct tuple first, then walks resource ancestry through `parent` tuples. For example, if `doc-1 parent folder-1` and `alice viewer folder-1`, then Alice is also viewer of `doc-1`.
 
 Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`.
 
@@ -652,7 +652,7 @@ DELETE /v1/policies/Document
 
 #### GET /v1/relations
 
-List direct ReBAC tuples currently loaded by the server.
+List ReBAC tuples currently loaded by the server.
 
 **Response:** `200 OK`
 ```json
@@ -672,7 +672,7 @@ List direct ReBAC tuples currently loaded by the server.
 
 #### POST /v1/relations
 
-Create a direct subject-relation-resource tuple. Requires `governance-admin` or `relation-admin`.
+Create a subject-relation-resource tuple. Requires `governance-admin` or `relation-admin`.
 
 **Request:**
 ```json
@@ -704,7 +704,7 @@ Delete a direct subject-relation-resource tuple. Requires `governance-admin` or 
 }
 ```
 
-Current limitation: relation checks are direct tuple checks only. Parent inheritance, recursive traversal, userset rewrites and durable external storage are not implemented yet.
+Current limitation: Autho supports direct checks plus resource-parent inheritance through `parent` tuples. Userset rewrites, group nesting, arbitrary recursive traversals and durable external storage are not implemented yet.
 
 ### Cache Management Endpoints
 

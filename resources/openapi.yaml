@@ -813,7 +813,9 @@ components:
           type: array
           description: >
             Policy rules. Rule conditions support standard attribute clauses
-            and direct ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
+            and ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
+            Relation checks include direct tuples and resource-parent inheritance
+            through tuples whose relation is "parent".
           items:
             type: object
         tests:
@@ -862,7 +864,9 @@ components:
           type: array
           description: >
             Candidate policy rules. Rule conditions support standard attribute
-            clauses and direct ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
+            clauses and ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
+            Relation checks include direct tuples and resource-parent inheritance
+            through tuples whose relation is "parent".
           items:
             type: object
         tests:
@@ -2014,7 +2018,7 @@ paths:
   /v1/relations:
     get:
       tags: [relations]
-      summary: List direct ReBAC relation tuples
+      summary: List ReBAC relation tuples
       operationId: listRelations
       responses:
         '200':
@@ -2034,7 +2038,7 @@ paths:
                               $ref: '#/components/schemas/RelationTuple'
     post:
       tags: [relations]
-      summary: Create a direct ReBAC relation tuple
+      summary: Create a ReBAC relation tuple
       description: Requires governance-admin or relation-admin.
       operationId: createRelation
       requestBody:
@@ -2052,7 +2056,7 @@ paths:
           $ref: '#/components/responses/GovernanceForbidden'
     delete:
       tags: [relations]
-      summary: Delete a direct ReBAC relation tuple
+      summary: Delete a ReBAC relation tuple
       description: Requires governance-admin or relation-admin.
       operationId: deleteRelation
       requestBody:

@@ -23,7 +23,7 @@ Les priorites 1 a 3 disposent maintenant d'un socle operationnel :
 
 Les limites connues restent :
 
-- le ReBAC ne fait aujourd'hui que des checks directs, sans expansion recursive ni heritage parent/enfant;
+- le ReBAC supporte l'heritage par ressources parentes, mais pas encore les rewrites de usersets, groupes imbriques ou traversals relationnels generiques;
 - les tuples relationnels sont en memoire et doivent etre externalises pour un usage enterprise;
 - le control plane, le data plane et l'evidence plane ne sont pas encore separes;
 - le multi-tenant, les bundles signes et les workflows GRC complets restent a construire.
@@ -131,7 +131,7 @@ Etat d'avancement :
 - rapport agrege des ressources sensibles touchees, populations touchees et regles responsables;
 - controles RBAC reels sur les endpoints de gouvernance : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, avec bypass explicite `governance-admin`;
 - role `relation-admin` ajoute pour administrer les tuples relationnels;
-- prochaine etape : poursuivre la priorite 4 avec resolution parent/heritage et stockage durable des relations.
+- prochaine etape : poursuivre la priorite 4 avec stockage durable des relations et explain relationnel.
 
 ## Priorite 4 - Moteur hybride ABAC/ReBAC/temporal
 
@@ -153,7 +153,9 @@ Etat d'avancement :
 - predicat de politique `["relation", "$s", "viewer", "$r"]` disponible dans `conditions`;
 - API minimale `GET/POST/DELETE /v1/relations` pour administrer les tuples directs;
 - controle RBAC des mutations relationnelles via `relation-admin` ou `governance-admin`;
-- prochaine etape : ajouter la resolution parent/heritage et persister/indexer les tuples.
+- heritage par relation `parent` ajoute : un droit accorde sur une ressource parente s'applique a ses descendants;
+- index en memoire des relations `parent` pour eviter un scan complet pendant la resolution d'heritage;
+- prochaine etape : persister les tuples et ajouter l'explain relationnel.
 
 ## Priorite 5 - Architecture enterprise
 
