@@ -537,7 +537,7 @@ Policy conditions can also use a ReBAC predicate:
 }
 ```
 
-This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. Autho checks the direct tuple first, follows group membership through `member` tuples, then walks resource ancestry through `parent` tuples. For example, if `alice member team-a` and `team-a viewer folder-1`, then Alice is viewer of `folder-1`; if `doc-1 parent folder-1`, Alice is also viewer of `doc-1`.
+This checks that the effective subject has the requested relation to the requested resource in the relation graph. Autho checks the direct tuple first, expands in-memory relation rewrites, follows group membership through `member` tuples, then walks resource ancestry through `parent` tuples. For example, `can-read` can be rewritten to `viewer` or `editor`; if `alice member team-a` and `team-a viewer folder-1`, then Alice can read `folder-1`; if `doc-1 parent folder-1`, Alice can also read `doc-1`.
 
 Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`. Tuples are persisted in the policy H2 database and reloaded into in-memory indexes by `rebac/init!` during PDP startup.
 
@@ -724,8 +724,9 @@ Check a relation and return the matched tuple explanation. This endpoint reports
   "data": {
     "allowed": true,
     "subject": {"class": "Person", "id": "alice"},
-    "relation": "viewer",
+    "relation": "can-read",
     "resource": {"class": "Document", "id": "doc-1"},
+    "matchedRelation": "viewer",
     "matchedResource": {"class": "Folder", "id": "folder-1"},
     "matchedSubject": {"class": "Group", "id": "team-a"},
     "inherited": true,
@@ -736,7 +737,8 @@ Check a relation and return the matched tuple explanation. This endpoint reports
     "path": [
       {"class": "Document", "id": "doc-1"},
       {"class": "Folder", "id": "folder-1"}
-    ]
+    ],
+    "relationPath": ["can-read", "viewer"]
   }
 }
 ```
@@ -760,7 +762,7 @@ Delete a direct subject-relation-resource tuple. Requires `governance-admin` or 
 }
 ```
 
-Current limitation: Autho supports direct checks, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Userset rewrites, arbitrary recursive traversals and distributed external relation storage are not implemented yet.
+Current limitation: Autho supports direct checks, in-memory relation rewrites, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Durable rewrite administration, arbitrary recursive traversals and distributed external relation storage are not implemented yet.
 
 ### Cache Management Endpoints
 

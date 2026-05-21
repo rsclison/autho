@@ -805,6 +805,8 @@ components:
           additionalProperties: true
         relation:
           type: string
+        matchedRelation:
+          type: string
         resource:
           type: object
           additionalProperties: true
@@ -2110,7 +2112,7 @@ paths:
     post:
       tags: [relations]
       summary: Check and explain a ReBAC relation
-      description: Returns whether the relation is granted directly, through group membership, or inherited from a parent resource.
+      description: Returns whether the relation is granted directly, through a relation rewrite, through group membership, or inherited from a parent resource.
       operationId: checkRelation
       requestBody:
         required: true

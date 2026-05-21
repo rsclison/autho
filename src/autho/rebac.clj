@@ -28,6 +28,9 @@
          :parents-by-child {}
          :memberships-by-member {}}))
 
+(defonce relation-rewrites
+  (atom {}))
+
 (defonce persistence-enabled?
   (atom false))
 
@@ -158,6 +161,22 @@
   []
   (vec (:tuples @relation-tuples)))
 
+(defn set-relation-rewrite!
+  "Defines a userset rewrite for a derived relation.
+   Example: (set-relation-rewrite! \"can-read\" [\"viewer\" \"editor\"])."
+  [relation derived-relations]
+  (swap! relation-rewrites assoc (name relation) (mapv name derived-relations))
+  (get @relation-rewrites (name relation)))
+
+(defn clear-relation-rewrites!
+  []
+  (reset! relation-rewrites {})
+  true)
+
+(defn list-relation-rewrites
+  []
+  @relation-rewrites)
+
 (defn- direct-relation?
   [tuples subject relation resource]
   (contains? tuples (relation-tuple subject relation resource)))
@@ -228,6 +247,36 @@
                    (conj paths current)
                    (inc depth))))))))
 
+(defn- relation-paths
+  [relation max-depth]
+  (let [root (name relation)]
+    (loop [frontier [{:relation root
+                      :path [root]}]
+           visited #{}
+           paths []
+           depth 0]
+      (cond
+        (empty? frontier)
+        paths
+
+        (> depth max-depth)
+        paths
+
+        :else
+        (let [{:keys [relation path] :as current} (first frontier)
+              remaining (subvec (vec frontier) 1)]
+          (if (contains? visited relation)
+            (recur remaining visited paths depth)
+            (let [derived (remove visited (get @relation-rewrites relation []))
+                  derived-paths (mapv (fn [derived-relation]
+                                        {:relation derived-relation
+                                         :path (conj path derived-relation)})
+                                      derived)]
+              (recur (vec (concat remaining derived-paths))
+                     (conj visited relation)
+                     (conj paths current)
+                     (inc depth)))))))))
+
 (defn explain-relation
   "Explains whether subject has relation to resource.
    The explanation includes the matched resource and the parent path when a
@@ -250,13 +299,15 @@
                                [{:resource resource-key
                                  :path [resource-key]}])
          match (first
-                (for [subject-candidate subject-candidates
+                (for [relation-candidate (relation-paths relation max-depth)
+                      subject-candidate subject-candidates
                       resource-candidate resource-candidates
                       :when (direct-relation? tuples
                                               (:subject subject-candidate)
-                                              relation
+                                              (:relation relation-candidate)
                                               (:resource resource-candidate))]
-                  {:subject-candidate subject-candidate
+                  {:relation-candidate relation-candidate
+                   :subject-candidate subject-candidate
                    :resource-candidate resource-candidate}))]
      (cond-> {:allowed (boolean match)
               :subject subject-key
@@ -264,12 +315,16 @@
               :resource resource-key}
        match
        (assoc :matchedSubject (get-in match [:subject-candidate :subject])
+              :matchedRelation (get-in match [:relation-candidate :relation])
               :matchedResource (get-in match [:resource-candidate :resource])
               :inherited (or (not= subject-key (get-in match [:subject-candidate :subject]))
-                             (not= resource-key (get-in match [:resource-candidate :resource])))
+                             (not= resource-key (get-in match [:resource-candidate :resource]))
+                             (not= (name relation) (get-in match [:relation-candidate :relation])))
               :path (get-in match [:resource-candidate :path]))
        (and match (not= subject-key (get-in match [:subject-candidate :subject])))
-       (assoc :subjectPath (get-in match [:subject-candidate :path]))))))
+       (assoc :subjectPath (get-in match [:subject-candidate :path]))
+       (and match (not= (name relation) (get-in match [:relation-candidate :relation])))
+       (assoc :relationPath (get-in match [:relation-candidate :path]))))))
 
 (defn has-relation?
   "Returns true when subject has relation to resource.

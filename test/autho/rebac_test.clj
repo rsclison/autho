@@ -6,8 +6,10 @@
 (use-fixtures :each
   (fn [f]
     (rebac/clear-relations!)
+    (rebac/clear-relation-rewrites!)
     (f)
-    (rebac/clear-relations!)))
+    (rebac/clear-relations!)
+    (rebac/clear-relation-rewrites!)))
 
 (deftest direct-relation-tuples-test
   (let [subject {:class "Person" :id "alice"}
@@ -47,6 +49,7 @@
             :relation "viewer"
             :resource {:class "Document" :id "doc-1"}
             :matchedSubject {:class "Person" :id "alice"}
+            :matchedRelation "viewer"
             :matchedResource {:class "Folder" :id "folder-1"}
             :inherited true
             :path [{:class "Document" :id "doc-1"}
@@ -75,6 +78,7 @@
             :relation "viewer"
             :resource {:class "Document" :id "doc-1"}
             :matchedSubject {:class "Group" :id "team-a"}
+            :matchedRelation "viewer"
             :matchedResource {:class "Document" :id "doc-1"}
             :inherited true
             :path [{:class "Document" :id "doc-1"}]
@@ -95,6 +99,34 @@
             {:class "Group" :id "team-a"}
             {:class "Group" :id "org-admins"}]
            (:subjectPath (rebac/explain-relation subject "viewer" resource))))))
+
+(deftest relation-rewrite-test
+  (let [subject {:class "Person" :id "alice"}
+        resource {:class "Document" :id "doc-1"}]
+    (rebac/set-relation-rewrite! "can-read" ["viewer" "editor"])
+    (rebac/add-relation! subject "viewer" resource)
+    (is (true? (rebac/has-relation? subject "can-read" resource)))
+    (is (= {:allowed true
+            :subject {:class "Person" :id "alice"}
+            :relation "can-read"
+            :resource {:class "Document" :id "doc-1"}
+            :matchedSubject {:class "Person" :id "alice"}
+            :matchedRelation "viewer"
+            :matchedResource {:class "Document" :id "doc-1"}
+            :inherited true
+            :path [{:class "Document" :id "doc-1"}]
+            :relationPath ["can-read" "viewer"]}
+           (rebac/explain-relation subject "can-read" resource)))))
+
+(deftest relation-rewrite-stops-on-cycles-test
+  (let [subject {:class "Person" :id "alice"}
+        resource {:class "Document" :id "doc-1"}]
+    (rebac/set-relation-rewrite! "can-read" ["readable"])
+    (rebac/set-relation-rewrite! "readable" ["can-read" "viewer"])
+    (rebac/add-relation! subject "viewer" resource)
+    (is (true? (rebac/has-relation? subject "can-read" resource)))
+    (is (= ["can-read" "readable" "viewer"]
+           (:relationPath (rebac/explain-relation subject "can-read" resource))))))
 
 (deftest durable-relations-survive-reinit-test
   (let [test-db {:classname "org.h2.Driver"

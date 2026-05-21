@@ -807,7 +807,9 @@ curl -X POST http://localhost:8080/v1/relations/check \
   }'
 ```
 
-Limite actuelle : Autho ne resout pas encore les rewrites de usersets, les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
+Le check relationnel commence par le tuple direct, applique les rewrites de relation en mémoire, suit les groupes via des tuples `member`, puis remonte les ressources parentes via des tuples `parent`.
+
+Limite actuelle : les rewrites de relations sont configurables en mémoire côté moteur, mais ne disposent pas encore d'une API d'administration durable. Autho ne resout pas encore les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 
