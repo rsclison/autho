@@ -164,6 +164,7 @@ services:
       API_CLIENT_ROLES: "governance-admin,policy-admin,policy-reviewer,policy-deployer,relation-admin"
       API_CLIENT_TENANTS: "demo"
       KAFKA_ENABLED: "true"
+      AUTHO_DEMO_LICENSE_TIER: "enterprise"
       PDP_CONFIG_PATH: "resources/pdp-prop.docker.properties"
       PIPS_CONFIG_PATH: "resources/pips.docker.edn"
       LDAP_PASSWORD: "admin"

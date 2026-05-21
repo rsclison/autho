@@ -57,7 +57,7 @@ curl -fsS -X POST "$BASE_URL/v1/authz/decisions" \
 echo
 
 echo "Explanation for the allowed decision:"
-curl -fsS -X POST "$BASE_URL/explain" \
+curl -fsS -X POST "$BASE_URL/v1/authz/explain" \
   -H "Content-Type: application/json" \
   -H "Authorization: X-API-Key $API_KEY" \
   -H "X-Tenant-ID: demo" \

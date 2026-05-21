@@ -26,6 +26,8 @@ abcdefghijklmnopqrstuvwxyz123456
 
 Dans cette stack, Autho tourne aussi en container. RocksDB est embarqué dans le container Autho et stocké dans le volume Docker `autho_data`, sous `/data/rocksdb/shared`.
 
+La stack active `AUTHO_DEMO_LICENSE_TIER=enterprise` pour exposer toutes les fonctionnalites pendant la demonstration : audit, versioning, explain, simulate, shadow, metrics, Kafka PIP et multi-instance. Cette variable est reservee aux environnements de demonstration.
+
 ### phpLDAPadmin — connexion
 - Login DN : `cn=admin,dc=example,dc=com`
 - Mot de passe : `admin`
@@ -90,7 +92,7 @@ Resultat attendu :
 
 - `FAC-TEST-01` est autorisee, car `30000 < 50000` ;
 - `FAC-TEST-02` est refusee, car `80000 > 50000`.
-- le script appelle ensuite l'endpoint legacy `/explain` pour montrer la trace de decision sans exiger de licence Pro. L'endpoint stable `/v1/authz/explain` reste disponible pour les environnements licencies.
+- le script appelle ensuite l'endpoint stable `/v1/authz/explain`, disponible grace a la licence de demonstration Enterprise.
 
 Commandes manuelles equivalentes :
 

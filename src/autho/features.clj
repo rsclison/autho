@@ -34,6 +34,10 @@
 (defonce ^:private active-claims
   (atom nil))
 
+(defn- env
+  [key]
+  (System/getenv key))
+
 ;; ---------------------------------------------------------------------------
 ;; Activation
 ;; ---------------------------------------------------------------------------
@@ -48,15 +52,28 @@
     (reset! active-features enabled)
     (reset! active-claims claims)
     (.info logger (format "Licence %s activée — client: %s — expire: %s — features: [%s]"
-                          (name tier)
-                          (:customer claims)
-                          (:expires_at claims)
-                          (str/join ", " (map name enabled))))))
+	                          (name tier)
+	                          (:customer claims)
+	                          (:expires_at claims)
+	                          (str/join ", " (map name enabled))))))
+
+(defn- demo-license-claims
+  []
+  (when-let [tier (or (env "AUTHO_DEMO_LICENSE_TIER")
+                      (env "AUTHO_DEMO_LICENSE"))]
+    (let [tier-key (keyword tier)]
+      (when (contains? tier-features tier-key)
+        {:tier       (name tier-key)
+         :customer   "Autho Demo"
+         :issued_at  "demo"
+         :expires_at "2099-12-31"
+         :features   (mapv name (get tier-features tier-key))
+         :demo       true}))))
 
 (defn init!
   "Reads AUTHO_LICENSE_KEY and activates the licence. Safe to call with no env var (free tier)."
   []
-  (if-let [token (System/getenv "AUTHO_LICENSE_KEY")]
+  (if-let [token (env "AUTHO_LICENSE_KEY")]
     (try
       (let [claims (license/parse-and-verify token)]
         (activate! claims))
@@ -64,7 +81,11 @@
         (.error logger "Erreur de licence : {} — démarrage en mode free" (ex-message e))
         ;; Keep free tier features — do not crash the server
         ))
-    (.info logger "Aucune licence détectée (AUTHO_LICENSE_KEY absent) — mode free")))
+    (if-let [claims (demo-license-claims)]
+      (do
+        (.warn logger "Licence de demonstration activee. Ne pas utiliser AUTHO_DEMO_LICENSE_TIER en production.")
+        (activate! claims))
+      (.info logger "Aucune licence détectée (AUTHO_LICENSE_KEY absent) — mode free"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Feature checks
@@ -96,9 +117,10 @@
   "Returns a summary map for the /status endpoint."
   []
   (if-let [claims @active-claims]
-    {:tier       (:tier claims)
-     :customer   (:customer claims)
-     :expires_at (:expires_at claims)
-     :features   (mapv name @active-features)}
+    (cond-> {:tier       (:tier claims)
+             :customer   (:customer claims)
+             :expires_at (:expires_at claims)
+             :features   (mapv name @active-features)}
+      (:demo claims) (assoc :demo true))
     {:tier     "free"
      :features (mapv name @active-features)}))

@@ -131,6 +131,8 @@ Le script lance :
 
 Il injecte ensuite les objets de `docker/kafka-producer/test-factures.json` dans le topic `business-objects-compacted`. Le consumer Kafka d'Autho lit ces messages et met a jour RocksDB dans le container Autho. Les appels d'autorisation ne transmettent ensuite que `{"class": "Facture", "id": "FAC-TEST-01"}` : les attributs `service` et `montant` sont lus depuis RocksDB pendant l'evaluation de la regle.
 
+Cette stack active `AUTHO_DEMO_LICENSE_TIER=enterprise`. Elle donne acces aux fonctionnalites maximales de demonstration : audit, versioning, explain, simulate, shadow, metrics, Kafka PIP et multi-instance. Ne pas utiliser cette variable pour un environnement de production.
+
 Services exposes :
 
 | Service | URL |
