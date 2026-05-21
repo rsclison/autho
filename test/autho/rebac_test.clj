@@ -151,6 +151,29 @@
           (finally
             (rebac/clear-relations! {:persist true})))))))
 
+(deftest durable-rewrites-survive-reinit-test
+  (let [test-db {:classname "org.h2.Driver"
+                 :subprotocol "h2:mem"
+                 :subname "rebac-rewrite-test;DB_CLOSE_DELAY=-1"
+                 :user "sa"
+                 :password ""}]
+    (with-redefs-fn {#'rebac/db test-db
+                     #'rebac/persistence-enabled? (atom false)}
+      (fn []
+        (try
+          (jdbc/execute! test-db ["DROP TABLE IF EXISTS REBAC_RELATION_REWRITES"])
+          (jdbc/execute! test-db ["DROP TABLE IF EXISTS REBAC_RELATIONS"])
+          (rebac/init!)
+          (rebac/clear-relation-rewrites! {:persist true})
+          (rebac/set-relation-rewrite! "can-read" ["viewer" "editor"])
+          (rebac/clear-relation-rewrites!)
+          (is (empty? (rebac/list-relation-rewrites)))
+          (rebac/init!)
+          (is (= {"can-read" ["editor" "viewer"]}
+                 (rebac/list-relation-rewrites)))
+          (finally
+            (rebac/clear-relation-rewrites! {:persist true})))))))
+
 (deftest inherited-resource-relation-stops-on-cycles-test
   (let [subject {:class "Person" :id "alice"}
         folder-a {:class "Folder" :id "a"}

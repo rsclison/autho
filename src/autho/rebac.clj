@@ -53,6 +53,11 @@
    :resource_class (:class resource)
    :resource_id (:id resource)})
 
+(defn- rewrite-row
+  [relation rewritten-relation]
+  {:relation (name relation)
+   :rewritten_relation (name rewritten-relation)})
+
 (defn- row->tuple
   [row]
   {:subject {:class (:subject_class row)
@@ -60,6 +65,13 @@
    :relation (:relation row)
    :resource {:class (:resource_class row)
               :id (:resource_id row)}})
+
+(defn- rows->rewrites
+  [rows]
+  (reduce (fn [rewrites {:keys [relation rewritten_relation]}]
+            (update rewrites relation (fnil conj []) rewritten_relation))
+          {}
+          rows))
 
 (defn- add-to-index
   [store tuple]
@@ -108,14 +120,30 @@
          created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
          UNIQUE (subject_class, subject_id, relation, resource_class, resource_id)
        )"])
+    (jdbc/execute! db
+                   ["CREATE TABLE IF NOT EXISTS REBAC_RELATION_REWRITES (
+         id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+         relation           VARCHAR(255) NOT NULL,
+         rewritten_relation VARCHAR(255) NOT NULL,
+         created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE (relation, rewritten_relation)
+       )"])
     (let [tuples (mapv row->tuple
                        (jdbc/query db
                                    ["SELECT subject_class, subject_id, relation,
                                             resource_class, resource_id
-                                       FROM REBAC_RELATIONS"]))]
+                                       FROM REBAC_RELATIONS"]))
+          rewrites (rows->rewrites
+                    (jdbc/query db
+                                ["SELECT relation, rewritten_relation
+                                    FROM REBAC_RELATION_REWRITES
+                                ORDER BY relation ASC, rewritten_relation ASC"]))]
       (reset! relation-tuples (build-index tuples))
+      (reset! relation-rewrites rewrites)
       (reset! persistence-enabled? true)
-      (.info logger "REBAC_RELATIONS table ready with {} tuple(s)" (count tuples)))
+      (.info logger "REBAC_RELATIONS table ready with {} tuple(s) and {} rewrite(s)"
+             (count tuples)
+             (reduce + 0 (map count (vals rewrites)))))
     (catch Exception e
       (.error logger "Failed to initialize REBAC_RELATIONS: {}" (.getMessage e) e))))
 
@@ -165,13 +193,31 @@
   "Defines a userset rewrite for a derived relation.
    Example: (set-relation-rewrite! \"can-read\" [\"viewer\" \"editor\"])."
   [relation derived-relations]
-  (swap! relation-rewrites assoc (name relation) (mapv name derived-relations))
-  (get @relation-rewrites (name relation)))
+  (let [relation (name relation)
+        derived-relations (vec (distinct (map name derived-relations)))]
+    (when @persistence-enabled?
+      (jdbc/with-db-transaction [tx db]
+        (jdbc/delete! tx :rebac_relation_rewrites ["relation = ?" relation])
+        (doseq [derived-relation derived-relations]
+          (jdbc/insert! tx :rebac_relation_rewrites (rewrite-row relation derived-relation)))))
+    (swap! relation-rewrites assoc relation derived-relations)
+    (get @relation-rewrites relation)))
+
+(defn delete-relation-rewrite!
+  [relation]
+  (let [relation (name relation)]
+    (when @persistence-enabled?
+      (jdbc/delete! db :rebac_relation_rewrites ["relation = ?" relation]))
+    (swap! relation-rewrites dissoc relation)
+    true))
 
 (defn clear-relation-rewrites!
-  []
-  (reset! relation-rewrites {})
-  true)
+  ([] (clear-relation-rewrites! {}))
+  ([{:keys [persist]}]
+   (reset! relation-rewrites {})
+   (when (and persist @persistence-enabled?)
+     (jdbc/delete! db :rebac_relation_rewrites ["1 = 1"]))
+   true))
 
 (defn list-relation-rewrites
   []

@@ -711,6 +711,36 @@
     (finally
       (rebac/clear-relations!))))
 
+(deftest relation-rewrite-handlers-manage-rewrites-test
+  (rebac/clear-relation-rewrites!)
+  (try
+    (let [upsert-response (handlers/upsert-relation-rewrite
+                           "can-read"
+                           (governance-request :body (json/write-value-as-string
+                                                      {:relations ["viewer" "editor"]})))
+          upsert-body (parse-response-body upsert-response)
+          list-response (handlers/list-relation-rewrites)
+          list-body (parse-response-body list-response)
+          delete-response (handlers/delete-relation-rewrite "can-read" (governance-request))
+          delete-body (parse-response-body delete-response)]
+      (is (= 200 (:status upsert-response)))
+      (is (= ["viewer" "editor"] (get-in upsert-body [:data :relations])))
+      (is (= ["viewer" "editor"] (get-in list-body [:data :rewrites :can-read])))
+      (is (= 200 (:status delete-response)))
+      (is (= true (get-in delete-body [:data :deleted])))
+      (is (empty? (rebac/list-relation-rewrites))))
+    (finally
+      (rebac/clear-relation-rewrites!))))
+
+(deftest relation-rewrite-mutation-requires-admin-role-test
+  (let [request (mock-request :body (json/write-value-as-string {:relations ["viewer"]})
+                              :identity {:client-id "viewer"
+                                         :roles ["policy-viewer"]})
+        response (handlers/upsert-relation-rewrite "can-read" request)
+        body (parse-response-body response)]
+    (is (= 403 (:status response)))
+    (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code])))))
+
 (deftest relation-mutation-requires-admin-role-test
   (let [payload {:subject {:class "Person" :id "alice"}
                  :relation "viewer"
@@ -750,6 +780,22 @@
                      :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
     (is (= 200 (:status response)))
     (is (= "/relations/check" (:uri @captured)))))
+
+(deftest relation-rewrite-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/upsert-relation-rewrite
+                               (fn [relation request]
+                                 (reset! captured {:relation relation
+                                                   :uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :put
+                     :uri "/relations/rewrites/can-read"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= "can-read" (:relation @captured)))
+    (is (= "/relations/rewrites/can-read" (:uri @captured)))))
 
 (deftest list-policy-versions-handler-returns-lineage-metadata-test
   (with-redefs [pv/list-versions (fn [_]

@@ -125,6 +125,15 @@
     (GET "/" []
          (handlers/list-relations))
 
+    (GET "/rewrites" []
+         (handlers/list-relation-rewrites))
+
+    (PUT "/rewrites/:relation" [relation :as request]
+         (handlers/upsert-relation-rewrite relation request))
+
+    (DELETE "/rewrites/:relation" [relation :as request]
+            (handlers/delete-relation-rewrite relation request))
+
     (POST "/" request
           (handlers/create-relation request))
 

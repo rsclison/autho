@@ -208,6 +208,7 @@ Les mutations de politiques, profils de risque, reviews, rollouts et relations s
 
 Les tuples ReBAC sont persistés dans la base H2 des politiques (`REBAC_RELATIONS`) et rechargés en index mémoire au démarrage du PDP.
 La relation `member` permet les groupes imbriqués ; la relation `parent` permet l'héritage depuis les ressources parentes.
+Les rewrites de relations sont persistés dans `REBAC_RELATION_REWRITES` et administrables via `/v1/relations/rewrites`.
 
 ### Time-Travel (Kafka activé)
 

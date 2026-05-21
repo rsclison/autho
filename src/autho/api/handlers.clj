@@ -126,6 +126,20 @@
      :relation relation
      :resource resource}))
 
+(defn- validate-relation-rewrite-payload!
+  [relation body]
+  (let [relations (or (:relations body)
+                      (:rewrites body)
+                      (:derivedRelations body))]
+    (when (or (str/blank? (str relation))
+              (not (sequential? relations))
+              (empty? relations)
+              (some #(str/blank? (str %)) relations))
+      (throw (ex-info "Relation rewrite requires a relation and non-empty relations"
+                      {:status 400
+                       :error-code "INVALID_RELATION_REWRITE"})))
+    (mapv str relations)))
+
 (defn require-body
   [request]
   (if-let [body (:body-params request)]
@@ -952,6 +966,44 @@
 (defn list-relations
   []
   (response/success-response {:relations (rebac/list-relations)}))
+
+(defn list-relation-rewrites
+  []
+  (response/success-response {:rewrites (rebac/list-relation-rewrites)}))
+
+(defn upsert-relation-rewrite
+  [relation request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (require-governance-role! request #{"relation-admin"})
+        (let [relations (validate-relation-rewrite-payload! relation body-or-response)
+              rewrite (rebac/set-relation-rewrite! relation relations)]
+          (response/success-response {:relation relation
+                                      :relations rewrite}))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RELATION_REWRITE_ERROR" "Failed to update relation rewrite: "))
+        (catch Exception e
+          (log/error e "Error updating relation rewrite")
+          (response/error-response "RELATION_REWRITE_ERROR"
+                                   (str "Failed to update relation rewrite: " (.getMessage e))
+                                   500))))))
+
+(defn delete-relation-rewrite
+  [relation request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (rebac/delete-relation-rewrite! relation)
+    (response/success-response {:deleted true
+                                :relation relation})
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RELATION_REWRITE_ERROR" "Failed to delete relation rewrite: "))
+    (catch Exception e
+      (log/error e "Error deleting relation rewrite")
+      (response/error-response "RELATION_REWRITE_ERROR"
+                               (str "Failed to delete relation rewrite: " (.getMessage e))
+                               500))))
 
 (defn create-relation
   [request]

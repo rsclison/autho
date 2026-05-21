@@ -792,7 +792,16 @@ Une politique peut ensuite utiliser :
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
 
-Le check relationnel commence par le tuple direct, suit les groupes via des tuples `member`, puis remonte les ressources parentes via des tuples `parent`. Exemple : si `alice member team-a`, `team-a viewer folder-1` et `doc-1 parent folder-1`, alors `alice` est aussi `viewer` de `doc-1`.
+Le check relationnel commence par le tuple direct, applique les rewrites persistés, suit les groupes via des tuples `member`, puis remonte les ressources parentes via des tuples `parent`. Exemple : si `can-read` est réécrit vers `viewer`, `alice member team-a`, `team-a viewer folder-1` et `doc-1 parent folder-1`, alors `alice` a aussi `can-read` sur `doc-1`.
+
+Les rewrites sont administrables via `GET/PUT/DELETE /v1/relations/rewrites...` :
+
+```bash
+curl -X PUT http://localhost:8080/v1/relations/rewrites/can-read \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{"relations": ["viewer", "editor"]}'
+```
 
 Pour expliquer un check relationnel sans passer par une decision complete :
 
@@ -807,9 +816,7 @@ curl -X POST http://localhost:8080/v1/relations/check \
   }'
 ```
 
-Le check relationnel commence par le tuple direct, applique les rewrites de relation en mémoire, suit les groupes via des tuples `member`, puis remonte les ressources parentes via des tuples `parent`.
-
-Limite actuelle : les rewrites de relations sont configurables en mémoire côté moteur, mais ne disposent pas encore d'une API d'administration durable. Autho ne resout pas encore les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
+Limite actuelle : Autho ne resout pas encore les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 

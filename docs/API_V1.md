@@ -537,7 +537,7 @@ Policy conditions can also use a ReBAC predicate:
 }
 ```
 
-This checks that the effective subject has the requested relation to the requested resource in the relation graph. Autho checks the direct tuple first, expands in-memory relation rewrites, follows group membership through `member` tuples, then walks resource ancestry through `parent` tuples. For example, `can-read` can be rewritten to `viewer` or `editor`; if `alice member team-a` and `team-a viewer folder-1`, then Alice can read `folder-1`; if `doc-1 parent folder-1`, Alice can also read `doc-1`.
+This checks that the effective subject has the requested relation to the requested resource in the relation graph. Autho checks the direct tuple first, expands persisted relation rewrites, follows group membership through `member` tuples, then walks resource ancestry through `parent` tuples. For example, `can-read` can be rewritten to `viewer` or `editor`; if `alice member team-a` and `team-a viewer folder-1`, then Alice can read `folder-1`; if `doc-1 parent folder-1`, Alice can also read `doc-1`.
 
 Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`. Tuples are persisted in the policy H2 database and reloaded into in-memory indexes by `rebac/init!` during PDP startup.
 
@@ -704,6 +704,41 @@ Create a subject-relation-resource tuple. Requires `governance-admin` or `relati
 
 **Response:** `201 Created`
 
+#### GET /v1/relations/rewrites
+
+List persisted relation rewrites loaded by the server.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "rewrites": {
+      "can-read": ["viewer", "editor"]
+    }
+  }
+}
+```
+
+#### PUT /v1/relations/rewrites/:relation
+
+Create or replace a relation rewrite. Requires `governance-admin` or `relation-admin`.
+
+**Request:**
+```json
+{
+  "relations": ["viewer", "editor"]
+}
+```
+
+**Response:** `200 OK`
+
+#### DELETE /v1/relations/rewrites/:relation
+
+Delete a relation rewrite. Requires `governance-admin` or `relation-admin`.
+
+**Response:** `200 OK`
+
 #### POST /v1/relations/check
 
 Check a relation and return the matched tuple explanation. This endpoint reports whether the relation is direct, inherited through `member` groups, or inherited from a parent resource.
@@ -762,7 +797,7 @@ Delete a direct subject-relation-resource tuple. Requires `governance-admin` or 
 }
 ```
 
-Current limitation: Autho supports direct checks, in-memory relation rewrites, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Durable rewrite administration, arbitrary recursive traversals and distributed external relation storage are not implemented yet.
+Current limitation: Autho supports direct checks, persisted relation rewrites, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Arbitrary recursive traversals and distributed external relation storage are not implemented yet.
 
 ### Cache Management Endpoints
 

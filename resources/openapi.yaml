@@ -828,6 +828,23 @@ components:
           items:
             type: object
             additionalProperties: true
+        relationPath:
+          type: array
+          items:
+            type: string
+
+    RelationRewrite:
+      type: object
+      required: [relation, relations]
+      properties:
+        relation:
+          type: string
+          example: can-read
+        relations:
+          type: array
+          items:
+            type: string
+          example: [viewer, editor]
 
     Policy:
       type: object
@@ -848,8 +865,9 @@ components:
           description: >
             Policy rules. Rule conditions support standard attribute clauses
             and ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
-            Relation checks include direct tuples, group inheritance through
-            "member" tuples, and resource-parent inheritance through "parent" tuples.
+            Relation checks include direct tuples, persisted relation rewrites,
+            group inheritance through "member" tuples, and resource-parent
+            inheritance through "parent" tuples.
           items:
             type: object
         tests:
@@ -899,8 +917,9 @@ components:
           description: >
             Candidate policy rules. Rule conditions support standard attribute
             clauses and ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
-            Relation checks include direct tuples, group inheritance through
-            "member" tuples, and resource-parent inheritance through "parent" tuples.
+            Relation checks include direct tuples, persisted relation rewrites,
+            group inheritance through "member" tuples, and resource-parent
+            inheritance through "parent" tuples.
           items:
             type: object
         tests:
@@ -2105,6 +2124,77 @@ paths:
           description: Relation tuple deleted
         '400':
           description: Invalid relation tuple
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
+
+  /v1/relations/rewrites:
+    get:
+      tags: [relations]
+      summary: List persisted ReBAC relation rewrites
+      operationId: listRelationRewrites
+      responses:
+        '200':
+          description: Persisted relation rewrites
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          rewrites:
+                            type: object
+                            additionalProperties:
+                              type: array
+                              items:
+                                type: string
+
+  /v1/relations/rewrites/{relation}:
+    put:
+      tags: [relations]
+      summary: Upsert a ReBAC relation rewrite
+      description: Requires governance-admin or relation-admin.
+      operationId: upsertRelationRewrite
+      parameters:
+        - in: path
+          name: relation
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                relations:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Relation rewrite updated
+        '400':
+          description: Invalid relation rewrite
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
+    delete:
+      tags: [relations]
+      summary: Delete a ReBAC relation rewrite
+      description: Requires governance-admin or relation-admin.
+      operationId: deleteRelationRewrite
+      parameters:
+        - in: path
+          name: relation
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Relation rewrite deleted
         '403':
           $ref: '#/components/responses/GovernanceForbidden'
 
