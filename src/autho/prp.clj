@@ -44,7 +44,8 @@
 (def delegationSingleton (atom {:type :file :path "resources/delegations.edn"}))
 (def personSingleton (atom []))
 
-(def pips (atom (utl/load-edn "resources/pips.edn")))
+(def pips (atom (utl/load-edn (or (System/getenv "PIPS_CONFIG_PATH")
+                                  "resources/pips.edn"))))
 
 (defn get-pips []
   @pips)

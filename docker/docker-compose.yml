@@ -145,10 +145,58 @@ services:
       openldap:
         condition: service_healthy
 
+  # ═══════════════════════════════════════════════════════════════
+  # AUTHO
+  # ═══════════════════════════════════════════════════════════════
+
+  autho:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: autho-server
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: "01234567890123456789012345678901"
+      API_KEY: "abcdefghijklmnopqrstuvwxyz123456"
+      API_CLIENT_ID: "001"
+      API_CLIENT_CLASS: "Person"
+      API_CLIENT_ROLES: "governance-admin,policy-admin,policy-reviewer,policy-deployer,relation-admin"
+      API_CLIENT_TENANTS: "demo"
+      KAFKA_ENABLED: "true"
+      PDP_CONFIG_PATH: "resources/pdp-prop.docker.properties"
+      PIPS_CONFIG_PATH: "resources/pips.docker.edn"
+      LDAP_PASSWORD: "admin"
+      AUTHO_POLICY_DB_PATH: "/data/h2db/autho-policy"
+      AUDIT_HMAC_SECRET: "audit-test-hmac-secret-32-chars-min-ok!!"
+      POLICY_BUNDLE_HMAC_SECRET: "policy-bundle-hmac-secret-32-chars-min"
+    volumes:
+      - autho_data:/data
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      openldap:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  kafka-producer:
+    build:
+      context: ./kafka-producer
+    profiles: ["tools"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
 volumes:
   kafka_data:
   ldap_data:
   ldap_config:
+  autho_data:
 
 networks:
   default:

@@ -700,8 +700,18 @@
       (.load props reader)
       (into {} (for [[k v] props] [(keyword k) (edn/read-string v)])))))
 
+(defn- ensure-parent-directory!
+  [path]
+  (when path
+    (let [parent (.getParentFile (clojure.java.io/file path))]
+      (when parent
+        (.mkdirs parent)))))
+
 (defn init []
-  (swap! properties (fn [oldprop] (load-props "resources/pdp-prop.properties")))
+  (swap! properties
+         (fn [_]
+           (load-props (or (System/getenv "PDP_CONFIG_PATH")
+                           "resources/pdp-prop.properties"))))
   (metrics/init-jvm-metrics!)
   (when (features/licensed? :audit)
     (audit/init!))
@@ -729,11 +739,13 @@
                                 (getProperty :ldap.password))}))
     ;; Initialise les PIPs Kafka individuels
     (when (and (kafka-enabled?) (seq kafka-pips) rocksdb-path)
+      (ensure-parent-directory! rocksdb-path)
       (kafka-pip/open-shared-db rocksdb-path kafka-pip-classes)
       (doseq [pip-config kafka-pips]
         (kafka-pip/init-pip pip-config)))
-    ;; Initialise le PIP Kafka unifiÃ©
+    ;; Initialise le PIP Kafka unifie
     (when (and (kafka-enabled?) (seq unified-pips) rocksdb-path)
+      (ensure-parent-directory! rocksdb-path)
       (kafka-pip-unified/open-shared-db rocksdb-path unified-classes)
       (doseq [pip-config unified-pips]
         (kafka-pip-unified/init-unified-pip pip-config))))

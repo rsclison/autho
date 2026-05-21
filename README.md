@@ -102,6 +102,14 @@ Le démarrage standard utilise le point d'entrée `autho.core` déclaré dans `p
 La tâche `lein ring server-headless` n'est pas disponible dans ce projet, car le plugin
 `lein-ring` n'est pas déclaré.
 
+Pour une démonstration complète avec Autho, Kafka, RocksDB embarqué et LDAP en containers :
+
+```bash
+./examples/container_kafka_rocksdb_demo.sh
+```
+
+Ce script lance la stack Docker, produit des objets `Facture` dans Kafka, laisse Autho alimenter RocksDB, puis exécute des décisions qui résolvent les attributs de la ressource depuis RocksDB.
+
 `API_KEY` authentifie une application cliente de confiance. L'identité applicative exposée au PDP est configurée par `API_CLIENT_ID` et `API_CLIENT_CLASS`. Avec une API key standard, Autho ignore le champ `subject` fourni dans le body : un appelant ne peut donc pas se faire passer pour une autre application en postant manuellement `{"subject": {"id": "app-A"}}`.
 
 Le tenant effectif est resolu cote serveur et retourne dans `tenantId`. Pour une API key, limitez les tenants autorises avec `API_CLIENT_TENANTS` ou `API_CLIENT_TENANT_ID`; `X-Tenant-ID` ne peut selectionner qu'un tenant autorise.

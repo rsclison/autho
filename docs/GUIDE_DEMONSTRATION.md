@@ -114,6 +114,54 @@ L'IHM contient les sections suivantes :
 | Infrastructure | Statut des caches, circuit breakers et actions d'administration. |
 | Settings | Theme et session courante. |
 
+## 4 bis. Variante recommandee : demonstration complete en containers
+
+Pour montrer Kafka, LDAP et RocksDB dans le meme scenario, utiliser la stack Docker :
+
+```bash
+./examples/container_kafka_rocksdb_demo.sh
+```
+
+Le script lance :
+
+- Kafka et Kafka UI ;
+- OpenLDAP et phpLDAPadmin ;
+- Autho en container ;
+- le producteur Kafka de demonstration.
+
+Il injecte ensuite les objets de `docker/kafka-producer/test-factures.json` dans le topic `business-objects-compacted`. Le consumer Kafka d'Autho lit ces messages et met a jour RocksDB dans le container Autho. Les appels d'autorisation ne transmettent ensuite que `{"class": "Facture", "id": "FAC-TEST-01"}` : les attributs `service` et `montant` sont lus depuis RocksDB pendant l'evaluation de la regle.
+
+Services exposes :
+
+| Service | URL |
+| --- | --- |
+| Autho | `http://localhost:8080` |
+| Admin UI | `http://localhost:8080/admin/ui` |
+| Kafka UI | `http://localhost:8090` |
+| phpLDAPadmin | `http://localhost:8091` |
+
+Scenario montre par le script :
+
+1. l'API key identifie le sujet `Person` `001`, enrichi depuis LDAP ;
+2. `FAC-TEST-01` est produite dans Kafka avec `service = service1` et `montant = 30000` ;
+3. Autho consomme le message et le stocke dans RocksDB ;
+4. la regle `R1` autorise la lecture, car Paul est `chef_de_service`, appartient a `service1` et son seuil `50000` couvre le montant ;
+5. `FAC-TEST-02` est refusee, car son montant `80000` depasse le seuil.
+
+Arret :
+
+```bash
+cd docker
+docker compose down
+```
+
+Reinitialisation complete :
+
+```bash
+cd docker
+docker compose down -v
+```
+
 ## 5. Preparer une politique de demonstration
 
 Creer la politique `DossierDemo` via l'API. Cette politique autorise `app-demo` a lire les dossiers non secrets et refuse explicitement les dossiers secrets.

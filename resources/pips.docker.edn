@@ -1,0 +1,6 @@
+[
+ {:type :kafka-pip-unified
+  :kafka-topic "business-objects-compacted"
+  :kafka-bootstrap-servers "kafka:29092"
+  :classes ["Facture" "Contrat" "EngagementJuridique"]}
+]
