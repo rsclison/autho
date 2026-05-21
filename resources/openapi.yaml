@@ -1075,6 +1075,73 @@ components:
         rollbackFromVersion:
           type: integer
 
+    PolicyBundleIntegrity:
+      type: object
+      properties:
+        algorithm:
+          type: string
+          enum: [HMAC-SHA256]
+        canonicalization:
+          type: string
+          enum: [json-sorted-keys-v1]
+        payloadSha256:
+          type: string
+        signature:
+          type: string
+        signedAt:
+          type: string
+          format: date-time
+
+    PolicyBundle:
+      type: object
+      required: [payload, integrity]
+      properties:
+        payload:
+          type: object
+          required: [format, resourceClass, version, policy]
+          properties:
+            format:
+              type: string
+              enum: [autho.policy.bundle.v1]
+            resourceClass:
+              type: string
+            version:
+              type: integer
+            policy:
+              type: object
+              additionalProperties: true
+            metadata:
+              type: object
+              additionalProperties: true
+        integrity:
+          $ref: '#/components/schemas/PolicyBundleIntegrity'
+
+    PolicyBundleVerification:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        format:
+          type: string
+        resourceClass:
+          type: string
+        version:
+          type: integer
+        algorithm:
+          type: string
+        payloadSha256:
+          type: string
+        signatureValid:
+          type: boolean
+        digestValid:
+          type: boolean
+        formatValid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+
     PolicyTimelineEvent:
       type: object
       properties:
@@ -1927,6 +1994,30 @@ paths:
         '403':
           $ref: '#/components/responses/GovernanceForbidden'
 
+  /v1/policies/bundles/verify:
+    post:
+      tags: [policies]
+      summary: Verify a signed policy bundle
+      description: Verifies HMAC-SHA256 signature, canonical payload digest, and bundle format.
+      operationId: verifyPolicyBundle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyBundle'
+      responses:
+        '200':
+          description: Bundle verification result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyBundleVerification'
+
   /v1/policies/{resource-class}/versions:
     get:
       tags: [policies]
@@ -1979,6 +2070,39 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/PolicyVersionRecord'
+        '404':
+          description: Version not found
+
+  /v1/policies/{resource-class}/versions/{version}/bundle:
+    get:
+      tags: [policies]
+      summary: Export a signed policy version bundle
+      description: Requires governance-admin or policy-deployer. The bundle is signed with POLICY_BUNDLE_HMAC_SECRET.
+      operationId: exportPolicyVersionBundle
+      parameters:
+        - in: path
+          name: resource-class
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Signed policy bundle
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PolicyBundle'
+        '403':
+          $ref: '#/components/responses/GovernanceForbidden'
         '404':
           description: Version not found
 

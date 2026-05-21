@@ -11,6 +11,7 @@
             [autho.local-cache :as cache]
             [autho.policy-impact :as policy-impact]
             [autho.policy-versions :as pv]
+            [autho.policy-bundles :as policy-bundles]
             [autho.policy-impact-history :as impact-history]
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.rebac :as rebac]
@@ -734,8 +735,8 @@
 
 (deftest relation-rewrite-mutation-requires-admin-role-test
   (let [request (mock-request :body (json/write-value-as-string {:relations ["viewer"]})
-	                              :identity {:client-id "viewer"
-	                                         :roles ["policy-viewer"]})
+                                      :identity {:client-id "viewer"
+                                                 :roles ["policy-viewer"]})
         response (handlers/upsert-relation-rewrite "can-read" request)
         body (parse-response-body response)]
     (is (= 403 (:status response)))
@@ -948,6 +949,55 @@
       (is (= 7 (get-in body [:data :sourceAnalysis :id])))
       (is (= "approved" (get-in body [:data :sourceAnalysis :reviewStatus])))
       (is (= 3 (get-in body [:data :sourceAnalysis :analysis :summary :changedDecisions]))))))
+
+(deftest policy-bundle-handlers-export-and-verify-test
+  (let [bundle {:payload {:format "autho.policy.bundle.v1"
+                          :resourceClass "Document"
+                          :version 6}
+                :integrity {:algorithm "HMAC-SHA256"
+                            :payloadSha256 "abc"
+                            :signature "sig"}}
+        verification {:valid true
+                      :resourceClass "Document"
+                      :version 6}]
+    (with-redefs [policy-bundles/export-version-bundle (fn [resource-class version]
+                                                         (is (= "Document" resource-class))
+                                                         (is (= 6 version))
+                                                         bundle)
+                  policy-bundles/verify-bundle (fn [received]
+                                                 (is (= bundle received))
+                                                 verification)]
+      (let [export-response (handlers/export-policy-version-bundle
+                             "Document"
+                             "6"
+                             (governance-request))
+            export-body (parse-response-body export-response)
+            verify-response (handlers/verify-policy-bundle
+                             (mock-request :body (json/write-value-as-string bundle)))
+            verify-body (parse-response-body verify-response)]
+        (is (= 200 (:status export-response)))
+        (is (= bundle (:data export-body)))
+        (is (= 200 (:status verify-response)))
+        (is (= verification (:data verify-body)))))))
+
+(deftest policy-bundle-export-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/export-policy-version-bundle
+                               (fn [resource-class version request]
+                                 (reset! captured {:resourceClass resource-class
+                                                   :version version
+                                                   :uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :get
+                     :uri "/policies/Document/versions/6/bundle"
+                     :headers {}}))]
+    (is (= 200 (:status response)))
+    (is (= {:resourceClass "Document"
+            :version "6"
+            :uri "/policies/Document/versions/6/bundle"}
+           @captured))))
+
 (deftest get-policy-change-timeline-handler-returns-unified-events-test
   (with-redefs [pv/list-versions (fn [_]
                                    [{:id 12

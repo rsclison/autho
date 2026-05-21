@@ -189,7 +189,9 @@ Etat d'avancement :
 - les API keys peuvent etre limitees cote serveur via `API_CLIENT_TENANTS` ou `API_CLIENT_TENANT_ID`;
 - les decisions canoniques exposent `tenantId`;
 - le cache de decisions est cloisonne par tenant;
-- prochaine etape : appliquer ce tenant aux stores persistants et preparer la distribution des politiques signees.
+- export de bundles de politiques signes HMAC-SHA256 via `GET /v1/policies/:resourceClass/versions/:version/bundle`;
+- verification de bundles via `POST /v1/policies/bundles/verify`;
+- prochaine etape : appliquer le tenant aux stores persistants et ajouter un mode d'import/activation de bundle cote data plane.
 
 ## Priorite 6 - Gouvernance et compliance
 

@@ -189,6 +189,8 @@ Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégra
 | `POST /v1/policies/import` | Import depuis YAML |
 | `GET  /v1/policies/:rc/versions` | Historique des versions |
 | `GET  /v1/policies/:rc/versions/:v` | Récupérer la version v |
+| `GET  /v1/policies/:rc/versions/:v/bundle` | Exporter une version signée |
+| `POST /v1/policies/bundles/verify` | Vérifier un bundle signé |
 | `GET  /v1/policies/:rc/diff?from=1&to=3` | Diff entre deux versions |
 | `POST /v1/policies/:rc/rollback/:v` | Rollback à la version v |
 | `POST /v1/policies/:rc/validate` | Validation pré-déploiement sans persistence |

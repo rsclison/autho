@@ -12,6 +12,7 @@
             [autho.policy-impact-history :as impact-history]
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.policy-versions :as pv]
+            [autho.policy-bundles :as policy-bundles]
             [autho.rebac :as rebac]
             [autho.features :as features]
             [jsonista.core :as json]
@@ -734,6 +735,39 @@
       (log/error e "Error getting policy version")
       (response/error-response "VERSION_ERROR"
                                (str "Failed to get version: " (.getMessage e)) 500))))
+
+(defn export-policy-version-bundle
+  [resource-class version request]
+  (log/debug "Exporting signed policy bundle" version "for" resource-class)
+  (try
+    (require-governance-role! request #{"policy-deployer"})
+    (let [bundle (policy-bundles/export-version-bundle resource-class
+                                                       (Long/parseLong (str version)))]
+      (response/success-response bundle))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "POLICY_BUNDLE_EXPORT_ERROR" "Failed to export policy bundle: "))
+    (catch Exception e
+      (log/error e "Error exporting policy bundle")
+      (response/error-response "POLICY_BUNDLE_EXPORT_ERROR"
+                               (str "Failed to export policy bundle: " (.getMessage e))
+                               500))))
+
+(defn verify-policy-bundle
+  [request]
+  (log/debug "Verifying signed policy bundle")
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (let [verification (policy-bundles/verify-bundle body-or-response)]
+          (response/success-response verification))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "POLICY_BUNDLE_VERIFY_ERROR" "Failed to verify policy bundle: "))
+        (catch Exception e
+          (log/error e "Error verifying policy bundle")
+          (response/error-response "POLICY_BUNDLE_VERIFY_ERROR"
+                                   (str "Failed to verify policy bundle: " (.getMessage e))
+                                   500))))))
 
 (defn diff-policy-versions
   [resource-class from-v to-v]

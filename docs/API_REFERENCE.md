@@ -938,6 +938,26 @@ curl -H "X-API-Key: key" \
 
 Retourne le corps complet de la politique à la version 3.
 
+### GET /v1/policies/:rc/versions/:v/bundle
+
+Exporte une version de politique dans un bundle signé HMAC-SHA256 pour distribution control-plane vers PDP. Requiert `governance-admin` ou `policy-deployer`. Le secret de signature est `POLICY_BUNDLE_HMAC_SECRET`.
+
+```bash
+curl -H "X-API-Key: key" \
+  http://localhost:8080/v1/policies/Facture/versions/3/bundle
+```
+
+### POST /v1/policies/bundles/verify
+
+Vérifie le format, le digest canonique et la signature du bundle.
+
+```bash
+curl -X POST http://localhost:8080/v1/policies/bundles/verify \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @policy-bundle.json
+```
+
 ### GET /v1/policies/:rc/diff?from=3&to=5
 
 ```bash

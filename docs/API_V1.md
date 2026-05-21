@@ -648,6 +648,53 @@ Rollout gates are enforced when promoting an impact preview:
 
 Policy versions expose lifecycle metadata: `lifecycleStatus`, `workflowAction`, `deploymentKind`, and rollback lineage through `rollbackFromVersion`. Rollback deploys a new active version instead of rewriting history.
 
+#### GET /v1/policies/:resource-class/versions/:version/bundle
+
+Export a signed policy bundle for distribution from a control plane to PDP instances. Requires `governance-admin` or `policy-deployer`. The bundle is signed with `POLICY_BUNDLE_HMAC_SECRET`.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "payload": {
+      "format": "autho.policy.bundle.v1",
+      "resourceClass": "Document",
+      "version": 6,
+      "policy": {"resourceClass": "Document", "rules": []},
+      "metadata": {"author": "api", "lifecycleStatus": "deployed"}
+    },
+    "integrity": {
+      "algorithm": "HMAC-SHA256",
+      "canonicalization": "json-sorted-keys-v1",
+      "payloadSha256": "...",
+      "signature": "...",
+      "signedAt": "2026-05-21T10:30:00Z"
+    }
+  }
+}
+```
+
+#### POST /v1/policies/bundles/verify
+
+Verify a signed policy bundle before accepting it on a PDP or in CI.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "valid": true,
+    "resourceClass": "Document",
+    "version": 6,
+    "signatureValid": true,
+    "digestValid": true,
+    "formatValid": true,
+    "errors": []
+  }
+}
+```
+
 The request batch can also come from audit replay:
 
 ```json

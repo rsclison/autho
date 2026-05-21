@@ -46,6 +46,7 @@ Trois secrets sont obligatoires au démarrage. Leur absence ou leur longueur ins
 | `JWT_SECRET` | Signature/vérification HMAC-SHA256 des tokens JWT (HS256) | 32 caractères (256 bits) |
 | `API_KEY` | Authentification des applications de confiance via `X-API-Key` | 32 caractères |
 | `AUDIT_HMAC_SECRET` | Chaîne HMAC-SHA256 du journal d'audit (tamper-evident) | 32 caractères (256 bits) |
+| `POLICY_BUNDLE_HMAC_SECRET` | Signature HMAC-SHA256 des bundles de politiques distribués aux PDP | 32 caractères |
 
 Des variables optionnelles lient la clé API à une identité applicative, à ses rôles de gouvernance et à ses tenants autorisés :
 

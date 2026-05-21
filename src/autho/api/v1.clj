@@ -49,8 +49,14 @@
     (POST "/import" request
           (handlers/import-yaml-policies request))
 
+    (POST "/bundles/verify" request
+          (handlers/verify-policy-bundle request))
+
     (GET "/:resource-class/versions" [resource-class]
          (handlers/list-policy-versions resource-class))
+
+    (GET "/:resource-class/versions/:version/bundle" [resource-class version :as request]
+         (handlers/export-policy-version-bundle resource-class version request))
 
     (GET "/:resource-class/versions/:version" [resource-class version]
          (handlers/get-policy-version resource-class version))
