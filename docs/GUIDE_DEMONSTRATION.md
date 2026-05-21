@@ -46,8 +46,12 @@ export AUTHO_LICENSE_KEY="<licence-pro-ou-enterprise>"
 Lancer le serveur :
 
 ```bash
-./lein ring server-headless
+./lein run
 ```
+
+La commande `./lein ring server-headless` ne s'applique pas a ce projet : `project.clj` ne declare pas le plugin `lein-ring`. Le point d'entree supporte est `autho.core`, lance par `./lein run`.
+
+Si le serveur echoue ensuite avec une erreur `Connection refused` vers `localhost:389`, ce n'est plus un probleme Leiningen : la configuration `resources/pdp-prop.properties` pointe vers un LDAP local. Pour une demonstration sans LDAP, demarrer le LDAP de demonstration avant Autho ou adapter temporairement cette configuration pour ne pas utiliser `person.source = "ldap"`.
 
 Verifier que le serveur repond :
 

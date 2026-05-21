@@ -92,9 +92,13 @@ export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
 export API_CLIENT_TENANTS="acme"
 
-./lein ring server-headless
+./lein run
 # Serveur démarré sur http://localhost:8080
 ```
+
+Le démarrage standard utilise le point d'entrée `autho.core` déclaré dans `project.clj`.
+La tâche `lein ring server-headless` n'est pas disponible dans ce projet, car le plugin
+`lein-ring` n'est pas déclaré.
 
 `API_KEY` authentifie une application cliente de confiance. L'identité applicative exposée au PDP est configurée par `API_CLIENT_ID` et `API_CLIENT_CLASS`. Avec une API key standard, Autho ignore le champ `subject` fourni dans le body : un appelant ne peut donc pas se faire passer pour une autre application en postant manuellement `{"subject": {"id": "app-A"}}`.
 
