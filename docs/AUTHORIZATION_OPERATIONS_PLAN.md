@@ -23,7 +23,7 @@ Les priorites 1 a 3 disposent maintenant d'un socle operationnel :
 
 Les limites connues restent :
 
-- le ReBAC supporte l'heritage par ressources parentes, mais pas encore les rewrites de usersets, groupes imbriques ou traversals relationnels generiques;
+- le ReBAC supporte l'heritage par ressources parentes et groupes imbriques, mais pas encore les rewrites de usersets ou traversals relationnels generiques;
 - les tuples relationnels sont persistés localement en H2, mais doivent encore etre externalises ou distribués pour un usage enterprise multi-instance;
 - le control plane, le data plane et l'evidence plane ne sont pas encore separes;
 - le multi-tenant, les bundles signes et les workflows GRC complets restent a construire.
@@ -158,7 +158,8 @@ Etat d'avancement :
 - explain relationnel minimal disponible via `POST /v1/relations/check` avec `matchedResource`, `inherited` et `path`;
 - persistence H2 des tuples via `REBAC_RELATIONS`, rechargee par `rebac/init!` au demarrage PDP;
 - explain des decisions completes enrichi avec `relationProofs` pour les regles qui utilisent une clause ReBAC;
-- prochaine etape : ajouter les groupes imbriques ou les rewrites de usersets.
+- groupes imbriques ajoutes via la relation `member`, avec `subjectPath` dans les preuves relationnelles;
+- prochaine etape : ajouter les rewrites de usersets.
 
 ## Priorite 5 - Architecture enterprise
 

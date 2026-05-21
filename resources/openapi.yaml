@@ -811,8 +811,16 @@ components:
         matchedResource:
           type: object
           additionalProperties: true
+        matchedSubject:
+          type: object
+          additionalProperties: true
         inherited:
           type: boolean
+        subjectPath:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         path:
           type: array
           items:
@@ -838,8 +846,8 @@ components:
           description: >
             Policy rules. Rule conditions support standard attribute clauses
             and ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
-            Relation checks include direct tuples and resource-parent inheritance
-            through tuples whose relation is "parent".
+            Relation checks include direct tuples, group inheritance through
+            "member" tuples, and resource-parent inheritance through "parent" tuples.
           items:
             type: object
         tests:
@@ -889,8 +897,8 @@ components:
           description: >
             Candidate policy rules. Rule conditions support standard attribute
             clauses and ReBAC predicates such as ["relation", "$s", "viewer", "$r"].
-            Relation checks include direct tuples and resource-parent inheritance
-            through tuples whose relation is "parent".
+            Relation checks include direct tuples, group inheritance through
+            "member" tuples, and resource-parent inheritance through "parent" tuples.
           items:
             type: object
         tests:
@@ -2102,7 +2110,7 @@ paths:
     post:
       tags: [relations]
       summary: Check and explain a ReBAC relation
-      description: Returns whether the relation is granted directly or inherited from a parent resource.
+      description: Returns whether the relation is granted directly, through group membership, or inherited from a parent resource.
       operationId: checkRelation
       requestBody:
         required: true

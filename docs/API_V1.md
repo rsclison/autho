@@ -537,7 +537,7 @@ Policy conditions can also use a ReBAC predicate:
 }
 ```
 
-This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. Autho checks the direct tuple first, then walks resource ancestry through `parent` tuples. For example, if `doc-1 parent folder-1` and `alice viewer folder-1`, then Alice is also viewer of `doc-1`.
+This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. Autho checks the direct tuple first, follows group membership through `member` tuples, then walks resource ancestry through `parent` tuples. For example, if `alice member team-a` and `team-a viewer folder-1`, then Alice is viewer of `folder-1`; if `doc-1 parent folder-1`, Alice is also viewer of `doc-1`.
 
 Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`. Tuples are persisted in the policy H2 database and reloaded into in-memory indexes by `rebac/init!` during PDP startup.
 
@@ -706,7 +706,7 @@ Create a subject-relation-resource tuple. Requires `governance-admin` or `relati
 
 #### POST /v1/relations/check
 
-Check a relation and return the matched tuple explanation. This endpoint reports whether the relation is direct or inherited from a parent resource.
+Check a relation and return the matched tuple explanation. This endpoint reports whether the relation is direct, inherited through `member` groups, or inherited from a parent resource.
 
 **Request:**
 ```json
@@ -727,7 +727,12 @@ Check a relation and return the matched tuple explanation. This endpoint reports
     "relation": "viewer",
     "resource": {"class": "Document", "id": "doc-1"},
     "matchedResource": {"class": "Folder", "id": "folder-1"},
+    "matchedSubject": {"class": "Group", "id": "team-a"},
     "inherited": true,
+    "subjectPath": [
+      {"class": "Person", "id": "alice"},
+      {"class": "Group", "id": "team-a"}
+    ],
     "path": [
       {"class": "Document", "id": "doc-1"},
       {"class": "Folder", "id": "folder-1"}
@@ -755,7 +760,7 @@ Delete a direct subject-relation-resource tuple. Requires `governance-admin` or 
 }
 ```
 
-Current limitation: Autho supports direct checks plus resource-parent inheritance through `parent` tuples. Userset rewrites, group nesting, arbitrary recursive traversals and distributed external relation storage are not implemented yet.
+Current limitation: Autho supports direct checks, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Userset rewrites, arbitrary recursive traversals and distributed external relation storage are not implemented yet.
 
 ### Cache Management Endpoints
 

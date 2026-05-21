@@ -792,7 +792,7 @@ Une politique peut ensuite utiliser :
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
 
-Le check relationnel commence par le tuple direct, puis remonte les ressources parentes via des tuples `parent`. Exemple : si `doc-1 parent folder-1` et `alice viewer folder-1`, alors `alice` est aussi `viewer` de `doc-1`.
+Le check relationnel commence par le tuple direct, suit les groupes via des tuples `member`, puis remonte les ressources parentes via des tuples `parent`. Exemple : si `alice member team-a`, `team-a viewer folder-1` et `doc-1 parent folder-1`, alors `alice` est aussi `viewer` de `doc-1`.
 
 Pour expliquer un check relationnel sans passer par une decision complete :
 
@@ -807,7 +807,7 @@ curl -X POST http://localhost:8080/v1/relations/check \
   }'
 ```
 
-Limite actuelle : Autho ne resout pas encore les rewrites de usersets, les groupes imbriques, les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
+Limite actuelle : Autho ne resout pas encore les rewrites de usersets, les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 

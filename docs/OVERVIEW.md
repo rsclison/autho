@@ -39,7 +39,7 @@ Policies can reference this graph with:
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
 
-Autho checks direct tuples and resource-parent inheritance through `parent` tuples. For example, if a document has a parent folder and Alice is `viewer` of that folder, Alice is also treated as `viewer` of the document. Tuples are persisted in the policy H2 database and loaded into in-memory indexes at startup. Userset rewrites, group nesting and distributed relation storage are planned follow-up work.
+Autho checks direct tuples, nested group membership through `member` tuples, and resource-parent inheritance through `parent` tuples. For example, if Alice is a member of a team, the team is `viewer` of a folder, and a document belongs to that folder, Alice is also treated as `viewer` of the document. Tuples are persisted in the policy H2 database and loaded into in-memory indexes at startup. Userset rewrites and distributed relation storage are planned follow-up work.
 
 ### XACML Architecture (PDP / PRP / PIP / PAP)
 
@@ -122,7 +122,7 @@ Autho uses an **open-core** model. The core PDP (decisions) is free; advanced fe
 | Policy versioning, diff & rollback | — | ✓ | ✓ |
 | `explain` & `simulate` | — | ✓ | ✓ |
 | Shadow evaluation and impact analysis | — | ✓ | ✓ |
-| ReBAC relation tuples with parent inheritance | — | ✓ | ✓ |
+| ReBAC relation tuples with groups and parent inheritance | — | ✓ | ✓ |
 | Prometheus metrics (`/metrics`) | — | ✓ | ✓ |
 | Kafka PIP / RocksDB | — | — | ✓ |
 | Multi-instance cache synchronisation | — | — | ✓ |

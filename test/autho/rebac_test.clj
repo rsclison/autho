@@ -46,6 +46,7 @@
             :subject {:class "Person" :id "alice"}
             :relation "viewer"
             :resource {:class "Document" :id "doc-1"}
+            :matchedSubject {:class "Person" :id "alice"}
             :matchedResource {:class "Folder" :id "folder-1"}
             :inherited true
             :path [{:class "Document" :id "doc-1"}
@@ -60,6 +61,40 @@
             :relation "viewer"
             :resource {:class "Document" :id "doc-1"}}
            (rebac/explain-relation subject "viewer" document)))))
+
+(deftest group-membership-relation-test
+  (let [subject {:class "Person" :id "alice"}
+        team {:class "Group" :id "team-a"}
+        resource {:class "Document" :id "doc-1"}]
+    (rebac/add-relation! subject "member" team)
+    (rebac/add-relation! team "viewer" resource)
+    (is (true? (rebac/has-relation? subject "viewer" resource)))
+    (is (false? (rebac/has-relation? subject "viewer" resource {:inherited false})))
+    (is (= {:allowed true
+            :subject {:class "Person" :id "alice"}
+            :relation "viewer"
+            :resource {:class "Document" :id "doc-1"}
+            :matchedSubject {:class "Group" :id "team-a"}
+            :matchedResource {:class "Document" :id "doc-1"}
+            :inherited true
+            :path [{:class "Document" :id "doc-1"}]
+            :subjectPath [{:class "Person" :id "alice"}
+                          {:class "Group" :id "team-a"}]}
+           (rebac/explain-relation subject "viewer" resource)))))
+
+(deftest nested-group-membership-relation-test
+  (let [subject {:class "Person" :id "alice"}
+        team {:class "Group" :id "team-a"}
+        org-admins {:class "Group" :id "org-admins"}
+        resource {:class "Document" :id "doc-1"}]
+    (rebac/add-relation! subject "member" team)
+    (rebac/add-relation! team "member" org-admins)
+    (rebac/add-relation! org-admins "viewer" resource)
+    (is (true? (rebac/has-relation? subject "viewer" resource)))
+    (is (= [{:class "Person" :id "alice"}
+            {:class "Group" :id "team-a"}
+            {:class "Group" :id "org-admins"}]
+           (:subjectPath (rebac/explain-relation subject "viewer" resource))))))
 
 (deftest durable-relations-survive-reinit-test
   (let [test-db {:classname "org.h2.Driver"
