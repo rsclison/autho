@@ -971,6 +971,23 @@
                                    (str "Failed to create relation: " (.getMessage e))
                                    500))))))
 
+(defn check-relation
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (let [{:keys [subject relation resource]} (validate-relation-payload! body-or-response)
+              explanation (rebac/explain-relation subject relation resource)]
+          (response/success-response explanation))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RELATION_CHECK_ERROR" "Failed to check relation: "))
+        (catch Exception e
+          (log/error e "Error checking relation")
+          (response/error-response "RELATION_CHECK_ERROR"
+                                   (str "Failed to check relation: " (.getMessage e))
+                                   500))))))
+
 (defn delete-relation
   [request]
   (let [body-or-response (require-body request)]

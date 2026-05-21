@@ -61,29 +61,61 @@
   [store resource-key]
   (get-in store [:parents-by-child resource-key] #{}))
 
-(defn- ancestor-keys
+(defn- ancestor-paths
   [store resource-key max-depth]
-  (loop [frontier [resource-key]
+  (loop [frontier [{:resource resource-key
+                    :path [resource-key]}]
          visited #{}
-         ancestors []
+         paths []
          depth 0]
     (cond
       (empty? frontier)
-      ancestors
+      paths
 
       (> depth max-depth)
-      ancestors
+      paths
 
       :else
-      (let [current (first frontier)
+      (let [{:keys [resource path] :as current} (first frontier)
             remaining (subvec (vec frontier) 1)]
-        (if (contains? visited current)
-          (recur remaining visited ancestors depth)
-          (let [parents (remove visited (parent-resources store current))]
-            (recur (vec (concat remaining parents))
-                   (conj visited current)
-                   (conj ancestors current)
+        (if (contains? visited resource)
+          (recur remaining visited paths depth)
+          (let [parents (remove visited (parent-resources store resource))
+                parent-paths (mapv (fn [parent]
+                                     {:resource parent
+                                      :path (conj path parent)})
+                                   parents)]
+            (recur (vec (concat remaining parent-paths))
+                   (conj visited resource)
+                   (conj paths current)
                    (inc depth))))))))
+
+(defn explain-relation
+  "Explains whether subject has relation to resource.
+   The explanation includes the matched resource and the parent path when a
+   relation is inherited from an ancestor."
+  ([subject relation resource]
+   (explain-relation subject relation resource {}))
+  ([subject relation resource {:keys [inherited max-depth]
+                               :or {inherited true
+                                    max-depth default-max-depth}}]
+   (let [store @relation-tuples
+         tuples (:tuples store)
+         resource-key (entity-key resource)
+         candidates (if inherited
+                      (ancestor-paths store resource-key max-depth)
+                      [{:resource resource-key
+                        :path [resource-key]}])
+         match (first (filter #(direct-relation? tuples subject relation (:resource %))
+                              candidates))]
+     (cond-> {:allowed (boolean match)
+              :subject (entity-key subject)
+              :relation (name relation)
+              :resource resource-key}
+       match
+       (assoc :matchedResource (:resource match)
+              :inherited (not= resource-key (:resource match))
+              :path (:path match))))))
 
 (defn has-relation?
   "Returns true when subject has relation to resource.
@@ -95,11 +127,5 @@
   ([subject relation resource {:keys [inherited max-depth]
                                :or {inherited true
                                     max-depth default-max-depth}}]
-   (let [store @relation-tuples
-         tuples (:tuples store)
-         resource-key (entity-key resource)
-         candidate-resources (if inherited
-                               (ancestor-keys store resource-key max-depth)
-                               [resource-key])]
-     (boolean
-      (some #(direct-relation? tuples subject relation %) candidate-resources)))))
+   (:allowed (explain-relation subject relation resource {:inherited inherited
+                                                          :max-depth max-depth}))))

@@ -83,6 +83,7 @@ Autho checks direct tuples and resource-parent inheritance through `parent` tupl
 ### Relationship Management
 - `GET /v1/relations` — list ReBAC tuples
 - `POST /v1/relations` — add a tuple, protected by `relation-admin` or `governance-admin`
+- `POST /v1/relations/check` — explain a direct or parent-inherited relation check
 - `DELETE /v1/relations` — remove a tuple, protected by `relation-admin` or `governance-admin`
 
 ### Time-Travel

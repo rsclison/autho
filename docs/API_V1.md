@@ -685,6 +685,38 @@ Create a subject-relation-resource tuple. Requires `governance-admin` or `relati
 
 **Response:** `201 Created`
 
+#### POST /v1/relations/check
+
+Check a relation and return the matched tuple explanation. This endpoint reports whether the relation is direct or inherited from a parent resource.
+
+**Request:**
+```json
+{
+  "subject": {"class": "Person", "id": "alice"},
+  "relation": "viewer",
+  "resource": {"class": "Document", "id": "doc-1"}
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "allowed": true,
+    "subject": {"class": "Person", "id": "alice"},
+    "relation": "viewer",
+    "resource": {"class": "Document", "id": "doc-1"},
+    "matchedResource": {"class": "Folder", "id": "folder-1"},
+    "inherited": true,
+    "path": [
+      {"class": "Document", "id": "doc-1"},
+      {"class": "Folder", "id": "folder-1"}
+    ]
+  }
+}
+```
+
 #### DELETE /v1/relations
 
 Delete a direct subject-relation-resource tuple. Requires `governance-admin` or `relation-admin`. The request body has the same shape as `POST /v1/relations`.

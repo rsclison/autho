@@ -201,6 +201,7 @@ Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégra
 |----------|-------------|
 | `GET  /v1/relations` | Lister les tuples relationnels directs |
 | `POST /v1/relations` | Créer un tuple sujet-relation-ressource |
+| `POST /v1/relations/check` | Expliquer un check relationnel direct ou hérité |
 | `DELETE /v1/relations` | Supprimer un tuple sujet-relation-ressource |
 
 Les mutations de politiques, profils de risque, reviews, rollouts et relations sont protégées par des rôles de gouvernance (`policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin` ou `governance-admin`). Pour les clients API key, ces rôles sont configurés via `API_CLIENT_ROLES`.

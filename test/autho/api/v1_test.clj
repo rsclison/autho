@@ -692,6 +692,25 @@
     (finally
       (rebac/clear-relations!))))
 
+(deftest relation-check-handler-explains-inherited-match-test
+  (rebac/clear-relations!)
+  (try
+    (let [payload {:subject {:class "Person" :id "alice"}
+                   :relation "viewer"
+                   :resource {:class "Document" :id "doc-1"}}
+          folder {:class "Folder" :id "folder-1"}]
+      (rebac/add-relation! (:resource payload) "parent" folder)
+      (rebac/add-relation! (:subject payload) "viewer" folder)
+      (let [response (handlers/check-relation
+                      (mock-request :body (json/write-value-as-string payload)))
+            body (parse-response-body response)]
+        (is (= 200 (:status response)))
+        (is (= true (get-in body [:data :allowed])))
+        (is (= true (get-in body [:data :inherited])))
+        (is (= "folder-1" (get-in body [:data :matchedResource :id])))))
+    (finally
+      (rebac/clear-relations!))))
+
 (deftest relation-mutation-requires-admin-role-test
   (let [payload {:subject {:class "Person" :id "alice"}
                  :relation "viewer"
@@ -717,6 +736,20 @@
                      :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
     (is (= 200 (:status response)))
     (is (= "/relations" (:uri @captured)))))
+
+(deftest relation-check-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/check-relation
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :post
+                     :uri "/relations/check"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= "/relations/check" (:uri @captured)))))
 
 (deftest list-policy-versions-handler-returns-lineage-metadata-test
   (with-redefs [pv/list-versions (fn [_]

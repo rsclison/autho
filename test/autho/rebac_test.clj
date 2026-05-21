@@ -35,6 +35,31 @@
     (is (false? (rebac/has-relation? subject "editor" document)))
     (is (false? (rebac/has-relation? subject "viewer" document {:inherited false})))))
 
+(deftest explain-inherited-relation-test
+  (let [subject {:class "Person" :id "alice"}
+        document {:class "Document" :id "doc-1"}
+        folder {:class "Folder" :id "folder-1"}]
+    (rebac/add-relation! document "parent" folder)
+    (rebac/add-relation! subject "viewer" folder)
+    (is (= {:allowed true
+            :subject {:class "Person" :id "alice"}
+            :relation "viewer"
+            :resource {:class "Document" :id "doc-1"}
+            :matchedResource {:class "Folder" :id "folder-1"}
+            :inherited true
+            :path [{:class "Document" :id "doc-1"}
+                   {:class "Folder" :id "folder-1"}]}
+           (rebac/explain-relation subject "viewer" document)))))
+
+(deftest explain-missing-relation-test
+  (let [subject {:class "Person" :id "alice"}
+        document {:class "Document" :id "doc-1"}]
+    (is (= {:allowed false
+            :subject {:class "Person" :id "alice"}
+            :relation "viewer"
+            :resource {:class "Document" :id "doc-1"}}
+           (rebac/explain-relation subject "viewer" document)))))
+
 (deftest inherited-resource-relation-stops-on-cycles-test
   (let [subject {:class "Person" :id "alice"}
         folder-a {:class "Folder" :id "a"}

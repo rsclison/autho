@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - governance RBAC roles for critical mutations (`policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin`, `governance-admin`)
   - `API_CLIENT_ROLES` for API-key application identities
   - ReBAC relation tuples with `GET/POST/DELETE /v1/relations`
+  - `POST /v1/relations/check` for relation check explanations
   - policy predicate `["relation", "$s", "<relation>", "$r"]` with direct checks and resource-parent inheritance
 - Rate limiting middleware to prevent DoS attacks (configurable via `RATE_LIMIT_ENABLED` and `RATE_LIMIT_REQUESTS_PER_MINUTE`)
 - Health monitoring endpoints:

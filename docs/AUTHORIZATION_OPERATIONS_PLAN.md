@@ -155,7 +155,8 @@ Etat d'avancement :
 - controle RBAC des mutations relationnelles via `relation-admin` ou `governance-admin`;
 - heritage par relation `parent` ajoute : un droit accorde sur une ressource parente s'applique a ses descendants;
 - index en memoire des relations `parent` pour eviter un scan complet pendant la resolution d'heritage;
-- prochaine etape : persister les tuples et ajouter l'explain relationnel.
+- explain relationnel minimal disponible via `POST /v1/relations/check` avec `matchedResource`, `inherited` et `path`;
+- prochaine etape : persister les tuples et enrichir l'explain des decisions completes.
 
 ## Priorite 5 - Architecture enterprise
 

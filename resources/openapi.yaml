@@ -795,6 +795,30 @@ components:
           required: [class, id]
           additionalProperties: true
 
+    RelationCheck:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+        subject:
+          type: object
+          additionalProperties: true
+        relation:
+          type: string
+        resource:
+          type: object
+          additionalProperties: true
+        matchedResource:
+          type: object
+          additionalProperties: true
+        inherited:
+          type: boolean
+        path:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
     Policy:
       type: object
       required: [resourceClass, strategy, rules]
@@ -2072,6 +2096,32 @@ paths:
           description: Invalid relation tuple
         '403':
           $ref: '#/components/responses/GovernanceForbidden'
+
+  /v1/relations/check:
+    post:
+      tags: [relations]
+      summary: Check and explain a ReBAC relation
+      description: Returns whether the relation is granted directly or inherited from a parent resource.
+      operationId: checkRelation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationTuple'
+      responses:
+        '200':
+          description: Relation check explanation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/RelationCheck'
+        '400':
+          description: Invalid relation tuple
 
   /v1/cache/stats:
     get:

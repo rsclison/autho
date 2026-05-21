@@ -128,6 +128,9 @@
     (POST "/" request
           (handlers/create-relation request))
 
+    (POST "/check" request
+          (handlers/check-relation request))
+
     (DELETE "/" request
             (handlers/delete-relation request)))
 
