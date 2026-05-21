@@ -34,11 +34,18 @@ Les variables d'environnement `API_CLIENT_ID` et `API_CLIENT_CLASS` permettent d
 export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
 export API_CLIENT_ROLES="policy-admin,policy-deployer"
+export API_CLIENT_TENANTS="acme,globex"
 ```
 
 Conséquence de sécurité : un appelant ne peut pas envoyer `{"subject": {"id": "app-A"}}` dans le body pour se faire passer pour `app-A`. Pour une API key standard, `body.subject` est ignoré lors de la résolution du sujet.
 
 Le mode où un composant backend de confiance fournit explicitement un sujet dans le body n'est possible que si l'identité Ring interne contient `:allow-subject-delegation true`. Ce mode doit rester réservé à un composant serveur authentifié, jamais à un client public.
+
+### Tenant
+
+Les endpoints de decision resolvent un tenant effectif et le retournent dans `tenantId`. Le tenant peut venir de `X-Tenant-ID`, `?tenantId=`, du champ body `tenantId`, ou de `context.tenantId`. Si l'identite authentifiee declare des tenants autorises (`tenantId`, `tenantIds`, `tenants`, ou les memes champs dans `identity.subject`), le tenant demande doit appartenir a cette liste, sinon la requete est refusee avec `TENANT_FORBIDDEN`.
+
+Pour les clients API key, les tenants autorises sont lies cote serveur via `API_CLIENT_TENANTS` ou `API_CLIENT_TENANT_ID`. Sans tenant explicite, Autho utilise le tenant unique de l'identite, sinon `AUTHO_DEFAULT_TENANT_ID`, sinon `default`. Le cache de decisions inclut ce tenant dans sa cle pour eviter les collisions cross-tenant.
 
 ### Rôles de gouvernance
 

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - persisted relation rewrites for derived ReBAC permissions
   - ReBAC list objects/list subjects endpoints with rewrite, group and parent inheritance
   - generic ReBAC traversal endpoint for explicit forward/inverse relation paths
+  - tenant-aware decision context and tenant-scoped decision cache
 - Rate limiting middleware to prevent DoS attacks (configurable via `RATE_LIMIT_ENABLED` and `RATE_LIMIT_REQUESTS_PER_MINUTE`)
 - Health monitoring endpoints:
   - `/health` - Liveness probe for Kubernetes/Docker

@@ -48,6 +48,14 @@
          (remove empty?)
          vec)))
 
+(def api-client-tenants
+  (let [tenants (or (System/getenv "API_CLIENT_TENANTS")
+                    (System/getenv "API_CLIENT_TENANT_ID"))]
+    (->> (if tenants (.split tenants ",") [])
+         (map str/trim)
+         (remove empty?)
+         vec)))
+
 ;; --- Authentication Backends ---
 
 ;; 1. JWT Backend for end-users
@@ -71,11 +79,15 @@
                (when (constant-time-equals? token api-key)
                  {:auth-method :api-key
                   :client-id api-client-id
+                  :tenants api-client-tenants
                   :roles api-client-roles
-                  :subject {:id api-client-id
-                            :class api-client-class
-                            :client-id api-client-id
-                            :roles api-client-roles}}))
+                  :subject (cond-> {:id api-client-id
+                                     :class api-client-class
+                                     :client-id api-client-id
+                                     :roles api-client-roles}
+                              (= 1 (count api-client-tenants))
+                              (assoc :tenant-id (first api-client-tenants)
+                                     :tenantId (first api-client-tenants)))}))
      :token-name "X-API-Key"}))
 
 ;; --- Middleware ---

@@ -308,9 +308,10 @@
         (let [result (isAuthorized ring-req body)]
           (is (= false (:allowed result)))
           (is (= "deny" (:decision result)))
-          (is (= false (:allowed? result)))
-          (is (= "deny" (:decisionType result)))
-          (is (= :almost_one_allow_no_deny (:strategy result)))
+                  (is (= false (:allowed? result)))
+                  (is (= "deny" (:decisionType result)))
+                  (is (= "default" (:tenantId result)))
+                  (is (= :almost_one_allow_no_deny (:strategy result)))
           (is (= "user1" (:subjectId result)))
           (is (= {:id "user1"} (:effectiveSubject result)))
           (is (= :current (:policySource result)))
@@ -450,12 +451,51 @@
         (let [decision (isAuthorized ring-req body)
               explanation (explain ring-req body)
               simulation (simulate ring-req body)
-              shared-keys [:allowed? :decisionType :subjectId :effectiveSubject
-                           :resourceClass :resourceId :operation :strategy
-                           :matchedRuleNames :policySource]]
+                      shared-keys [:allowed? :decisionType :subjectId :effectiveSubject
+                                   :tenantId :resourceClass :resourceId :operation :strategy
+                                   :matchedRuleNames :policySource]]
           (doseq [k shared-keys]
             (is (= (get decision k) (get explanation k)) (str "decision/explain differ on " k))
-            (is (= (get explanation k) (get simulation k)) (str "explain/simulate differ on " k))))))))
+                    (is (= (get explanation k) (get simulation k)) (str "explain/simulate differ on " k))))))))
+
+(deftest decision-contract-includes-request-tenant-test
+  (testing "Decision endpoints expose the effective tenant"
+    (let [body {:subject {:id "user1"}
+                :resource {:class "doc" :id "doc-1"}
+                :operation "read"}
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true
+                               :tenantIds ["acme"]}
+                    :headers {"x-tenant-id" "acme"}}
+          policy {:rules [{:name "allow-rule" :effect "allow" :priority 10 :operation "read"}]
+                  :strategy :almost_one_allow_no_deny}]
+      (with-redefs [prp/getGlobalPolicy (fn [_] policy)
+                    deleg/findDelegation (fn [_] [])
+                    local-cache/get-cached-decision (fn [& _] nil)
+                    local-cache/cache-decision! (fn [& _] nil)
+                    metrics/record-decision! (fn [& _] nil)
+                    audit/log-decision! (fn [& _] nil)
+                    rule/evaluateRule (fn [_ req]
+                                        {:value (= "acme" (get-in req [:context :tenantId]))})]
+                (let [decision (isAuthorized ring-req body)]
+                  (is (= true (:allowed? decision)))
+                  (is (= "acme" (:tenantId decision))))))))
+
+(deftest decision-denies-cross-tenant-request-test
+  (testing "A requested tenant must be allowed by identity tenant claims"
+    (let [body {:subject {:id "user1"}
+                :resource {:class "doc" :id "doc-1"}
+                :operation "read"}
+          ring-req {:identity {:auth-method :api-key
+                               :allow-subject-delegation true
+                               :tenantIds ["acme"]}
+                    :headers {"x-tenant-id" "globex"}}]
+      (try
+        (isAuthorized ring-req body)
+        (is false "Expected tenant access denial")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= 403 (get-in (ex-data e) [:status])))
+          (is (= "TENANT_FORBIDDEN" (get-in (ex-data e) [:error-code]))))))))
 
 
 (deftest whoAuthorizedDetailed-test

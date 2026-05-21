@@ -36,6 +36,7 @@ The API-key application identity is configured with:
 API_CLIENT_ID=app-A
 API_CLIENT_CLASS=Application
 API_CLIENT_ROLES=policy-admin,policy-deployer
+API_CLIENT_TENANTS=acme,globex
 ```
 
 For service-to-service authorization, write policies against that application subject:
@@ -65,11 +66,19 @@ Policy governance write endpoints require an authenticated identity with a gover
 
 For API-key clients, roles are loaded from `API_CLIENT_ROLES` as a comma-separated list. The default is `governance-admin` for compatibility; production deployments should set least-privilege roles explicitly.
 
+### Tenant Resolution
+
+Decision endpoints resolve an effective tenant and return it as `tenantId` in the canonical decision contract. The tenant can come from `X-Tenant-ID`, `?tenantId=`, body `tenantId`, or `context.tenantId`. If the authenticated identity declares tenant claims (`tenantId`, `tenantIds`, `tenants`, or the same keys on `identity.subject`), the requested tenant must be one of them.
+
+For API-key clients, bind allowed tenants server-side with `API_CLIENT_TENANTS` or `API_CLIENT_TENANT_ID`. Without an explicit tenant, Autho uses the single identity tenant when exactly one exists, otherwise `AUTHO_DEFAULT_TENANT_ID` or `default`.
+
+The PDP injects `tenantId` into `context.tenantId` and scopes the decision cache by tenant. This is the enterprise isolation baseline; policies can also assert tenant equality explicitly through subject/resource attributes.
+
 ## Response Format
 
 All responses follow a standard format:
 
-Authorization decision endpoints expose the canonical decision contract documented in `docs/DECISION_CONTRACT.md`. New clients should prefer `allowed?`, `decisionType`, `effectiveSubject`, `matchedRuleNames`, `strategy`, and `policySource`. Compatibility fields such as `allowed`, `decision`, `results`, and `matchedRules` are still returned.
+Authorization decision endpoints expose the canonical decision contract documented in `docs/DECISION_CONTRACT.md`. New clients should prefer `allowed?`, `decisionType`, `tenantId`, `effectiveSubject`, `matchedRuleNames`, `strategy`, and `policySource`. Compatibility fields such as `allowed`, `decision`, `results`, and `matchedRules` are still returned.
 
 ### Success Response
 ```json

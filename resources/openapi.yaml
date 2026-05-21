@@ -57,7 +57,8 @@ components:
         calls, the effective PDP subject is the server-side application
         identity bound to the key via API_CLIENT_ID/API_CLIENT_CLASS; the
         request body subject is not trusted as an identity proof. Governance
-        write operations also use API_CLIENT_ROLES for role checks.
+        write operations also use API_CLIENT_ROLES for role checks. Tenant
+        selection can be constrained server-side with API_CLIENT_TENANTS.
     BearerAuth:
       type: http
       scheme: bearer
@@ -116,6 +117,10 @@ components:
         context:
           type: object
           additionalProperties: true
+        tenantId:
+          type: string
+          description: Optional requested tenant. Also accepted through X-Tenant-ID, query params, or context.tenantId.
+          example: acme
 
     AuthzDecision:
       type: object
@@ -134,6 +139,9 @@ components:
           type: string
           enum: [allow, deny]
           description: Canonical decision type.
+        tenantId:
+          type: string
+          description: Effective tenant used by the PDP and decision cache.
         subjectId:
           type: string
           description: Effective subject identifier used by the PDP.
@@ -252,6 +260,8 @@ components:
         decisionType:
           type: string
           enum: [allow, deny]
+        tenantId:
+          type: string
         strategy:
           type: string
         resourceClass:

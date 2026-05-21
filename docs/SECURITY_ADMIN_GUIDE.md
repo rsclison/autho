@@ -47,13 +47,16 @@ Trois secrets sont obligatoires au démarrage. Leur absence ou leur longueur ins
 | `API_KEY` | Authentification des applications de confiance via `X-API-Key` | 32 caractères |
 | `AUDIT_HMAC_SECRET` | Chaîne HMAC-SHA256 du journal d'audit (tamper-evident) | 32 caractères (256 bits) |
 
-Trois variables optionnelles lient la clé API à une identité applicative et à ses rôles de gouvernance :
+Des variables optionnelles lient la clé API à une identité applicative, à ses rôles de gouvernance et à ses tenants autorisés :
 
 | Variable | Usage | Défaut |
 |---|---|---|
 | `API_CLIENT_ID` | Identifiant applicatif utilisé comme sujet PDP pour les appels `X-API-Key` | `trusted-internal-app` |
 | `API_CLIENT_CLASS` | Classe du sujet applicatif | `Application` |
 | `API_CLIENT_ROLES` | Rôles de gouvernance attribués à l'application API key, séparés par des virgules | `governance-admin` |
+| `API_CLIENT_TENANTS` | Tenants autorisés pour cette application API key, séparés par des virgules | aucun |
+| `API_CLIENT_TENANT_ID` | Raccourci pour une application mono-tenant | aucun |
+| `AUTHO_DEFAULT_TENANT_ID` | Tenant utilisé si aucun tenant explicite ou lié à l'identité n'existe | `default` |
 
 Exemple :
 
@@ -61,6 +64,7 @@ Exemple :
 export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
 export API_CLIENT_ROLES="policy-admin,policy-deployer"
+export API_CLIENT_TENANTS="acme,globex"
 ```
 
 Avec cette configuration, une requête authentifiée par `X-API-Key` est évaluée comme le sujet :
@@ -73,6 +77,8 @@ Avec cette configuration, une requête authentifiée par `X-API-Key` est évalu�
 ```
 
 Le champ `subject` du body n'est pas une preuve d'identité et n'est pas utilisé pour déterminer le sujet d'un appel API key standard. Cette règle empêche un utilisateur ou un script d'appeler manuellement une route REST en déclarant `subject.id = app-A`.
+
+Pour les decisions, Autho resout aussi un tenant effectif depuis `X-Tenant-ID`, `?tenantId=`, le body `tenantId`, ou `context.tenantId`. Si l'identité contient des tenants autorisés, le tenant demandé doit être dans cette liste; sinon la requête est refusée avec `TENANT_FORBIDDEN`. Le cache de decisions est séparé par tenant.
 
 Les endpoints de gouvernance qui modifient l'état exigent un rôle applicatif ou JWT. `governance-admin` autorise tout ; en production, préférez des rôles minimaux : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer` ou `relation-admin`.
 

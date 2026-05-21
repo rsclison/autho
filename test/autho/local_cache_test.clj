@@ -178,6 +178,25 @@
       (is (= "old" (:value merged)))  ; Preserved from cache
       (is (= "new" (:new-field merged))))))
 
+(deftest decision-cache-is-tenant-scoped-test
+  (testing "Decision cache separates identical requests by tenant"
+    (cache/init-caches)
+    (cache/cache-decision! "acme" "alice" "Document" "doc-1" "read" {:allowed true})
+    (cache/cache-decision! "globex" "alice" "Document" "doc-1" "read" {:allowed false})
+    (is (= {:allowed true}
+           (cache/get-cached-decision "acme" "alice" "Document" "doc-1" "read")))
+    (is (= {:allowed false}
+           (cache/get-cached-decision "globex" "alice" "Document" "doc-1" "read")))))
+
+(deftest decision-cache-keeps-legacy-default-tenant-test
+  (testing "Legacy decision cache arities keep using the default tenant"
+    (cache/init-caches)
+    (cache/cache-decision! "alice" "Document" "doc-1" "read" {:allowed true})
+    (is (= {:allowed true}
+           (cache/get-cached-decision "alice" "Document" "doc-1" "read")))
+    (is (= {:allowed true}
+           (cache/get-cached-decision "default" "alice" "Document" "doc-1" "read")))))
+
 ;; =============================================================================
 ;; Cache Configuration Tests
 ;; =============================================================================

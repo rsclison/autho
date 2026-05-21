@@ -11,6 +11,7 @@
             [autho.policy-impact-history :as pih]
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.rebac :as rebac]
+            [autho.tenant :as tenant]
             [autho.otel :as otel]
             [autho.delegation :as deleg]
             [autho.features :as features]
@@ -196,11 +197,14 @@
 
 (defn- build-authz-request
   [request body]
-  (validate-authz-request!
-   {:subject (get-subject request body)
-    :resource (:resource body)
-    :operation (:operation body)
-    :context (:context body)}))
+  (let [tenant-context (tenant/resolve-tenant request body)]
+    (validate-authz-request!
+     {:subject (get-subject request body)
+      :resource (:resource body)
+      :operation (:operation body)
+      :context (tenant/with-tenant-context (:context body) tenant-context)
+      :tenant tenant-context
+      :tenantId (:tenantId tenant-context)})))
 
 (defn- build-rule-evaluation
   [rule augreq operation]
@@ -253,9 +257,10 @@
   "Common additive decision fields shared by public decision endpoints.
    Historical fields are kept by each endpoint for compatibility."
   [{:keys [allowed? decision subject resource operation strategy matched-rule-names
-           policy-source policy-version]}]
+           policy-source policy-version tenant-id]}]
   (cond-> {:allowed? allowed?
            :decisionType (name decision)
+           :tenantId tenant-id
            :subjectId (:id subject)
            :effectiveSubject subject
            :resourceClass (:class resource)
@@ -427,6 +432,7 @@
      :operation      (str (:operation body))}
     (let [authz-request (build-authz-request request body)
           subject-id (:id (:subject authz-request))
+          tenant-id (:tenantId authz-request)
           resource-class (:class (:resource authz-request))
           resource-id (:id (:resource authz-request))
           operation (:operation authz-request)
@@ -435,27 +441,28 @@
         (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
 
       (or (when-not (:timestamp (:context body))
-            (local-cache/get-cached-decision subject-id resource-class resource-id operation))
+            (local-cache/get-cached-decision tenant-id subject-id resource-class resource-id operation))
           (let [decision-result (evalRequest authz-request)
                 allowed? (:result decision-result)
                 matched-rules (mapv :name (:rules decision-result))
                 decision-key (if allowed? :allow :deny)
-                result (merge
-                        (decision-contract {:allowed? allowed?
-                                            :decision decision-key
-                                            :subject (:subject authz-request)
-                                            :resource (:resource authz-request)
-                                            :operation operation
-                                            :strategy (:strategy globalPolicy)
-                                            :matched-rule-names matched-rules})
-                        {:allowed allowed?
-                         :decision (name decision-key)
-                         :results matched-rules
-                         :matchedRules matched-rules
-                         :resourceClass resource-class
-                         :resourceId resource-id
-                         :operation operation})]
-            (local-cache/cache-decision! subject-id resource-class resource-id operation result)
+                        result (merge
+                                (decision-contract {:allowed? allowed?
+                                                    :decision decision-key
+                                                    :tenant-id (:tenantId authz-request)
+                                                    :subject (:subject authz-request)
+                                                    :resource (:resource authz-request)
+                                                    :operation operation
+                                                    :strategy (:strategy globalPolicy)
+                                                    :matched-rule-names matched-rules})
+                                {:allowed allowed?
+                                 :decision (name decision-key)
+                                 :results matched-rules
+                                 :matchedRules matched-rules
+                                 :resourceClass resource-class
+                                 :resourceId resource-id
+                                 :operation operation})]
+            (local-cache/cache-decision! tenant-id subject-id resource-class resource-id operation result)
             result)))))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
@@ -559,15 +566,16 @@
     (if-not globalPolicy
       (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
 
-    (let [decision-result (-> (evaluate-policy-rules globalPolicy authz-request)
-                              (canonical-decision))
-          contract (decision-contract {:allowed? (:allowed? decision-result)
-                                       :decision (:decision decision-result)
-                                       :subject (:subject authz-request)
-                                       :resource (:resource authz-request)
-                                       :operation operation
-                                       :strategy (:conflict-strategy decision-result)
-                                       :matched-rule-names (:matched-rule-names decision-result)})]
+            (let [decision-result (-> (evaluate-policy-rules globalPolicy authz-request)
+                                      (canonical-decision))
+                  contract (decision-contract {:allowed? (:allowed? decision-result)
+                                               :decision (:decision decision-result)
+                                               :tenant-id (:tenantId authz-request)
+                                               :subject (:subject authz-request)
+                                               :resource (:resource authz-request)
+                                               :operation operation
+                                               :strategy (:conflict-strategy decision-result)
+                                               :matched-rule-names (:matched-rule-names decision-result)})]
       (merge contract
              {:decision (:allowed? decision-result)
               :allowed? (:allowed? decision-result)
@@ -603,22 +611,23 @@
         (throw (ex-info "No policy available for simulation"
                         {:status 404 :error-code "NO_POLICY"})))
 
-      (let [decision-result (-> (evaluate-policy-rules policy authz-request)
-                                (canonical-decision))
-            policy-source (cond (:simulatedPolicy body) :provided
-                                (:policyVersion body)   :version
-                                :else                   :current)
-            policy-version (or (:policyVersion body)
-                               (pv/latest-version-number resource-class))
-            contract (decision-contract {:allowed? (:allowed? decision-result)
-                                         :decision (:decision decision-result)
-                                         :subject (:subject authz-request)
-                                         :resource (:resource authz-request)
-                                         :operation (:operation authz-request)
-                                         :strategy (:conflict-strategy decision-result)
-                                         :matched-rule-names (:matched-rule-names decision-result)
-                                         :policy-source policy-source
-                                         :policy-version policy-version})]
+              (let [decision-result (-> (evaluate-policy-rules policy authz-request)
+                                        (canonical-decision))
+                    policy-source (cond (:simulatedPolicy body) :provided
+                                        (:policyVersion body)   :version
+                                        :else                   :current)
+                    policy-version (or (:policyVersion body)
+                                       (pv/latest-version-number resource-class))
+                    contract (decision-contract {:allowed? (:allowed? decision-result)
+                                                 :decision (:decision decision-result)
+                                                 :tenant-id (:tenantId authz-request)
+                                                 :subject (:subject authz-request)
+                                                 :resource (:resource authz-request)
+                                                 :operation (:operation authz-request)
+                                                 :strategy (:conflict-strategy decision-result)
+                                                 :matched-rule-names (:matched-rule-names decision-result)
+                                                 :policy-source policy-source
+                                                 :policy-version policy-version})]
         (merge contract
                {:decision      (:allowed? decision-result)
                 :allowed?      (:allowed? decision-result)

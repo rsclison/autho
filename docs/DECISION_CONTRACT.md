@@ -20,6 +20,7 @@ Tout endpoint de decision doit exposer les champs suivants :
 |---|---|---|
 | `allowed?` | boolean | Decision booleenne canonique |
 | `decisionType` | string | `allow` ou `deny` |
+| `tenantId` | string | Tenant effectif utilise pour la decision |
 | `subjectId` | string | Identifiant du sujet effectif |
 | `effectiveSubject` | object | Sujet reel utilise par le PDP apres authentification/enrichissement |
 | `resourceClass` | string | Classe de ressource |
@@ -48,6 +49,7 @@ Ils ne doivent pas etre utilises comme base de nouveaux developpements. Les nouv
 3. `effectiveSubject` est le sujet authentifie ou delegue par le serveur, pas une valeur client non fiable.
 4. `policySource` vaut `current` pour une decision normale, `provided` pour une simulation inline, `version` pour une simulation sur version archivee.
 5. Le batch v1 renvoie une liste de decisions canoniques dans `data.results`.
+6. `tenantId` est resolu cote serveur depuis l'identite, `X-Tenant-ID`, les parametres ou le contexte de requete; si l'identite declare une liste de tenants, le tenant demande doit en faire partie.
 
 ## Strategie de conflit supportee
 

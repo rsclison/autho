@@ -90,12 +90,15 @@ export JWT_SECRET="my-strong-secret-key-32-chars-min"
 export API_KEY="my-strong-api-key-32-chars-min"
 export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
+export API_CLIENT_TENANTS="acme"
 
 ./lein ring server-headless
 # Serveur démarré sur http://localhost:8080
 ```
 
 `API_KEY` authentifie une application cliente de confiance. L'identité applicative exposée au PDP est configurée par `API_CLIENT_ID` et `API_CLIENT_CLASS`. Avec une API key standard, Autho ignore le champ `subject` fourni dans le body : un appelant ne peut donc pas se faire passer pour une autre application en postant manuellement `{"subject": {"id": "app-A"}}`.
+
+Le tenant effectif est resolu cote serveur et retourne dans `tenantId`. Pour une API key, limitez les tenants autorises avec `API_CLIENT_TENANTS` ou `API_CLIENT_TENANT_ID`; `X-Tenant-ID` ne peut selectionner qu'un tenant autorise.
 
 ### Premier appel
 

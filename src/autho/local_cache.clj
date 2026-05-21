@@ -263,53 +263,67 @@
 ;; =============================================================================
 ;; Decision Cache
 ;; Short-circuits repeated identical authorization evaluations.
-;; Key: [subject-id resource-class resource-id operation]
+;; Key: [tenant-id subject-id resource-class resource-id operation]
 ;; Value: {:value <decision-map> :expires-at <epoch-ms>}
 ;; =============================================================================
 
+(defn- decision-cache-key
+  ([subject-id resource-class resource-id operation]
+   ["default" subject-id resource-class resource-id operation])
+  ([tenant-id subject-id resource-class resource-id operation]
+   [(or tenant-id "default") subject-id resource-class resource-id operation]))
+
 (defn get-cached-decision
   "Return cached authorization decision or nil (miss / expired)."
-  [subject-id resource-class resource-id operation]
-  (when (:decision-cache-enabled @cache-config)
-    (let [k     [subject-id resource-class resource-id operation]
-          entry (get (:decision-cache @cache-state) k)]
-      (if (nil? entry)
-        (do (swap! cache-state update-in [:cache-stats :decision-misses] inc) nil)
-        (if (> (System/currentTimeMillis) (:expires-at entry))
-          ;; Lazy expiry: remove and report miss
-          (do (swap! cache-state update :decision-cache dissoc k)
-              (swap! cache-state update-in [:cache-stats :decision-misses] inc)
-              nil)
-          (do (swap! cache-state update-in [:cache-stats :decision-hits] inc)
-              (metrics/record-cache-hit! :decision)
-              (:value entry)))))))
+  ([subject-id resource-class resource-id operation]
+   (get-cached-decision "default" subject-id resource-class resource-id operation))
+  ([tenant-id subject-id resource-class resource-id operation]
+   (when (:decision-cache-enabled @cache-config)
+     (let [k     (decision-cache-key tenant-id subject-id resource-class resource-id operation)
+           entry (get (:decision-cache @cache-state) k)]
+       (if (nil? entry)
+         (do (swap! cache-state update-in [:cache-stats :decision-misses] inc) nil)
+         (if (> (System/currentTimeMillis) (:expires-at entry))
+           ;; Lazy expiry: remove and report miss
+           (do (swap! cache-state update :decision-cache dissoc k)
+               (swap! cache-state update-in [:cache-stats :decision-misses] inc)
+               nil)
+           (do (swap! cache-state update-in [:cache-stats :decision-hits] inc)
+               (metrics/record-cache-hit! :decision)
+               (:value entry))))))))
 
 (defn cache-decision!
   "Store an authorization decision with TTL.
    Evicts oldest entries when the cache exceeds decision-max-size."
-  [subject-id resource-class resource-id operation value]
-  (when (:decision-cache-enabled @cache-config)
-    (let [k        [subject-id resource-class resource-id operation]
-          ttl      (:decision-ttl @cache-config)
-          max-size (:decision-max-size @cache-config)
-          expires  (+ (System/currentTimeMillis) ttl)]
-      (swap! cache-state update :decision-cache
-             (fn [dc]
-               (let [dc' (assoc dc k {:value value :expires-at expires})]
-                 (if (<= (count dc') max-size)
-                   dc'
-                   ;; Evict the quarter of entries that expire soonest
-                   (let [sorted  (sort-by (fn [[_ v]] (:expires-at v)) dc')
-                         keep-n  (int (* max-size 0.75))]
-                     (into {} (take-last keep-n sorted)))))))))
-  value)
+  ([subject-id resource-class resource-id operation value]
+   (cache-decision! "default" subject-id resource-class resource-id operation value))
+  ([tenant-id subject-id resource-class resource-id operation value]
+   (when (:decision-cache-enabled @cache-config)
+     (let [k        (decision-cache-key tenant-id subject-id resource-class resource-id operation)
+           ttl      (:decision-ttl @cache-config)
+           max-size (:decision-max-size @cache-config)
+           expires  (+ (System/currentTimeMillis) ttl)]
+       (swap! cache-state update :decision-cache
+              (fn [dc]
+                (let [dc' (assoc dc k {:value value :expires-at expires})]
+                  (if (<= (count dc') max-size)
+                    dc'
+                    ;; Evict the quarter of entries that expire soonest
+                    (let [sorted  (sort-by (fn [[_ v]] (:expires-at v)) dc')
+                          keep-n  (int (* max-size 0.75))]
+                      (into {} (take-last keep-n sorted)))))))))
+   value))
 
 (defn invalidate-decisions-for-class!
   "Remove all cached decisions for a given resource class (called on policy update)."
   [resource-class]
   (swap! cache-state update :decision-cache
          (fn [dc]
-           (into {} (remove (fn [[[_ rc _ _] _]] (= rc resource-class)) dc))))
+           (into {} (remove (fn [[k _]]
+                              (let [cached-class (if (= 5 (count k))
+                                                   (nth k 2)
+                                                   (nth k 1))]
+                                (= cached-class resource-class))) dc))))
   (log/debug "Invalidated all decision cache entries for class:" resource-class))
 
 ;; =============================================================================

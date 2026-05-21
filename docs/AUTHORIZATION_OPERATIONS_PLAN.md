@@ -19,14 +19,15 @@ Les priorites 1 a 3 disposent maintenant d'un socle operationnel :
 - impact analysis avec profils de risque persistables, revisions append-only, approbations et garde-fous de rollout;
 - lifecycle auditable des politiques : versions, diff, rollback, rollout depuis analyse d'impact et timeline;
 - RBAC de gouvernance sur les mutations critiques via `API_CLIENT_ROLES` ou roles JWT;
-- premier socle ReBAC durable : tuples sujet-relation-ressource persistés en H2, predicat `relation` dans les politiques, API `/v1/relations`.
+- premier socle ReBAC durable : tuples sujet-relation-ressource persistés en H2, predicat `relation` dans les politiques, API `/v1/relations`;
+- premier socle enterprise multi-tenant : resolution `tenantId`, controle des tenants API key/JWT et cache de decisions cloisonne par tenant.
 
 Les limites connues restent :
 
-- le ReBAC supporte l'heritage par ressources parentes, groupes imbriques et rewrites persistés de relations, mais pas encore les traversals relationnels generiques;
+- le ReBAC supporte l'heritage par ressources parentes, groupes imbriques, rewrites persistés et traversals explicites;
 - les tuples relationnels sont persistés localement en H2, mais doivent encore etre externalises ou distribués pour un usage enterprise multi-instance;
 - le control plane, le data plane et l'evidence plane ne sont pas encore separes;
-- le multi-tenant, les bundles signes et les workflows GRC complets restent a construire.
+- le multi-tenant strict au niveau stockage, les bundles signes et les workflows GRC complets restent a construire.
 
 ## Priorite 1 - Socle de confiance
 
@@ -182,6 +183,14 @@ Chantiers :
 
 Critere de succes : un client enterprise peut deployer Autho sans bricolage.
 
+Etat d'avancement :
+
+- resolution de tenant ajoutee depuis `X-Tenant-ID`, query params, body, contexte ou claims d'identite;
+- les API keys peuvent etre limitees cote serveur via `API_CLIENT_TENANTS` ou `API_CLIENT_TENANT_ID`;
+- les decisions canoniques exposent `tenantId`;
+- le cache de decisions est cloisonne par tenant;
+- prochaine etape : appliquer ce tenant aux stores persistants et preparer la distribution des politiques signees.
+
 ## Priorite 6 - Gouvernance et compliance
 
 Objectif : transformer l'autorisation en processus gouvernable.
@@ -205,7 +214,7 @@ Critere de succes : Autho parle aux equipes securite, conformite, DPO et RSSI, p
 1. Stabilise : contrat de decision canonique, validation, tests declaratifs et impact analysis initial.
 2. Stabilise : gouvernance RBAC minimale et lifecycle policy auditable.
 3. En cours : moteur hybride ABAC/ReBAC avec tuples directs, héritage, rewrites persistés, list objects/list subjects et traversals explicites.
-4. Prochaine tranche : architecture enterprise et stockage relationnel distribué.
+4. En cours : architecture enterprise avec contexte tenant et cache cloisonne.
 5. Prochaine tranche : demo commerciale complete avec API key application, utilisateur delegue, explain, simulate, audit, replay, rapport d'impact et relation ReBAC.
 6. Prochaine tranche : comparaison produit honnete Autho vs OPA, Cedar, OpenFGA, SpiceDB.
 
