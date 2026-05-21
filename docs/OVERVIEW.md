@@ -39,7 +39,7 @@ Policies can reference this graph with:
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
 
-Autho checks direct tuples, persisted relation rewrites, nested group membership through `member` tuples, and resource-parent inheritance through `parent` tuples. For example, if `can-read` rewrites to `viewer`, Alice is a member of a team, the team is `viewer` of a folder, and a document belongs to that folder, Alice is treated as having `can-read` on the document. The relation API can also list accessible objects for a subject and authorized subjects for an object with the same semantics. Tuples and rewrites are persisted in the policy H2 database and loaded into in-memory indexes at startup. Distributed relation storage is planned follow-up work.
+Autho checks direct tuples, persisted relation rewrites, nested group membership through `member` tuples, and resource-parent inheritance through `parent` tuples. For example, if `can-read` rewrites to `viewer`, Alice is a member of a team, the team is `viewer` of a folder, and a document belongs to that folder, Alice is treated as having `can-read` on the document. The relation API can also list accessible objects for a subject, list authorized subjects for an object, and traverse explicit relation paths using forward or inverse indexes. Tuples and rewrites are persisted in the policy H2 database and loaded into in-memory indexes at startup. Distributed relation storage is planned follow-up work.
 
 ### XACML Architecture (PDP / PRP / PIP / PAP)
 

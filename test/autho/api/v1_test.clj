@@ -774,6 +774,26 @@
       (rebac/clear-relations!)
       (rebac/clear-relation-rewrites!))))
 
+(deftest relation-traverse-handler-test
+  (rebac/clear-relations!)
+  (try
+    (let [alice {:class "Person" :id "alice"}
+          team {:class "Group" :id "team-a"}
+          doc {:class "Document" :id "doc-1"}]
+      (rebac/add-relation! alice "member" team)
+      (rebac/add-relation! team "viewer" doc)
+      (let [response (handlers/traverse-relations
+                      (mock-request :body (json/write-value-as-string
+                                           {:start alice
+                                            :steps ["member" "viewer"]
+                                            :targetClass "Document"})))
+            body (parse-response-body response)]
+        (is (= 200 (:status response)))
+        (is (= [doc] (get-in body [:data :entities])))
+        (is (= 1 (get-in body [:data :count])))))
+    (finally
+      (rebac/clear-relations!))))
+
 (deftest relation-mutation-requires-admin-role-test
   (let [payload {:subject {:class "Person" :id "alice"}
                  :relation "viewer"
@@ -841,6 +861,20 @@
                      :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
     (is (= 200 (:status response)))
     (is (= "/relations/list-subjects" (:uri @captured)))))
+
+(deftest relation-traverse-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/traverse-relations
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :post
+                     :uri "/relations/traverse"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= "/relations/traverse" (:uri @captured)))))
 
 (deftest relation-rewrite-route-forwards-request-test
   (let [captured (atom nil)

@@ -204,6 +204,7 @@ Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégra
 | `POST /v1/relations/check` | Expliquer un check relationnel direct ou hérité |
 | `POST /v1/relations/list-objects` | Lister les ressources accessibles par un sujet |
 | `POST /v1/relations/list-subjects` | Lister les sujets autorisés sur une ressource |
+| `POST /v1/relations/traverse` | Suivre un chemin relationnel explicite |
 | `DELETE /v1/relations` | Supprimer un tuple sujet-relation-ressource |
 
 Les mutations de politiques, profils de risque, reviews, rollouts et relations sont protégées par des rôles de gouvernance (`policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin` ou `governance-admin`). Pour les clients API key, ces rôles sont configurés via `API_CLIENT_ROLES`.
@@ -212,6 +213,7 @@ Les tuples ReBAC sont persistés dans la base H2 des politiques (`REBAC_RELATION
 La relation `member` permet les groupes imbriqués ; la relation `parent` permet l'héritage depuis les ressources parentes.
 Les rewrites de relations sont persistés dans `REBAC_RELATION_REWRITES` et administrables via `/v1/relations/rewrites`.
 Les endpoints `list-objects` et `list-subjects` appliquent les tuples directs, rewrites, groupes imbriqués et héritage parent.
+Le endpoint `traverse` suit des chemins relationnels explicites en sens sortant ou inverse.
 
 ### Time-Travel (Kafka activé)
 

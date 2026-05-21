@@ -146,6 +146,9 @@
     (POST "/list-subjects" request
           (handlers/list-relation-subjects request))
 
+    (POST "/traverse" request
+          (handlers/traverse-relations request))
+
     (DELETE "/" request
             (handlers/delete-relation request)))
 

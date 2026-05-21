@@ -163,7 +163,8 @@ Etat d'avancement :
 - `matchedRelation` et `relationPath` ajoutés dans les preuves;
 - mode list objects/list subjects ReBAC expose via `POST /v1/relations/list-objects` et `POST /v1/relations/list-subjects`;
 - index inverses en memoire pour retrouver descendants de ressources parentes et membres de groupes;
-- prochaine etape : préparer l'architecture enterprise ou ajouter les traversals relationnels generiques.
+- traversal relationnel generique expose via `POST /v1/relations/traverse`, avec chemins explicites et directions sortante/inverse;
+- prochaine etape : préparer l'architecture enterprise et le stockage relationnel distribué.
 
 ## Priorite 5 - Architecture enterprise
 
@@ -203,8 +204,8 @@ Critere de succes : Autho parle aux equipes securite, conformite, DPO et RSSI, p
 
 1. Stabilise : contrat de decision canonique, validation, tests declaratifs et impact analysis initial.
 2. Stabilise : gouvernance RBAC minimale et lifecycle policy auditable.
-3. En cours : moteur hybride ABAC/ReBAC avec tuples directs, héritage, rewrites persistés et list objects/list subjects.
-4. Prochaine tranche : traversals relationnels generiques et stockage relationnel enterprise.
+3. En cours : moteur hybride ABAC/ReBAC avec tuples directs, héritage, rewrites persistés, list objects/list subjects et traversals explicites.
+4. Prochaine tranche : architecture enterprise et stockage relationnel distribué.
 5. Prochaine tranche : demo commerciale complete avec API key application, utilisateur delegue, explain, simulate, audit, replay, rapport d'impact et relation ReBAC.
 6. Prochaine tranche : comparaison produit honnete Autho vs OPA, Cedar, OpenFGA, SpiceDB.
 

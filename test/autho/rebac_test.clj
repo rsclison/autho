@@ -166,6 +166,50 @@
                                            "can-read"
                                            {:subject-class "Person"})))))
 
+(deftest generic-relation-traversal-follows-explicit-path-test
+  (let [alice {:class "Person" :id "alice"}
+        team {:class "Group" :id "team-a"}
+        workspace {:class "Workspace" :id "workspace-1"}
+        folder {:class "Folder" :id "folder-1"}
+        doc {:class "Document" :id "doc-1"}]
+    (rebac/add-relation! alice "member" team)
+    (rebac/add-relation! team "viewer" workspace)
+    (rebac/add-relation! folder "parent" workspace)
+    (rebac/add-relation! doc "parent" folder)
+    (is (= {:start alice
+            :steps [{:relation "member" :direction "out"}
+                    {:relation "viewer" :direction "out"}
+                    {:relation "parent" :direction "in"}
+                    {:relation "parent" :direction "in"}]
+            :entities [doc]
+            :count 1
+            :paths [{:entity doc
+                     :path [{:entity alice}
+                            {:relation "member" :direction "out" :entity team}
+                            {:relation "viewer" :direction "out" :entity workspace}
+                            {:relation "parent" :direction "in" :entity folder}
+                            {:relation "parent" :direction "in" :entity doc}]}]}
+           (rebac/traverse-relations alice
+                                     ["member"
+                                      "viewer"
+                                      {:relation "parent" :direction "in"}
+                                      {:relation "parent" :direction "in"}]
+                                     {:target-class "Document"})))))
+
+(deftest generic-relation-traversal-expands-rewrites-test
+  (let [alice {:class "Person" :id "alice"}
+        doc {:class "Document" :id "doc-1"}]
+    (rebac/set-relation-rewrite! "can-read" ["viewer"])
+    (rebac/add-relation! alice "viewer" doc)
+    (is (= [doc]
+           (:entities (rebac/traverse-relations alice
+                                                ["can-read"]
+                                                {:target-class "Document"}))))
+    (is (empty? (:entities (rebac/traverse-relations alice
+                                                     ["can-read"]
+                                                     {:target-class "Document"
+                                                      :expand-rewrites false}))))))
+
 (deftest durable-relations-survive-reinit-test
   (let [test-db {:classname "org.h2.Driver"
                  :subprotocol "h2:mem"

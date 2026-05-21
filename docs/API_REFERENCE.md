@@ -840,7 +840,26 @@ curl -X POST http://localhost:8080/v1/relations/list-subjects \
 
 Ces endpoints appliquent les memes regles que le check relationnel : tuples directs, rewrites persistés, groupes imbriqués et héritage parent.
 
-Limite actuelle : Autho ne resout pas encore les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
+Pour suivre un chemin relationnel explicite :
+
+```bash
+curl -X POST http://localhost:8080/v1/relations/traverse \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{
+    "start": {"class": "Person", "id": "alice"},
+    "steps": [
+      "member",
+      "viewer",
+      {"relation": "parent", "direction": "in"}
+    ],
+    "targetClass": "Folder"
+  }'
+```
+
+La direction `out` suit les tuples sujet vers ressource. La direction `in` suit l'index inverse, de la ressource vers les sujets qui pointent vers elle.
+
+Limite actuelle : Autho ne propose pas encore de stockage relationnel distribué externe.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 

@@ -25,6 +25,8 @@
 
 (defonce relation-tuples
   (atom {:tuples #{}
+         :by-subject-relation {}
+         :by-resource-relation {}
          :parents-by-child {}
          :children-by-parent {}
          :memberships-by-member {}
@@ -77,7 +79,14 @@
 
 (defn- add-to-index
   [store tuple]
-  (cond-> (update store :tuples conj tuple)
+  (cond-> (-> store
+              (update :tuples conj tuple)
+              (update-in [:by-subject-relation [(:subject tuple) (:relation tuple)]]
+                         (fnil conj #{})
+                         (:resource tuple))
+              (update-in [:by-resource-relation [(:resource tuple) (:relation tuple)]]
+                         (fnil conj #{})
+                         (:subject tuple)))
     (= "parent" (:relation tuple))
     (update-in [:parents-by-child (:subject tuple)]
                (fnil conj #{})
@@ -97,7 +106,14 @@
 
 (defn- remove-from-index
   [store tuple]
-  (cond-> (update store :tuples disj tuple)
+  (cond-> (-> store
+              (update :tuples disj tuple)
+              (update-in [:by-subject-relation [(:subject tuple) (:relation tuple)]]
+                         (fnil disj #{})
+                         (:resource tuple))
+              (update-in [:by-resource-relation [(:resource tuple) (:relation tuple)]]
+                         (fnil disj #{})
+                         (:subject tuple)))
     (= "parent" (:relation tuple))
     (update-in [:parents-by-child (:subject tuple)]
                (fnil disj #{})
@@ -119,6 +135,8 @@
   [tuples]
   (reduce add-to-index
           {:tuples #{}
+           :by-subject-relation {}
+           :by-resource-relation {}
            :parents-by-child {}
            :children-by-parent {}
            :memberships-by-member {}
@@ -199,6 +217,8 @@
   ([] (clear-relations! {}))
   ([{:keys [persist]}]
    (reset! relation-tuples {:tuples #{}
+                            :by-subject-relation {}
+                            :by-resource-relation {}
                             :parents-by-child {}
                             :children-by-parent {}
                             :memberships-by-member {}
@@ -418,10 +438,66 @@
                                         {:relation derived-relation
                                          :path (conj path derived-relation)})
                                       derived)]
-              (recur (vec (concat remaining derived-paths))
-                     (conj visited relation)
-                     (conj paths current)
-                     (inc depth)))))))))
+	              (recur (vec (concat remaining derived-paths))
+	                     (conj visited relation)
+	                     (conj paths current)
+	                     (inc depth)))))))))
+
+(defn- normalized-traversal-step
+  [step]
+  (if (map? step)
+    {:relation (name (:relation step))
+     :direction (or (:direction step) "out")}
+    {:relation (name step)
+     :direction "out"}))
+
+(defn- relation-names-for-step
+  [relation expand-rewrites max-depth]
+  (if expand-rewrites
+    (mapv :relation (relation-paths relation max-depth))
+    [(name relation)]))
+
+(defn- tuple-neighbors
+  [store entity relation direction]
+  (case (name direction)
+    "in" (get-in store [:by-resource-relation [entity relation]] #{})
+    "inbound" (get-in store [:by-resource-relation [entity relation]] #{})
+    "out" (get-in store [:by-subject-relation [entity relation]] #{})
+    "outbound" (get-in store [:by-subject-relation [entity relation]] #{})
+    (get-in store [:by-subject-relation [entity relation]] #{})))
+
+(defn traverse-relations
+  "Traverses a relation path from a starting entity.
+   Steps can be relation names or maps like {:relation \"parent\" :direction \"out\"}.
+   Directions are out/outbound for subject->resource and in/inbound for resource->subject."
+  ([start steps]
+   (traverse-relations start steps {}))
+  ([start steps {:keys [target-class expand-rewrites max-depth]
+                 :or {expand-rewrites true
+                      max-depth default-max-depth}}]
+   (let [store @relation-tuples
+         normalized-steps (mapv normalized-traversal-step steps)
+         start-key (entity-key start)
+         final-paths (reduce
+                      (fn [paths {:keys [relation direction]}]
+                        (vec
+                         (for [{:keys [entity path]} paths
+                               relation-name (relation-names-for-step relation expand-rewrites max-depth)
+                               neighbor (tuple-neighbors store entity relation-name direction)]
+                           {:entity neighbor
+                            :path (conj path {:relation relation-name
+                                              :direction (name direction)
+                                              :entity neighbor})})))
+                      [{:entity start-key
+                        :path [{:entity start-key}]}]
+                      normalized-steps)
+         filtered-paths (filter #(entity-matches-class? (:entity %) target-class) final-paths)
+         entities (sort-entities (map :entity filtered-paths))]
+     {:start start-key
+      :steps normalized-steps
+      :entities entities
+      :count (count entities)
+      :paths (vec (sort-by pr-str filtered-paths))})))
 
 (defn list-accessible-resources
   "Lists resources for which subject has relation.

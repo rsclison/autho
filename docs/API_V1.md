@@ -830,6 +830,53 @@ List subjects authorized on a resource for a relation. Use `subjectClass` to fil
 }
 ```
 
+#### POST /v1/relations/traverse
+
+Traverse an explicit relation path from a starting entity. Steps can be relation names, or objects with `relation` and `direction`; `direction` is `out` for subject-to-resource and `in` for resource-to-subject. Rewrites are expanded by default.
+
+**Request:**
+```json
+{
+  "start": {"class": "Person", "id": "alice"},
+  "steps": [
+    "member",
+    "viewer",
+    {"relation": "parent", "direction": "in"}
+  ],
+  "targetClass": "Folder"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "start": {"class": "Person", "id": "alice"},
+    "steps": [
+      {"relation": "member", "direction": "out"},
+      {"relation": "viewer", "direction": "out"},
+      {"relation": "parent", "direction": "in"}
+    ],
+    "entities": [
+      {"class": "Folder", "id": "folder-1"}
+    ],
+    "count": 1,
+    "paths": [
+      {
+        "entity": {"class": "Folder", "id": "folder-1"},
+        "path": [
+          {"entity": {"class": "Person", "id": "alice"}},
+          {"relation": "member", "direction": "out", "entity": {"class": "Group", "id": "team-a"}},
+          {"relation": "viewer", "direction": "out", "entity": {"class": "Document", "id": "doc-1"}},
+          {"relation": "parent", "direction": "in", "entity": {"class": "Folder", "id": "folder-1"}}
+        ]
+      }
+    ]
+  }
+}
+```
+
 #### DELETE /v1/relations
 
 Delete a direct subject-relation-resource tuple. Requires `governance-admin` or `relation-admin`. The request body has the same shape as `POST /v1/relations`.
@@ -849,7 +896,7 @@ Delete a direct subject-relation-resource tuple. Requires `governance-admin` or 
 }
 ```
 
-Current limitation: Autho supports direct checks, list objects/list subjects, persisted relation rewrites, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Arbitrary recursive traversals and distributed external relation storage are not implemented yet.
+Current limitation: Autho supports direct checks, list objects/list subjects, explicit relation traversals, persisted relation rewrites, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Distributed external relation storage is not implemented yet.
 
 ### Cache Management Endpoints
 

@@ -193,6 +193,38 @@
                                       :subject-class
                                       [:subjectClass :subject-class])}))
 
+(defn- valid-traversal-step?
+  [step]
+  (let [relation (if (map? step) (:relation step) step)]
+    (and (some? relation)
+         (not (str/blank? (str relation))))))
+
+(defn- validate-traverse-payload!
+  [body]
+  (let [start (:start body)
+        steps (:steps body)
+        target-class (or (:targetClass body) (:target-class body))
+        expand-rewrites (if (contains? body :expandRewrites)
+                          (:expandRewrites body)
+                          (:expand-rewrites body))
+        max-depth (parse-max-depth (:maxDepth body))]
+    (when-not (and (valid-relation-entity? start)
+                   (sequential? steps)
+                   (not (empty? steps))
+                   (every? valid-traversal-step? steps))
+      (throw (ex-info "Relation traversal requires start and non-empty steps"
+                      {:status 400
+                       :error-code "INVALID_RELATION_TRAVERSAL"})))
+    {:start start
+     :steps steps
+     :options (cond-> {}
+                target-class
+                (assoc :target-class target-class)
+                (some? expand-rewrites)
+                (assoc :expand-rewrites (boolean expand-rewrites))
+                max-depth
+                (assoc :max-depth max-depth))}))
+
 (defn- validate-relation-rewrite-payload!
   [relation body]
   (let [relations (or (:relations body)
@@ -1141,6 +1173,23 @@
           (log/error e "Error listing relation subjects")
           (response/error-response "RELATION_QUERY_ERROR"
                                    (str "Failed to list relation subjects: " (.getMessage e))
+                                   500))))))
+
+(defn traverse-relations
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (let [{:keys [start steps options]} (validate-traverse-payload! body-or-response)
+              result (rebac/traverse-relations start steps options)]
+          (response/success-response result))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RELATION_TRAVERSAL_ERROR" "Failed to traverse relations: "))
+        (catch Exception e
+          (log/error e "Error traversing relations")
+          (response/error-response "RELATION_TRAVERSAL_ERROR"
+                                   (str "Failed to traverse relations: " (.getMessage e))
                                    500))))))
 
 (defn delete-relation

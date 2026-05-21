@@ -888,6 +888,44 @@ components:
           type: integer
           default: 8
 
+    RelationTraversalStep:
+      oneOf:
+        - type: string
+          example: member
+        - type: object
+          required: [relation]
+          properties:
+            relation:
+              type: string
+              example: parent
+            direction:
+              type: string
+              enum: [out, outbound, in, inbound]
+              default: out
+
+    RelationTraverseRequest:
+      type: object
+      required: [start, steps]
+      properties:
+        start:
+          type: object
+          required: [class, id]
+          additionalProperties: true
+        steps:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RelationTraversalStep'
+        targetClass:
+          type: string
+          example: Document
+        expandRewrites:
+          type: boolean
+          default: true
+        maxDepth:
+          type: integer
+          default: 8
+
     Policy:
       type: object
       required: [resourceClass, strategy, rules]
@@ -2333,6 +2371,57 @@ paths:
                             type: integer
         '400':
           description: Invalid relation query
+
+  /v1/relations/traverse:
+    post:
+      tags: [relations]
+      summary: Traverse an explicit ReBAC relation path
+      description: Follows forward or inverse relation indexes. String steps default to outbound subject-to-resource traversal.
+      operationId: traverseRelations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationTraverseRequest'
+      responses:
+        '200':
+          description: Traversal result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          start:
+                            type: object
+                            additionalProperties: true
+                          steps:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                relation:
+                                  type: string
+                                direction:
+                                  type: string
+                          entities:
+                            type: array
+                            items:
+                              type: object
+                              additionalProperties: true
+                          count:
+                            type: integer
+                          paths:
+                            type: array
+                            items:
+                              type: object
+                              additionalProperties: true
+        '400':
+          description: Invalid relation traversal
 
   /v1/cache/stats:
     get:
