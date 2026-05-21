@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `relationProofs` in explain/simulate rule traces for ReBAC clauses
   - nested group inheritance through `member` tuples
   - persisted relation rewrites for derived ReBAC permissions
+  - ReBAC list objects/list subjects endpoints with rewrite, group and parent inheritance
 - Rate limiting middleware to prevent DoS attacks (configurable via `RATE_LIMIT_ENABLED` and `RATE_LIMIT_REQUESTS_PER_MINUTE`)
 - Health monitoring endpoints:
   - `/health` - Liveness probe for Kubernetes/Docker

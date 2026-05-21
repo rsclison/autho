@@ -26,7 +26,9 @@
 (defonce relation-tuples
   (atom {:tuples #{}
          :parents-by-child {}
-         :memberships-by-member {}}))
+         :children-by-parent {}
+         :memberships-by-member {}
+         :members-by-group {}}))
 
 (defonce relation-rewrites
   (atom {}))
@@ -80,10 +82,18 @@
     (update-in [:parents-by-child (:subject tuple)]
                (fnil conj #{})
                (:resource tuple))
+    (= "parent" (:relation tuple))
+    (update-in [:children-by-parent (:resource tuple)]
+               (fnil conj #{})
+               (:subject tuple))
     (= "member" (:relation tuple))
     (update-in [:memberships-by-member (:subject tuple)]
                (fnil conj #{})
-               (:resource tuple))))
+               (:resource tuple))
+    (= "member" (:relation tuple))
+    (update-in [:members-by-group (:resource tuple)]
+               (fnil conj #{})
+               (:subject tuple))))
 
 (defn- remove-from-index
   [store tuple]
@@ -92,17 +102,27 @@
     (update-in [:parents-by-child (:subject tuple)]
                (fnil disj #{})
                (:resource tuple))
+    (= "parent" (:relation tuple))
+    (update-in [:children-by-parent (:resource tuple)]
+               (fnil disj #{})
+               (:subject tuple))
     (= "member" (:relation tuple))
     (update-in [:memberships-by-member (:subject tuple)]
                (fnil disj #{})
-               (:resource tuple))))
+               (:resource tuple))
+    (= "member" (:relation tuple))
+    (update-in [:members-by-group (:resource tuple)]
+               (fnil disj #{})
+               (:subject tuple))))
 
 (defn- build-index
   [tuples]
   (reduce add-to-index
           {:tuples #{}
            :parents-by-child {}
-           :memberships-by-member {}}
+           :children-by-parent {}
+           :memberships-by-member {}
+           :members-by-group {}}
           tuples))
 
 (defn init!
@@ -180,7 +200,9 @@
   ([{:keys [persist]}]
    (reset! relation-tuples {:tuples #{}
                             :parents-by-child {}
-                            :memberships-by-member {}})
+                            :children-by-parent {}
+                            :memberships-by-member {}
+                            :members-by-group {}})
    (when (and persist @persistence-enabled?)
      (jdbc/delete! db :rebac_relations ["1 = 1"]))
    true))
@@ -234,6 +256,26 @@
 (defn- member-groups
   [store member-key]
   (get-in store [:memberships-by-member member-key] #{}))
+
+(defn- child-resources
+  [store parent-key]
+  (get-in store [:children-by-parent parent-key] #{}))
+
+(defn- group-members
+  [store group-key]
+  (get-in store [:members-by-group group-key] #{}))
+
+(defn- entity-matches-class?
+  [entity class-name]
+  (or (nil? class-name)
+      (= class-name (:class entity))))
+
+(defn- sort-entities
+  [entities]
+  (->> entities
+       distinct
+       (sort-by (juxt :class :id))
+       vec))
 
 (defn- ancestor-paths
   [store resource-key max-depth]
@@ -293,6 +335,64 @@
                    (conj paths current)
                    (inc depth))))))))
 
+(defn- descendant-resource-paths
+  [store resource-key max-depth]
+  (loop [frontier [{:resource resource-key
+                    :path [resource-key]}]
+         visited #{}
+         paths []
+         depth 0]
+    (cond
+      (empty? frontier)
+      paths
+
+      (> depth max-depth)
+      paths
+
+      :else
+      (let [{:keys [resource path] :as current} (first frontier)
+            remaining (subvec (vec frontier) 1)]
+        (if (contains? visited resource)
+          (recur remaining visited paths depth)
+          (let [children (remove visited (child-resources store resource))
+                child-paths (mapv (fn [child]
+                                    {:resource child
+                                     :path (conj path child)})
+                                  children)]
+            (recur (vec (concat remaining child-paths))
+                   (conj visited resource)
+                   (conj paths current)
+                   (inc depth))))))))
+
+(defn- descendant-subject-paths
+  [store subject-key max-depth]
+  (loop [frontier [{:subject subject-key
+                    :path [subject-key]}]
+         visited #{}
+         paths []
+         depth 0]
+    (cond
+      (empty? frontier)
+      paths
+
+      (> depth max-depth)
+      paths
+
+      :else
+      (let [{:keys [subject path] :as current} (first frontier)
+            remaining (subvec (vec frontier) 1)]
+        (if (contains? visited subject)
+          (recur remaining visited paths depth)
+          (let [members (remove visited (group-members store subject))
+                member-paths (mapv (fn [member]
+                                     {:subject member
+                                      :path (conj path member)})
+                                   members)]
+            (recur (vec (concat remaining member-paths))
+                   (conj visited subject)
+                   (conj paths current)
+                   (inc depth))))))))
+
 (defn- relation-paths
   [relation max-depth]
   (let [root (name relation)]
@@ -322,6 +422,68 @@
                      (conj visited relation)
                      (conj paths current)
                      (inc depth)))))))))
+
+(defn list-accessible-resources
+  "Lists resources for which subject has relation.
+   Rewrites, group membership and resource inheritance are applied by default.
+   Pass {:resource-class \"Document\"} to filter returned resources."
+  ([subject relation]
+   (list-accessible-resources subject relation {}))
+  ([subject relation {:keys [resource-class inherited max-depth]
+                      :or {inherited true
+                           max-depth default-max-depth}}]
+   (let [store @relation-tuples
+         tuples (:tuples store)
+         subject-key (entity-key subject)
+         subject-candidates (set (map :subject
+                                      (if inherited
+                                        (subject-paths store subject-key max-depth)
+                                        [{:subject subject-key
+                                          :path [subject-key]}])))
+         relation-candidates (set (map :relation (relation-paths relation max-depth)))
+         matched-resources (for [{:keys [subject relation resource]} tuples
+                                 :when (and (contains? subject-candidates subject)
+                                            (contains? relation-candidates relation))]
+                             resource)
+         resources (if inherited
+                     (mapcat #(map :resource
+                                    (descendant-resource-paths store % max-depth))
+                             matched-resources)
+                     matched-resources)]
+     (->> resources
+          (filter #(entity-matches-class? % resource-class))
+          sort-entities))))
+
+(defn list-authorized-subjects
+  "Lists subjects that have relation to resource.
+   Rewrites, nested group membership and resource inheritance are applied by default.
+   Pass {:subject-class \"Person\"} to filter returned subjects."
+  ([resource relation]
+   (list-authorized-subjects resource relation {}))
+  ([resource relation {:keys [subject-class inherited max-depth]
+                       :or {inherited true
+                            max-depth default-max-depth}}]
+   (let [store @relation-tuples
+         tuples (:tuples store)
+         resource-key (entity-key resource)
+         resource-candidates (set (map :resource
+                                       (if inherited
+                                         (ancestor-paths store resource-key max-depth)
+                                         [{:resource resource-key
+                                           :path [resource-key]}])))
+         relation-candidates (set (map :relation (relation-paths relation max-depth)))
+         matched-subjects (for [{:keys [subject relation resource]} tuples
+                                :when (and (contains? resource-candidates resource)
+                                           (contains? relation-candidates relation))]
+                            subject)
+         subjects (if inherited
+                    (mapcat #(map :subject
+                                   (descendant-subject-paths store % max-depth))
+                            matched-subjects)
+                    matched-subjects)]
+     (->> subjects
+          (filter #(entity-matches-class? % subject-class))
+          sort-entities))))
 
 (defn explain-relation
   "Explains whether subject has relation to resource.

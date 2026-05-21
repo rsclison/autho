@@ -140,6 +140,12 @@
     (POST "/check" request
           (handlers/check-relation request))
 
+    (POST "/list-objects" request
+          (handlers/list-relation-objects request))
+
+    (POST "/list-subjects" request
+          (handlers/list-relation-subjects request))
+
     (DELETE "/" request
             (handlers/delete-relation request)))
 

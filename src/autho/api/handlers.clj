@@ -126,6 +126,73 @@
      :relation relation
      :resource resource}))
 
+(defn- valid-relation-entity?
+  [entity]
+  (and (map? entity)
+       (some? (:id entity))
+       (or (:class entity) (:resourceClass entity))))
+
+(defn- parse-max-depth
+  [value]
+  (when (some? value)
+    (try
+      (let [depth (if (integer? value)
+                    value
+                    (Long/parseLong (str value)))]
+        (when (neg? depth)
+          (throw (ex-info "maxDepth must be positive"
+                          {:status 400
+                           :error-code "INVALID_RELATION_QUERY"})))
+        depth)
+      (catch NumberFormatException _
+        (throw (ex-info "maxDepth must be an integer"
+                        {:status 400
+                         :error-code "INVALID_RELATION_QUERY"}))))))
+
+(defn- relation-query-options
+  [body output-class-key input-class-keys]
+  (let [class-name (some #(get body %) input-class-keys)
+        max-depth (parse-max-depth (:maxDepth body))]
+    (cond-> {}
+      (contains? body :inherited)
+      (assoc :inherited (boolean (:inherited body)))
+      max-depth
+      (assoc :max-depth max-depth)
+      class-name
+      (assoc output-class-key class-name))))
+
+(defn- validate-list-objects-payload!
+  [body]
+  (let [subject (:subject body)
+        relation (:relation body)]
+    (when-not (and (valid-relation-entity? subject)
+                   (some? relation)
+                   (not (str/blank? (str relation))))
+      (throw (ex-info "List objects requires subject and relation"
+                      {:status 400
+                       :error-code "INVALID_RELATION_QUERY"})))
+    {:subject subject
+     :relation relation
+     :options (relation-query-options body
+                                      :resource-class
+                                      [:resourceClass :resource-class])}))
+
+(defn- validate-list-subjects-payload!
+  [body]
+  (let [resource (:resource body)
+        relation (:relation body)]
+    (when-not (and (valid-relation-entity? resource)
+                   (some? relation)
+                   (not (str/blank? (str relation))))
+      (throw (ex-info "List subjects requires resource and relation"
+                      {:status 400
+                       :error-code "INVALID_RELATION_QUERY"})))
+    {:resource resource
+     :relation relation
+     :options (relation-query-options body
+                                      :subject-class
+                                      [:subjectClass :subject-class])}))
+
 (defn- validate-relation-rewrite-payload!
   [relation body]
   (let [relations (or (:relations body)
@@ -1038,6 +1105,42 @@
           (log/error e "Error checking relation")
           (response/error-response "RELATION_CHECK_ERROR"
                                    (str "Failed to check relation: " (.getMessage e))
+                                   500))))))
+
+(defn list-relation-objects
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (let [{:keys [subject relation options]} (validate-list-objects-payload! body-or-response)
+              resources (rebac/list-accessible-resources subject relation options)]
+          (response/success-response {:resources resources
+                                      :count (count resources)}))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RELATION_QUERY_ERROR" "Failed to list relation objects: "))
+        (catch Exception e
+          (log/error e "Error listing relation objects")
+          (response/error-response "RELATION_QUERY_ERROR"
+                                   (str "Failed to list relation objects: " (.getMessage e))
+                                   500))))))
+
+(defn list-relation-subjects
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (let [{:keys [resource relation options]} (validate-list-subjects-payload! body-or-response)
+              subjects (rebac/list-authorized-subjects resource relation options)]
+          (response/success-response {:subjects subjects
+                                      :count (count subjects)}))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RELATION_QUERY_ERROR" "Failed to list relation subjects: "))
+        (catch Exception e
+          (log/error e "Error listing relation subjects")
+          (response/error-response "RELATION_QUERY_ERROR"
+                                   (str "Failed to list relation subjects: " (.getMessage e))
                                    500))))))
 
 (defn delete-relation

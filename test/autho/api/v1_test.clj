@@ -734,12 +734,45 @@
 
 (deftest relation-rewrite-mutation-requires-admin-role-test
   (let [request (mock-request :body (json/write-value-as-string {:relations ["viewer"]})
-                              :identity {:client-id "viewer"
-                                         :roles ["policy-viewer"]})
+	                              :identity {:client-id "viewer"
+	                                         :roles ["policy-viewer"]})
         response (handlers/upsert-relation-rewrite "can-read" request)
         body (parse-response-body response)]
     (is (= 403 (:status response)))
     (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code])))))
+
+(deftest relation-list-object-and-subject-handlers-test
+  (rebac/clear-relations!)
+  (rebac/clear-relation-rewrites!)
+  (try
+    (let [alice {:class "Person" :id "alice"}
+          team {:class "Group" :id "team-a"}
+          folder {:class "Folder" :id "folder-1"}
+          doc {:class "Document" :id "doc-1"}]
+      (rebac/set-relation-rewrite! "can-read" ["viewer"])
+      (rebac/add-relation! alice "member" team)
+      (rebac/add-relation! team "viewer" folder)
+      (rebac/add-relation! doc "parent" folder)
+      (let [objects-response (handlers/list-relation-objects
+                              (mock-request :body (json/write-value-as-string
+                                                   {:subject alice
+                                                    :relation "can-read"
+                                                    :resourceClass "Document"})))
+            objects-body (parse-response-body objects-response)
+            subjects-response (handlers/list-relation-subjects
+                               (mock-request :body (json/write-value-as-string
+                                                    {:resource doc
+                                                     :relation "can-read"
+                                                     :subjectClass "Person"})))
+            subjects-body (parse-response-body subjects-response)]
+        (is (= 200 (:status objects-response)))
+        (is (= [doc] (get-in objects-body [:data :resources])))
+        (is (= 1 (get-in objects-body [:data :count])))
+        (is (= 200 (:status subjects-response)))
+        (is (= [alice] (get-in subjects-body [:data :subjects])))))
+    (finally
+      (rebac/clear-relations!)
+      (rebac/clear-relation-rewrites!))))
 
 (deftest relation-mutation-requires-admin-role-test
   (let [payload {:subject {:class "Person" :id "alice"}
@@ -780,6 +813,34 @@
                      :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
     (is (= 200 (:status response)))
     (is (= "/relations/check" (:uri @captured)))))
+
+(deftest relation-list-objects-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/list-relation-objects
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :post
+                     :uri "/relations/list-objects"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= "/relations/list-objects" (:uri @captured)))))
+
+(deftest relation-list-subjects-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/list-relation-subjects
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :post
+                     :uri "/relations/list-subjects"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= "/relations/list-subjects" (:uri @captured)))))
 
 (deftest relation-rewrite-route-forwards-request-test
   (let [captured (atom nil)

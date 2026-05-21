@@ -846,6 +846,48 @@ components:
             type: string
           example: [viewer, editor]
 
+    RelationListObjectsRequest:
+      type: object
+      required: [subject, relation]
+      properties:
+        subject:
+          type: object
+          required: [class, id]
+          additionalProperties: true
+        relation:
+          type: string
+          example: can-read
+        resourceClass:
+          type: string
+          example: Document
+        inherited:
+          type: boolean
+          default: true
+        maxDepth:
+          type: integer
+          default: 8
+
+    RelationListSubjectsRequest:
+      type: object
+      required: [resource, relation]
+      properties:
+        resource:
+          type: object
+          required: [class, id]
+          additionalProperties: true
+        relation:
+          type: string
+          example: can-read
+        subjectClass:
+          type: string
+          example: Person
+        inherited:
+          type: boolean
+          default: true
+        maxDepth:
+          type: integer
+          default: 8
+
     Policy:
       type: object
       required: [resourceClass, strategy, rules]
@@ -2223,6 +2265,74 @@ paths:
                         $ref: '#/components/schemas/RelationCheck'
         '400':
           description: Invalid relation tuple
+
+  /v1/relations/list-objects:
+    post:
+      tags: [relations]
+      summary: List ReBAC objects accessible by a subject
+      description: Applies direct tuples, persisted relation rewrites, nested groups and parent-resource inheritance.
+      operationId: listRelationObjects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationListObjectsRequest'
+      responses:
+        '200':
+          description: Accessible resources
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          resources:
+                            type: array
+                            items:
+                              type: object
+                              additionalProperties: true
+                          count:
+                            type: integer
+        '400':
+          description: Invalid relation query
+
+  /v1/relations/list-subjects:
+    post:
+      tags: [relations]
+      summary: List ReBAC subjects authorized on a resource
+      description: Applies direct tuples, persisted relation rewrites, nested groups and parent-resource inheritance.
+      operationId: listRelationSubjects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationListSubjectsRequest'
+      responses:
+        '200':
+          description: Authorized subjects
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          subjects:
+                            type: array
+                            items:
+                              type: object
+                              additionalProperties: true
+                          count:
+                            type: integer
+        '400':
+          description: Invalid relation query
 
   /v1/cache/stats:
     get:

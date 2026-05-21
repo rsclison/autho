@@ -128,6 +128,44 @@
     (is (= ["can-read" "readable" "viewer"]
            (:relationPath (rebac/explain-relation subject "can-read" resource))))))
 
+(deftest list-accessible-resources-includes-rewrites-groups-and-descendants-test
+  (let [alice {:class "Person" :id "alice"}
+        team {:class "Group" :id "team-a"}
+        folder {:class "Folder" :id "folder-1"}
+        doc-1 {:class "Document" :id "doc-1"}
+        doc-2 {:class "Document" :id "doc-2"}]
+    (rebac/set-relation-rewrite! "can-read" ["viewer"])
+    (rebac/add-relation! alice "member" team)
+    (rebac/add-relation! team "viewer" folder)
+    (rebac/add-relation! doc-1 "parent" folder)
+    (rebac/add-relation! doc-2 "parent" folder)
+    (is (= [doc-1 doc-2]
+           (rebac/list-accessible-resources alice
+                                            "can-read"
+                                            {:resource-class "Document"})))
+    (is (empty? (rebac/list-accessible-resources alice
+                                                 "can-read"
+                                                 {:resource-class "Document"
+                                                  :inherited false})))))
+
+(deftest list-authorized-subjects-includes-nested-group-members-test
+  (let [alice {:class "Person" :id "alice"}
+        bob {:class "Person" :id "bob"}
+        team {:class "Group" :id "team-a"}
+        org-admins {:class "Group" :id "org-admins"}
+        folder {:class "Folder" :id "folder-1"}
+        doc {:class "Document" :id "doc-1"}]
+    (rebac/set-relation-rewrite! "can-read" ["viewer"])
+    (rebac/add-relation! alice "member" team)
+    (rebac/add-relation! team "member" org-admins)
+    (rebac/add-relation! bob "member" org-admins)
+    (rebac/add-relation! org-admins "viewer" folder)
+    (rebac/add-relation! doc "parent" folder)
+    (is (= [alice bob]
+           (rebac/list-authorized-subjects doc
+                                           "can-read"
+                                           {:subject-class "Person"})))))
+
 (deftest durable-relations-survive-reinit-test
   (let [test-db {:classname "org.h2.Driver"
                  :subprotocol "h2:mem"

@@ -813,8 +813,32 @@ curl -X POST http://localhost:8080/v1/relations/check \
     "subject": {"class": "Person", "id": "alice"},
     "relation": "viewer",
     "resource": {"class": "Document", "id": "doc-1"}
+	  }'
+```
+
+Pour lister les ressources accessibles par un sujet ou les sujets autorisés sur une ressource :
+
+```bash
+curl -X POST http://localhost:8080/v1/relations/list-objects \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{
+    "subject": {"class": "Person", "id": "alice"},
+    "relation": "can-read",
+    "resourceClass": "Document"
+  }'
+
+curl -X POST http://localhost:8080/v1/relations/list-subjects \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d '{
+    "resource": {"class": "Document", "id": "doc-1"},
+    "relation": "can-read",
+    "subjectClass": "Person"
   }'
 ```
+
+Ces endpoints appliquent les memes regles que le check relationnel : tuples directs, rewrites persistés, groupes imbriqués et héritage parent.
 
 Limite actuelle : Autho ne resout pas encore les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
 
