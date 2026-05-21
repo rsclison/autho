@@ -206,6 +206,8 @@ Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégra
 
 Les mutations de politiques, profils de risque, reviews, rollouts et relations sont protégées par des rôles de gouvernance (`policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin` ou `governance-admin`). Pour les clients API key, ces rôles sont configurés via `API_CLIENT_ROLES`.
 
+Les tuples ReBAC sont persistés dans la base H2 des politiques (`REBAC_RELATIONS`) et rechargés en index mémoire au démarrage du PDP.
+
 ### Time-Travel (Kafka activé)
 
 | Endpoint | Description |

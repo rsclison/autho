@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ReBAC relation tuples with `GET/POST/DELETE /v1/relations`
   - `POST /v1/relations/check` for relation check explanations
   - policy predicate `["relation", "$s", "<relation>", "$r"]` with direct checks and resource-parent inheritance
+  - durable H2 storage for ReBAC tuples through `REBAC_RELATIONS`
 - Rate limiting middleware to prevent DoS attacks (configurable via `RATE_LIMIT_ENABLED` and `RATE_LIMIT_REQUESTS_PER_MINUTE`)
 - Health monitoring endpoints:
   - `/health` - Liveness probe for Kubernetes/Docker

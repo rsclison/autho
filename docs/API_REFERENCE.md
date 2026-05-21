@@ -751,7 +751,7 @@ La revue d'impact requiert `governance-admin` ou `policy-reviewer`. Le rollout d
 
 ### ReBAC relations
 
-Les tuples relationnels directs sont administrables via `GET/POST/DELETE /v1/relations`. Les mutations requierent `governance-admin` ou `relation-admin`.
+Les tuples relationnels sont administrables via `GET/POST/DELETE /v1/relations`. Les mutations requierent `governance-admin` ou `relation-admin`. Les tuples sont persistés dans la base H2 des politiques, table `REBAC_RELATIONS`, puis rechargés en index mémoire par `rebac/init!` au démarrage PDP.
 
 ```bash
 curl -H "X-API-Key: key" \
@@ -801,7 +801,7 @@ curl -X POST http://localhost:8080/v1/relations/check \
   }'
 ```
 
-Limite actuelle : Autho ne resout pas encore les rewrites de usersets, les groupes imbriques, les traversals relationnels arbitraires ni le stockage durable externe des relations.
+Limite actuelle : Autho ne resout pas encore les rewrites de usersets, les groupes imbriques, les traversals relationnels arbitraires ni le stockage relationnel distribué externe.
 
 Le batch peut aussi etre construit depuis l'audit avec `auditReplay` :
 

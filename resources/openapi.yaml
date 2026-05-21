@@ -2043,10 +2043,11 @@ paths:
     get:
       tags: [relations]
       summary: List ReBAC relation tuples
+      description: Tuples are persisted in REBAC_RELATIONS and loaded into in-memory indexes at PDP startup.
       operationId: listRelations
       responses:
         '200':
-          description: Direct relation tuples
+          description: Persisted relation tuples
           content:
             application/json:
               schema:

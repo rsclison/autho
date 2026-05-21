@@ -263,7 +263,7 @@ Le rate limiting est activé par défaut. En production, les valeurs par défaut
 
 Autho utilise deux bases H2 persistantes :
 - `./resources/auditdb` — journal d'audit HMAC
-- `./resources/h2db` — politiques XACML et historique de versions
+- `./resources/h2db` — politiques XACML, historique de versions, profils de risque et tuples ReBAC (`REBAC_RELATIONS`)
 
 ### 8.1 Activation du chiffrement AES
 

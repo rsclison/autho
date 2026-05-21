@@ -19,12 +19,12 @@ Les priorites 1 a 3 disposent maintenant d'un socle operationnel :
 - impact analysis avec profils de risque persistables, revisions append-only, approbations et garde-fous de rollout;
 - lifecycle auditable des politiques : versions, diff, rollback, rollout depuis analyse d'impact et timeline;
 - RBAC de gouvernance sur les mutations critiques via `API_CLIENT_ROLES` ou roles JWT;
-- premier socle ReBAC direct : tuples sujet-relation-ressource, predicat `relation` dans les politiques, API `/v1/relations`.
+- premier socle ReBAC durable : tuples sujet-relation-ressource persistés en H2, predicat `relation` dans les politiques, API `/v1/relations`.
 
 Les limites connues restent :
 
 - le ReBAC supporte l'heritage par ressources parentes, mais pas encore les rewrites de usersets, groupes imbriques ou traversals relationnels generiques;
-- les tuples relationnels sont en memoire et doivent etre externalises pour un usage enterprise;
+- les tuples relationnels sont persistés localement en H2, mais doivent encore etre externalises ou distribués pour un usage enterprise multi-instance;
 - le control plane, le data plane et l'evidence plane ne sont pas encore separes;
 - le multi-tenant, les bundles signes et les workflows GRC complets restent a construire.
 
@@ -156,7 +156,8 @@ Etat d'avancement :
 - heritage par relation `parent` ajoute : un droit accorde sur une ressource parente s'applique a ses descendants;
 - index en memoire des relations `parent` pour eviter un scan complet pendant la resolution d'heritage;
 - explain relationnel minimal disponible via `POST /v1/relations/check` avec `matchedResource`, `inherited` et `path`;
-- prochaine etape : persister les tuples et enrichir l'explain des decisions completes.
+- persistence H2 des tuples via `REBAC_RELATIONS`, rechargee par `rebac/init!` au demarrage PDP;
+- prochaine etape : enrichir l'explain des decisions completes avec les preuves relationnelles.
 
 ## Priorite 5 - Architecture enterprise
 

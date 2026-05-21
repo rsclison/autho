@@ -1,6 +1,7 @@
 (ns autho.rebac-test
   (:require [clojure.test :refer :all]
-            [autho.rebac :as rebac]))
+            [autho.rebac :as rebac]
+            [clojure.java.jdbc :as jdbc]))
 
 (use-fixtures :each
   (fn [f]
@@ -59,6 +60,29 @@
             :relation "viewer"
             :resource {:class "Document" :id "doc-1"}}
            (rebac/explain-relation subject "viewer" document)))))
+
+(deftest durable-relations-survive-reinit-test
+  (let [test-db {:classname "org.h2.Driver"
+                 :subprotocol "h2:mem"
+                 :subname "rebac-test;DB_CLOSE_DELAY=-1"
+                 :user "sa"
+                 :password ""}
+        subject {:class "Person" :id "alice"}
+        resource {:class "Document" :id "doc-1"}]
+    (with-redefs-fn {#'rebac/db test-db
+                     #'rebac/persistence-enabled? (atom false)}
+      (fn []
+        (try
+          (jdbc/execute! test-db ["DROP TABLE IF EXISTS REBAC_RELATIONS"])
+          (rebac/init!)
+          (rebac/clear-relations! {:persist true})
+          (rebac/add-relation! subject "viewer" resource)
+          (rebac/clear-relations!)
+          (is (false? (rebac/has-relation? subject "viewer" resource)))
+          (rebac/init!)
+          (is (true? (rebac/has-relation? subject "viewer" resource)))
+          (finally
+            (rebac/clear-relations! {:persist true})))))))
 
 (deftest inherited-resource-relation-stops-on-cycles-test
   (let [subject {:class "Person" :id "alice"}

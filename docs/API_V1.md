@@ -520,7 +520,7 @@ Policy conditions can also use a ReBAC predicate:
 
 This checks that the effective subject has the `viewer` relation to the requested resource in the relation graph. Autho checks the direct tuple first, then walks resource ancestry through `parent` tuples. For example, if `doc-1 parent folder-1` and `alice viewer folder-1`, then Alice is also viewer of `doc-1`.
 
-Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`.
+Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`. Tuples are persisted in the policy H2 database and reloaded into in-memory indexes by `rebac/init!` during PDP startup.
 
 **Response:** `200 OK`
 ```json
@@ -652,7 +652,7 @@ DELETE /v1/policies/Document
 
 #### GET /v1/relations
 
-List ReBAC tuples currently loaded by the server.
+List ReBAC tuples currently loaded by the server. The list is loaded from the durable `REBAC_RELATIONS` table at startup and kept in memory for fast checks.
 
 **Response:** `200 OK`
 ```json
@@ -736,7 +736,7 @@ Delete a direct subject-relation-resource tuple. Requires `governance-admin` or 
 }
 ```
 
-Current limitation: Autho supports direct checks plus resource-parent inheritance through `parent` tuples. Userset rewrites, group nesting, arbitrary recursive traversals and durable external storage are not implemented yet.
+Current limitation: Autho supports direct checks plus resource-parent inheritance through `parent` tuples. Userset rewrites, group nesting, arbitrary recursive traversals and distributed external relation storage are not implemented yet.
 
 ### Cache Management Endpoints
 
