@@ -7,7 +7,8 @@
             [autho.local-cache :as local-cache]
             [autho.metrics :as metrics]
             [autho.audit :as audit]
-            [autho.policy-versions :as pv]))
+            [autho.policy-versions :as pv]
+            [autho.rebac :as rebac]))
 
 (deftest evalRequest-test
   (testing "evalRequest function"
@@ -398,6 +399,36 @@
           (is (= {:id "user1"} (:effectiveSubject simulate-result)))
           (is (= (:matchedRuleNames explain-result)
                  (:matchedRuleNames simulate-result))))))))
+
+(deftest explain-includes-relation-proofs-test
+  (testing "explain exposes ReBAC evidence for relation policy clauses"
+    (rebac/clear-relations!)
+    (try
+      (let [body {:subject {:class "Person" :id "alice"}
+                  :resource {:class "Document" :id "doc-1"}
+                  :operation "read"}
+            folder {:class "Folder" :id "folder-1"}
+            ring-req {:identity {:auth-method :api-key
+                                 :allow-subject-delegation true}}
+            policy {:rules [{:name "folder-viewer"
+                             :effect "allow"
+                             :priority 10
+                             :operation "read"
+                             :conditions [["relation" "$s" "viewer" "$r"]]}]
+                    :strategy :almost_one_allow_no_deny}]
+        (rebac/add-relation! (:resource body) "parent" folder)
+        (rebac/add-relation! (:subject body) "viewer" folder)
+        (with-redefs [prp/getGlobalPolicy (fn [_] policy)]
+          (let [result (explain ring-req body)
+                proof (get-in result [:rules 0 :relationProofs 0])]
+            (is (= true (:allowed proof)))
+            (is (= true (:inherited proof)))
+            (is (= {:class "Folder" :id "folder-1"} (:matchedResource proof)))
+            (is (= [{:class "Document" :id "doc-1"}
+                    {:class "Folder" :id "folder-1"}]
+                   (:path proof))))))
+      (finally
+        (rebac/clear-relations!)))))
 
 (deftest decision-endpoints-share-canonical-contract-test
   (testing "isAuthorized, explain and simulate expose common decision contract fields"

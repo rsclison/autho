@@ -474,6 +474,12 @@ Trace détaillée règle par règle de la décision.
 
 ---
 
+### ReBAC dans explain
+
+Les réponses de `POST /v1/authz/explain` et `POST /v1/authz/simulate` exposent `relationProofs` sur les règles évaluées qui utilisent une clause ReBAC. Chaque preuve indique la relation testée, la ressource qui porte effectivement le droit, si le droit est hérité, et le chemin de ressources utilisé.
+
+---
+
 ### POST /v1/authz/batch
 
 Évalue jusqu'à 100 demandes en parallèle.

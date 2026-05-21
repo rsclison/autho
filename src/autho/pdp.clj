@@ -163,6 +163,29 @@
                   (= rule-op operation))))
           rules))
 
+(defn- relation-clause?
+  [[operator & _]]
+  (and operator
+       (contains? #{"relation" "related" "has-relation"} (name operator))))
+
+(defn- relation-proof
+  [[_ subject-op relation resource-op] request]
+  (let [subject (case (str subject-op)
+                  "$s" (:subject request)
+                  subject-op)
+        resource (case (str resource-op)
+                   "$r" (:resource request)
+                   resource-op)]
+    (when (and (map? subject) (map? resource))
+      (rebac/explain-relation subject relation resource))))
+
+(defn- relation-proofs
+  [rule request]
+  (->> (:conditions rule)
+       (filter relation-clause?)
+       (keep #(relation-proof % request))
+       vec))
+
 (defn- validate-authz-request!
   [authz-request]
   (if-not (:resource authz-request)
@@ -185,18 +208,20 @@
         op-match (or (nil? rule-op) (= rule-op operation))
         eval-result (if op-match
                       (rule/evaluateRule rule augreq)
-                      {:value false})]
-    {:rule rule
-     :name (:name rule)
-     :effect (:effect rule)
-     :operation (:operation rule)
-     :matched (:value eval-result)
-     :resourceClass (:resourceClass rule)
-     :priority (:priority rule)
-     :subjectCond (when-let [subject-cond (:subjectCond rule)]
-                    (rest subject-cond))
-     :resourceCond (when-let [resource-cond (:resourceCond rule)]
-                     (rest resource-cond))}))
+                      {:value false})
+        proofs (when op-match (relation-proofs rule augreq))]
+    (cond-> {:rule rule
+             :name (:name rule)
+             :effect (:effect rule)
+             :operation (:operation rule)
+             :matched (:value eval-result)
+             :resourceClass (:resourceClass rule)
+             :priority (:priority rule)
+             :subjectCond (when-let [subject-cond (:subjectCond rule)]
+                            (rest subject-cond))
+             :resourceCond (when-let [resource-cond (:resourceCond rule)]
+                             (rest resource-cond))}
+      (seq proofs) (assoc :relationProofs proofs))))
 
 (defn- evaluate-policy-rules
   [policy authz-request]

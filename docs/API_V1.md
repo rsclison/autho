@@ -231,6 +231,25 @@ List all permissions for a subject.
 
 Explain an authorization decision.
 
+When a policy rule uses a ReBAC clause such as `["relation", "$s", "viewer", "$r"]`, each evaluated rule can include `relationProofs`. A proof shows whether the relation matched directly or through a parent resource:
+
+```json
+{
+  "relationProofs": [
+    {
+      "allowed": true,
+      "relation": "viewer",
+      "matchedResource": {"class": "Folder", "id": "folder-1"},
+      "inherited": true,
+      "path": [
+        {"class": "Document", "id": "doc-1"},
+        {"class": "Folder", "id": "folder-1"}
+      ]
+    }
+  ]
+}
+```
+
 **Request:**
 ```json
 {

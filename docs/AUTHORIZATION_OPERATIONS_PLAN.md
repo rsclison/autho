@@ -157,7 +157,8 @@ Etat d'avancement :
 - index en memoire des relations `parent` pour eviter un scan complet pendant la resolution d'heritage;
 - explain relationnel minimal disponible via `POST /v1/relations/check` avec `matchedResource`, `inherited` et `path`;
 - persistence H2 des tuples via `REBAC_RELATIONS`, rechargee par `rebac/init!` au demarrage PDP;
-- prochaine etape : enrichir l'explain des decisions completes avec les preuves relationnelles.
+- explain des decisions completes enrichi avec `relationProofs` pour les regles qui utilisent une clause ReBAC;
+- prochaine etape : ajouter les groupes imbriques ou les rewrites de usersets.
 
 ## Priorite 5 - Architecture enterprise
 
