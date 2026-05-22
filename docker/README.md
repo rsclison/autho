@@ -92,6 +92,8 @@ Resultat attendu :
 - `FAC-TEST-01` est autorisee, car `30000 < 50000` ;
 - `FAC-TEST-02` est refusee, car `80000 > 50000`.
 
+Dans l'Admin UI, l'ecran `Données PIP` permet ensuite de selectionner la classe `Facture` et de visualiser les objets presents dans RocksDB.
+
 ## Configuration utilisee
 
 La stack Docker utilise :

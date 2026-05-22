@@ -4,6 +4,7 @@
             [autho.api.resource-handlers :as resource-handlers]
             [autho.api.response :as response]
             [autho.kafka-pip :as kpip]
+            [autho.kafka-pip-unified :as kupip]
             [jsonista.core :as json])
   (:import (java.io ByteArrayInputStream)))
 
@@ -38,6 +39,20 @@
         (is (= "success" (:status body)))
         (is (vector? (:data body)))))))
 
+(deftest list-resource-classes-includes-unified-rocksdb-counts-test
+  (with-redefs [kpip/list-column-families (fn [] [])
+                kpip/count-objects (fn [_] 0)
+                kupip/list-column-families (fn [] ["Facture"])
+                kupip/count-objects (fn [class-name]
+                                      (if (= "Facture" class-name) 2 0))]
+    (let [resp (resource-handlers/list-resource-classes)
+          body (parse-response-body resp)]
+      (is (= 200 (:status resp)))
+      (is (= [{:class "Facture"
+               :description "Resource class: Facture"
+               :count 2}]
+             (:data body))))))
+
 ;; =============================================================================
 ;; Get Resource Tests
 ;; =============================================================================
@@ -49,6 +64,38 @@
       ;; When db-state is nil, it should return 404
       (is (or (= 404 (:status resp))
               (= 500 (:status resp)))))))
+
+(deftest list-resources-by-class-returns-unified-rocksdb-objects-test
+  (with-redefs [kpip/list-column-families (fn [] [])
+                kpip/query-all-objects (fn [_] [])
+                kupip/list-column-families (fn [] ["Facture"])
+                kupip/query-all-objects (fn [class-name]
+                                          (if (= "Facture" class-name)
+                                            [{:id "FAC-001" :montant 30000 :service "service1"}]
+                                            []))]
+    (let [resp (resource-handlers/list-resources-by-class
+                "Facture"
+                (mock-request :params {"page" "1" "per-page" "20"}))
+          body (parse-response-body resp)]
+      (is (= 200 (:status resp)))
+      (is (= [{:class "Facture"
+               :id "FAC-001"
+               :attributes {:montant 30000 :service "service1"}}]
+             (:data body))))))
+
+(deftest get-resource-returns-unified-rocksdb-object-test
+  (with-redefs [kupip/query-pip (fn [class-name resource-id]
+                                  (when (and (= "Facture" class-name)
+                                             (= "FAC-001" resource-id))
+                                    {:montant 30000 :service "service1"}))
+                kpip/query-pip (fn [_ _] nil)]
+    (let [resp (resource-handlers/get-resource "Facture" "FAC-001")
+          body (parse-response-body resp)]
+      (is (= 200 (:status resp)))
+      (is (= {:class "Facture"
+              :id "FAC-001"
+              :attributes {:montant 30000 :service "service1"}}
+             (:data body))))))
 
 ;; =============================================================================
 ;; Search Resources Tests

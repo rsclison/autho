@@ -194,14 +194,14 @@
     (GET "/" []
          (resource-handlers/list-resource-classes))
 
+    (GET "/search" request
+         (resource-handlers/search-resources-handler request))
+
     (GET "/:class" [class :as request]
          (resource-handlers/list-resources-by-class class request))
 
     (GET "/:class/:id" [class id]
          (resource-handlers/get-resource class id))
-
-    (GET "/search" request
-         (resource-handlers/search-resources-handler request))
 
     (POST "/batch-get" request
           (resource-handlers/batch-get-resources request))))

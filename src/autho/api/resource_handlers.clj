@@ -2,6 +2,7 @@
   "Handlers for resource-related API endpoints.
    Provides read-only access to resources from the RocksDB/Kafka PIP."
   (:require [autho.kafka-pip :as kpip]
+            [autho.kafka-pip-unified :as kupip]
             [autho.api.response :as response]
             [autho.api.pagination :as pagination]
             [jsonista.core :as json]
@@ -30,44 +31,52 @@
 (defn- get-all-cf-names
   "Get all column family names from the RocksDB."
   []
-  (when-let [db-state @kpip/db-state]
-    (keys (:cf-handles db-state))))
+  (let [classes (->> (concat (or (kpip/list-column-families) [])
+                             (or (kupip/list-column-families) []))
+                     distinct
+                     sort
+                     vec)]
+    (when (or (seq classes) @kpip/db-state @kupip/db-state)
+      classes)))
+
+(defn- resource-class-exists?
+  [class-name]
+  (boolean (some #(= class-name %) (get-all-cf-names))))
 
 (defn- fetch-resources-by-class
   "Get all resources for a specific class from RocksDB."
   [class-name]
-  (when-let [db-state @kpip/db-state]
-    (when-let [cf-handle (get-in db-state [:cf-handles class-name])]
-      ;; RocksDB doesn't have a built-in way to list all keys
-      ;; We'll need to use an iterator or maintain a separate index
-      ;; For now, return empty list - this would need to be implemented
-      (log/warn "Resource listing not yet implemented for class:" class-name)
-      [])))
+  (when (resource-class-exists? class-name)
+    (let [unified-objects (when (some #(= class-name %) (or (kupip/list-column-families) []))
+                            (kupip/query-all-objects class-name))
+          legacy-objects (when (some #(= class-name %) (or (kpip/list-column-families) []))
+                           (kpip/query-all-objects class-name))]
+      (->> (concat (or unified-objects []) (or legacy-objects []))
+           (map (fn [resource]
+                  {:class class-name
+                   :id (:id resource)
+                   :attributes (dissoc resource :id)}))
+           vec))))
 
 (defn- get-resource-by-id
   "Get a specific resource by class and ID."
   [class-name resource-id]
-  (when-let [db-state @kpip/db-state]
-    (when-let [cf-handle (get-in db-state [:cf-handles class-name])]
-      (when-let [value-str (kpip/db-get cf-handle resource-id)]
-        (try
-          (let [attrs (json/read-value value-str json/keyword-keys-object-mapper)]
-            {:class class-name
-             :id resource-id
-             :attributes attrs})
-          (catch Exception e
-            (log/error e "Error parsing resource attributes for" class-name ":" resource-id)
-            nil))))))
+  (when-let [attrs (or (kupip/query-pip class-name resource-id)
+                       (kpip/query-pip class-name resource-id))]
+    {:class class-name
+     :id resource-id
+     :attributes attrs}))
 
 (defn- get-resource-classes
   "List all available resource classes."
   []
-  (when-let [db-state @kpip/db-state]
-    (let [cf-names (keys (:cf-handles db-state))]
-      (map (fn [class-name]
-             {:class class-name
-              :description (str "Resource class: " class-name)})
-           cf-names))))
+  (when-let [cf-names (get-all-cf-names)]
+    (mapv (fn [class-name]
+            {:class class-name
+             :description (str "Resource class: " class-name)
+             :count (+ (kpip/count-objects class-name)
+                       (kupip/count-objects class-name))})
+          cf-names)))
 
 ;; =============================================================================
 ;; Resource Handlers

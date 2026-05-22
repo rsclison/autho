@@ -167,9 +167,12 @@ Apres injection :
 2. ouvrir le topic `business-objects-compacted` ;
 3. montrer les objets `FAC-TEST-01` et `FAC-TEST-02` ;
 4. revenir dans l'Admin UI ;
-5. ouvrir `Audit` et filtrer sur `Facture` ;
-6. montrer que `FAC-TEST-01` passe maintenant en `allow` ;
-7. montrer que `FAC-TEST-02` reste en `deny`, car son montant depasse le seuil LDAP.
+5. ouvrir `Données PIP` ;
+6. selectionner la classe `Facture` ;
+7. montrer les objets stockes dans RocksDB et le JSON detaille ;
+8. ouvrir `Audit` et filtrer sur `Facture` ;
+9. montrer que `FAC-TEST-01` passe maintenant en `allow` ;
+10. montrer que `FAC-TEST-02` reste en `deny`, car son montant depasse le seuil LDAP.
 
 Points a commenter :
 
@@ -307,7 +310,8 @@ Pour arreter et supprimer aussi les volumes persistants de demonstration :
 6. Audit filtre sur `DossierDemo`.
 7. Audit filtre sur `Facture` avant injection Kafka : refus attendu.
 8. `./demo_inject_kafka.sh`.
-9. Kafka UI puis audit `Facture` apres injection : `FAC-TEST-01` autorisee, `FAC-TEST-02` refusee.
-10. Audit `FacturePurposeDemo`.
-11. Gouvernance et preview d'impact.
-12. `./demo_stop.sh`.
+9. Kafka UI puis écran `Données PIP` pour visualiser les objets RocksDB.
+10. Audit `Facture` apres injection : `FAC-TEST-01` autorisee, `FAC-TEST-02` refusee.
+11. Audit `FacturePurposeDemo`.
+12. Gouvernance et preview d'impact.
+13. `./demo_stop.sh`.

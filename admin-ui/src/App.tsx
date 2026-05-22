@@ -9,6 +9,7 @@ import PoliciesPage from '@/pages/PoliciesPage'
 import SimulatorPage from '@/pages/SimulatorPage'
 import AuditPage from '@/pages/AuditPage'
 import InfrastructurePage from '@/pages/InfrastructurePage'
+import PipDataPage from '@/pages/PipDataPage'
 import SettingsPage from '@/pages/SettingsPage'
 import { handleQueryError } from '@/lib/api-client'
 
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="policies/*" element={<PoliciesPage />} />
             <Route path="simulator" element={<SimulatorPage />} />
             <Route path="audit" element={<AuditPage />} />
+            <Route path="pip-data" element={<PipDataPage />} />
             <Route path="infrastructure" element={<InfrastructurePage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>

@@ -176,6 +176,55 @@
       (log/warn "Query for unknown class or uninitialized PIP:" class-name)
       nil)))
 
+(defn query-all-objects
+  "Retrieves objects for a given class from RocksDB.
+   Returns maps shaped as {:id <key> ...object-attributes...}.
+   Supports optional pagination with :offset and :limit."
+  ([class-name] (query-all-objects class-name {}))
+  ([class-name {:keys [offset limit] :or {offset 0 limit nil}}]
+   (if-let [cf-handle (get-cf-handle class-name)]
+     (if-let [db (:db-instance @db-state)]
+       (let [objects (atom [])
+             seen (atom 0)
+             collected (atom 0)]
+         (with-open [iter (.newIterator db cf-handle)]
+           (.seekToFirst iter)
+           (while (and (.isValid iter)
+                       (or (nil? limit) (< @collected limit)))
+             (when (>= @seen offset)
+               (let [key (String. (.key iter) StandardCharsets/UTF_8)
+                     value-str (String. (.value iter) StandardCharsets/UTF_8)]
+                 (try
+                   (let [obj-data (json/read-value value-str json/keyword-keys-object-mapper)]
+                     (swap! objects conj (assoc obj-data :id key))
+                     (swap! collected inc))
+                   (catch Exception e
+                     (log/error e "Failed to parse object" key)))))
+             (swap! seen inc)
+             (.next iter)))
+         @objects)
+       (do
+         (log/error "RocksDB not initialized")
+         []))
+     (do
+       (log/warn "Query all objects for unknown class or uninitialized PIP:" class-name)
+       []))))
+
+(defn count-objects
+  "Counts total number of objects for a given class in RocksDB."
+  [class-name]
+  (if-let [cf-handle (get-cf-handle class-name)]
+    (if-let [db (:db-instance @db-state)]
+      (let [counter (atom 0)]
+        (with-open [iter (.newIterator db cf-handle)]
+          (.seekToFirst iter)
+          (while (.isValid iter)
+            (swap! counter inc)
+            (.next iter)))
+        @counter)
+      0)
+    0))
+
 (defn stop-unified-pip []
   (when-let [handle @consumer-handle]
     (when-let [stop-fn (:stop-fn handle)]

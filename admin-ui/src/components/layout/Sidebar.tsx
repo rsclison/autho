@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Shield, FlaskConical, ScrollText,
-  Server, Settings, Zap, ChevronDown,
+  Server, Settings, Zap, ChevronDown, Database,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStatus } from '@/api/status'
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/simulator', label: 'Simulateur', icon: FlaskConical },
   { to: '/audit', label: 'Audit', icon: ScrollText },
+  { to: '/pip-data', label: 'Données PIP', icon: Database },
   { to: '/infrastructure', label: 'Infrastructure', icon: Server },
   { to: '/settings', label: 'Paramètres', icon: Settings },
 ]
