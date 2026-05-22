@@ -10,7 +10,7 @@ import {
   useImportYaml, useVersions, useVersion, useDiffVersions, useRollback,
 } from '@/api/policies'
 import { getDarkMode } from '@/lib/auth'
-import { normalizePolicyForSave } from '@/lib/policyDocument'
+import { DEFAULT_POLICY_STRATEGY, normalizePolicyForSave } from '@/lib/policyDocument'
 import PolicyGovernancePage from '@/pages/PolicyGovernancePage'
 import toast from 'react-hot-toast'
 import type { PolicyVersion } from '@/types/policy'
@@ -27,7 +27,7 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
     const rc = name.trim()
     if (!rc) { toast.error('Nom requis'); return }
     submit.mutate(
-      { resourceClass: rc, policy: { resourceClass: rc, strategy: 'deny-unless-permit', rules: [] } },
+      { resourceClass: rc, policy: { resourceClass: rc, strategy: DEFAULT_POLICY_STRATEGY, rules: [] } },
       { onSuccess: () => { onCreated(rc); onClose() } },
     )
   }
@@ -194,8 +194,8 @@ function StrategySelector({ resourceClass }: { resourceClass: string }) {
   const { data } = usePolicy(resourceClass)
   const submit = useSubmitPolicy()
   const [open, setOpen] = useState(false)
-  const strategies = ['deny-unless-permit', 'permit-unless-deny', 'first-applicable', 'only-one-applicable']
-  const current = (normalizePolicyForSave(data, resourceClass).strategy ?? 'deny-unless-permit') as string
+  const strategies = [DEFAULT_POLICY_STRATEGY]
+  const current = (normalizePolicyForSave(data, resourceClass).strategy ?? DEFAULT_POLICY_STRATEGY) as string
 
   return (
     <div className="relative">

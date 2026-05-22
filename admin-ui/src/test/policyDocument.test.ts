@@ -6,7 +6,7 @@ describe('normalizePolicyForSave', () => {
     const document = {
       resourceClass: 'Facture',
       global: {
-        strategy: 'deny-unless-permit',
+        strategy: 'almost_one_allow_no_deny',
         rules: [
           {
             name: 'R3',
@@ -21,7 +21,7 @@ describe('normalizePolicyForSave', () => {
 
     expect(normalizePolicyForSave(document, 'Facture')).toEqual({
       resourceClass: 'Facture',
-      strategy: 'deny-unless-permit',
+      strategy: 'almost_one_allow_no_deny',
       rules: [
         {
           name: 'R3',
@@ -37,7 +37,7 @@ describe('normalizePolicyForSave', () => {
   it('keeps already-flat policies unchanged', () => {
     const document = {
       resourceClass: 'Facture',
-      strategy: 'deny-unless-permit',
+      strategy: 'almost_one_allow_no_deny',
       rules: [],
     }
 

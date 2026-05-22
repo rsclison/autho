@@ -1,5 +1,7 @@
 type UnknownRecord = Record<string, unknown>
 
+export const DEFAULT_POLICY_STRATEGY = 'almost_one_allow_no_deny'
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -8,7 +10,7 @@ export function normalizePolicyForSave(document: unknown, resourceClass: string)
   if (!isRecord(document)) {
     return {
       resourceClass,
-      strategy: 'deny-unless-permit',
+      strategy: DEFAULT_POLICY_STRATEGY,
       rules: [],
     }
   }
