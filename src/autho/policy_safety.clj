@@ -56,7 +56,7 @@
        (= 3 (count operand))
        (let [[class-name scope attribute] operand]
          (and (non-blank-ident? class-name)
-              (contains? #{"$s" "$r"} (str scope))
+              (contains? #{"$s" "$r" "$c"} (str scope))
               (non-blank-ident? attribute)))))
 
 (defn- path-reference?
@@ -83,7 +83,10 @@
   (cond
     (variable-reference? operand)
     (let [[class-name scope attribute] operand]
-      {:scope (if (= "$r" (str scope)) :resource :subject)
+      {:scope (case (str scope)
+                "$r" :resource
+                "$c" :context
+                :subject)
        :class (name class-name)
        :attribute (name attribute)})
 
@@ -97,6 +100,9 @@
 
       (str/starts-with? operand "$r.")
       {:scope :resource :attribute (subs operand 3)}
+
+      (str/starts-with? operand "$c.")
+      {:scope :context :attribute (subs operand 3)}
 
       :else nil)
 
@@ -290,6 +296,7 @@
   (case scope
     :subject (or (:subjects schema) (:subject schema) {})
     :resource (or (:resources schema) (:resource schema) {})
+    :context (or (:contexts schema) (:context schema) {})
     {}))
 
 (defn- schema-classes

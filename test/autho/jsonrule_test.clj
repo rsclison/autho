@@ -138,6 +138,14 @@
       (is (true? (jsonrule/evalClause ["=" "$r.required-role" "$s.role"] ctxt :resource)))
       (is (false? (jsonrule/evalClause ["=" "$r.class" "$s.role"] ctxt :resource))))))
 
+(deftest evalClause-context-purpose-test
+  (testing "evalClause can compare context attributes in legacy path syntax"
+    (let [ctxt {:subject {:id "app-demo"}
+                :resource {:class "Facture"}
+                :context {:purpose "aggregate_invoice_total"}}]
+      (is (true? (jsonrule/evalClause ["=" "$c.purpose" "aggregate_invoice_total"] ctxt :subject)))
+      (is (false? (jsonrule/evalClause ["=" "$c.purpose" "export_invoice_details"] ctxt :subject))))))
+
 ;; ==============================================================================
 ;; Tests pour evaluateRule
 ;; ==============================================================================
@@ -230,6 +238,22 @@
       (is (false? (:value (jsonrule/evaluateRule rule request))))
       (rebac/add-relation! subject "viewer" resource)
       (is (true? (:value (jsonrule/evaluateRule rule request)))))))
+
+(deftest evaluateRule-context-purpose-condition-test
+  (testing "evaluateRule supports policy conditions on request context"
+    (let [rule {:conditions [["=" ["Application" "$s" "client-id"] "app-demo"]
+                             ["=" ["Context" "$c" "purpose"] "aggregate_invoice_total"]]}
+          request {:subject {:id "app-demo"
+                             :class "Application"
+                             :client-id "app-demo"}
+                   :resource {:class "Facture" :id "FAC-001"}
+                   :operation "process"
+                   :context {:purpose "aggregate_invoice_total"
+                             :requestingUser "alice"}}]
+      (is (true? (:value (jsonrule/evaluateRule rule request))))
+      (is (false? (:value (jsonrule/evaluateRule
+                           rule
+                           (assoc-in request [:context :purpose] "export_invoice_details"))))))))
 
 (deftest evaluateRule-inherited-relation-condition-test
   (testing "relation predicates inherit grants from parent resources"

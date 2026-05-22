@@ -21,6 +21,23 @@
     (is (= [] (:errors analysis)))
     (is (= [] (:warnings analysis)))))
 
+(deftest validate-policy-accepts-context-references-test
+  (let [policy {:strategy "almost_one_allow_no_deny"
+                :schema {:subjects {:Application ["client-id"]}
+                         :resources {:Facture ["id"]}
+                         :contexts {:Context ["purpose" "requestingUser"]}
+                         :operations ["process"]}
+                :rules [{:name "allow-app-purpose"
+                         :priority 10
+                         :effect "allow"
+                         :resourceClass "Facture"
+                         :operation "process"
+                         :conditions [["=" ["Application" "$s" "client-id"] "app-demo"]
+                                      ["=" ["Context" "$c" "purpose"] "aggregate_invoice_total"]]}]}]
+    (let [analysis (safety/validate-policy! "Facture" policy)]
+      (is (= [] (:errors analysis)))
+      (is (= [] (:warnings analysis))))))
+
 (deftest validate-policy-detects-duplicate-rule-names-test
   (let [policy (assoc valid-policy
                       :rules [(first (:rules valid-policy))

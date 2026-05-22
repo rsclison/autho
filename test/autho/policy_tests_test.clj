@@ -40,6 +40,33 @@
     (is (= 2 (:passed result)))
     (is (= 0 (:failed result)))))
 
+(deftest run-policy-tests-supports-context-purpose-test
+  (let [policy {:strategy :almost_one_allow_no_deny
+                :rules [{:name "allow-purpose"
+                         :priority 10
+                         :effect "allow"
+                         :resourceClass "Facture"
+                         :operation "process"
+                         :conditions [["=" ["Application" "$s" "client-id"] "app-demo"]
+                                      ["=" ["Context" "$c" "purpose"] "aggregate_invoice_total"]]}]
+                :tests [{:name "application can aggregate invoices"
+                         :subject {:id "app-demo" :class "Application" :client-id "app-demo"}
+                         :resource {:id "FAC-001" :class "Facture"}
+                         :operation "process"
+                         :context {:purpose "aggregate_invoice_total"
+                                   :requestingUser "alice"}
+                         :expect "allow"}
+                        {:name "application cannot export invoice details"
+                         :subject {:id "app-demo" :class "Application" :client-id "app-demo"}
+                         :resource {:id "FAC-001" :class "Facture"}
+                         :operation "process"
+                         :context {:purpose "export_invoice_details"
+                                   :requestingUser "alice"}
+                         :expect "deny"}]}
+        result (policy-tests/run-policy-tests policy)]
+    (is (= 2 (:passed result)))
+    (is (= 0 (:failed result)))))
+
 (deftest validate-policy-tests-rejects-failing-scenario-test
   (let [policy (assoc policy-with-tests
                       :tests [{:name "wrong expectation"

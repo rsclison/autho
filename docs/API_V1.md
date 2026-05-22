@@ -550,6 +550,19 @@ This checks that the effective subject has the requested relation to the request
 
 Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`. Tuples are persisted in the policy H2 database and reloaded into in-memory indexes by `rebac/init!` during PDP startup.
 
+Policy conditions may reference request context attributes with `$c` or `["Context", "$c", "<attribute>"]`. This is intended for controlled business context such as `purpose`, not for authenticating the caller:
+
+```json
+{
+  "conditions": [
+    ["=", ["Application", "$s", "client-id"], "app-demo"],
+    ["=", ["Context", "$c", "purpose"], "aggregate_invoice_total"]
+  ]
+}
+```
+
+For API-key callers, `$s` is still the server-bound application identity. A caller cannot gain broader access by sending an arbitrary `purpose`; the policy must explicitly allow the authenticated application to use that purpose.
+
 **Response:** `200 OK`
 ```json
 {

@@ -260,6 +260,139 @@ curl -X POST http://localhost:8080/v1/authz/decisions \
 
 Dans le Dashboard, rafraichir la page et montrer les dernieres decisions.
 
+## 6 bis. Tester un `purpose` applicatif controle
+
+Ce scenario montre le cas ou `app-demo` traite des donnees que l'utilisateur courant ne peut pas consulter directement. Le champ `purpose` n'est pas documentaire : il est evalue par la policy et couple a l'identite applicative authentifiee.
+
+Creer la politique `FacturePurposeDemo` :
+
+```bash
+curl -X PUT http://localhost:8080/v1/policies/FacturePurposeDemo \
+  -H "Content-Type: application/json" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
+  -H "X-Tenant-ID: demo" \
+  -d '{
+    "resourceClass": "FacturePurposeDemo",
+    "strategy": "almost_one_allow_no_deny",
+    "schema": {
+      "subjects": {"Application": ["client-id"]},
+      "resources": {"FacturePurposeDemo": ["id"]},
+      "contexts": {"Context": ["purpose", "requestingUser"]},
+      "operations": ["process", "lire"]
+    },
+    "rules": [
+      {
+        "name": "ALLOW-APP-DEMO-AGGREGATE",
+        "operation": "process",
+        "priority": 10,
+        "effect": "allow",
+        "conditions": [
+          ["=", ["Application", "$s", "client-id"], "app-demo"],
+          ["=", ["Context", "$c", "purpose"], "aggregate_invoice_total"]
+        ]
+      },
+      {
+        "name": "DENY-APP-DEMO-EXPORT",
+        "operation": "process",
+        "priority": 100,
+        "effect": "deny",
+        "conditions": [
+          ["=", ["Application", "$s", "client-id"], "app-demo"],
+          ["=", ["Context", "$c", "purpose"], "export_invoice_details"]
+        ]
+      }
+    ],
+    "tests": [
+      {
+        "name": "app-demo peut agreger les factures pour Alice",
+        "subject": {"id": "app-demo", "class": "Application", "client-id": "app-demo"},
+        "resource": {"id": "FAC-001", "class": "FacturePurposeDemo"},
+        "operation": "process",
+        "context": {"purpose": "aggregate_invoice_total", "requestingUser": "alice"},
+        "expect": "allow"
+      },
+      {
+        "name": "app-demo ne peut pas exporter les lignes de facture",
+        "subject": {"id": "app-demo", "class": "Application", "client-id": "app-demo"},
+        "resource": {"id": "FAC-001", "class": "FacturePurposeDemo"},
+        "operation": "process",
+        "context": {"purpose": "export_invoice_details", "requestingUser": "alice"},
+        "expect": "deny"
+      },
+      {
+        "name": "Alice ne lit pas la facture brute via cette policy",
+        "subject": {"id": "alice", "class": "Person"},
+        "resource": {"id": "FAC-001", "class": "FacturePurposeDemo"},
+        "operation": "lire",
+        "context": {"purpose": "consultation", "requestingUser": "alice"},
+        "expect": "deny"
+      }
+    ]
+  }'
+```
+
+Test 1, `purpose` autorise : `app-demo` peut traiter les factures pour calculer un agregat.
+
+```bash
+curl -X POST http://localhost:8080/v1/authz/decisions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
+  -H "X-Tenant-ID: demo" \
+  -d '{
+    "subject": {"id": "alice", "class": "Person"},
+    "resource": {"class": "FacturePurposeDemo", "id": "FAC-001"},
+    "operation": "process",
+    "context": {
+      "purpose": "aggregate_invoice_total",
+      "requestingUser": "alice"
+    }
+  }'
+```
+
+Resultat attendu : `decision` vaut `allow`. Le corps declare `alice`, mais l'API key fait que le sujet effectif est `app-demo`.
+
+Test 2, `purpose` non autorise : la meme application ne peut pas utiliser un autre objectif pour exporter les lignes de facture.
+
+```bash
+curl -X POST http://localhost:8080/v1/authz/decisions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
+  -H "X-Tenant-ID: demo" \
+  -d '{
+    "subject": {"id": "alice", "class": "Person"},
+    "resource": {"class": "FacturePurposeDemo", "id": "FAC-001"},
+    "operation": "process",
+    "context": {
+      "purpose": "export_invoice_details",
+      "requestingUser": "alice"
+    }
+  }'
+```
+
+Resultat attendu : `decision` vaut `deny`.
+
+Test 3, consultation utilisateur : le fait que `app-demo` puisse traiter les factures pour un agregat ne donne pas a Alice le droit de lire la facture brute.
+
+```bash
+curl -X POST http://localhost:8080/v1/authz/decisions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
+  -H "X-Tenant-ID: demo" \
+  -d '{
+    "subject": {"id": "alice", "class": "Person"},
+    "resource": {"class": "FacturePurposeDemo", "id": "FAC-001"},
+    "operation": "lire",
+    "context": {
+      "purpose": "consultation",
+      "requestingUser": "alice"
+    }
+  }'
+```
+
+Resultat attendu : `decision` vaut `deny`.
+
+Point a commenter : une application ne peut pas obtenir un acces plus large en inventant un `purpose`. La policy verifie le couple `application authentifiee + purpose + operation + ressource`. Les donnees sources peuvent etre traitees par A pour produire une somme, mais seules les donnees de sortie autorisees doivent etre presentees a l'utilisateur.
+
 ## 7. Montrer l'explication d'une decision
 
 L'explication sert a comprendre pourquoi Autho autorise ou refuse.
@@ -518,8 +651,9 @@ Arreter les processus avec `Ctrl+C` dans les terminaux du serveur et de l'IHM.
 3. Presenter le Dashboard.
 4. Ouvrir `Policies` et montrer `DossierDemo`.
 5. Executer une decision `allow`, puis une decision `deny`.
-6. Ouvrir `Simulator` et expliquer la decision refusee.
-7. Simuler une politique candidate qui changerait le refus en autorisation.
-8. Montrer le shadow testing via API.
-9. Ouvrir `Audit`, filtrer les decisions, exporter en CSV et verifier la chaine.
-10. Montrer l'analyse d'impact et conclure sur le cycle professionnel : tester, simuler, auditer, approuver, deployer.
+6. Executer les trois tests `purpose` : agregation autorisee, export refuse, lecture brute refusee.
+7. Ouvrir `Simulator` et expliquer la decision refusee.
+8. Simuler une politique candidate qui changerait le refus en autorisation.
+9. Montrer le shadow testing via API.
+10. Ouvrir `Audit`, filtrer les decisions, exporter en CSV et verifier la chaine.
+11. Montrer l'analyse d'impact et conclure sur le cycle professionnel : tester, simuler, auditer, approuver, deployer.

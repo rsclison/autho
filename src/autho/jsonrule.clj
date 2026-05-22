@@ -1,7 +1,8 @@
 (ns autho.jsonrule
   (:require [autho.jsonpath :as js]
             [autho.attfun :as attfun]
-            [autho.rebac :as rebac])
+            [autho.rebac :as rebac]
+            [clojure.string :as str])
   (:use clojure.test))
 
 ;; a context is like {:class :student :name "john" :age 21}
@@ -37,19 +38,34 @@
                     pip-result)))]
     (coerce-str val)))
 
+(defn- resolve-path-operand
+  [op ctxt]
+  (when (string? op)
+    (cond
+      (str/starts-with? op "$s.")
+      (coerce-str (js/at-path (str "$" (subs op 2)) (:subject ctxt)))
+
+      (str/starts-with? op "$r.")
+      (coerce-str (js/at-path (str "$" (subs op 2)) (:resource ctxt)))
+
+      (str/starts-with? op "$c.")
+      (coerce-str (js/at-path (str "$" (subs op 2)) (:context ctxt))))))
+
 (defn- eval-operand2
   "Evalue un opérande du nouveau format :conditions.
-   Scalaire → valeur littérale (string).
-   Vecteur [Classe $s|$r attribut] → résolution PIP/objet."
+   Scalaire → valeur littérale (string), sauf chemins $s./$r./$c.
+   Vecteur [Classe $s|$r|$c attribut] → résolution PIP/objet/contexte."
   [op ctxt]
   (if-not (coll? op)
-    (coerce-str op)
+    (or (resolve-path-operand op ctxt)
+        (coerce-str op))
     (let [class-name (name (first op))
           var-sym    (str (second op))
           attribute  (name (nth op 2))
           obj        (case var-sym
                        "$s" (:subject ctxt)
                        "$r" (:resource ctxt)
+                       "$c" (:context ctxt)
                        nil)]
       (when obj
         (resolve-attr obj class-name attribute)))))
@@ -115,6 +131,8 @@
                                          (:resource ctxt)))]
              (if (number? value) (str value) value))
       "$r" (let [value (js/at-path (str "$" (subs op 2)) (:resource ctxt))]
+             (if (number? value) (str value) value))
+      "$c" (let [value (js/at-path (str "$" (subs op 2)) (:context ctxt))]
              (if (number? value) (str value) value))
       "$s" (let [value (js/at-path (str "$" (subs op 2)) (:subject ctxt))]
              (if (number? value) (str value) value)))))
@@ -198,4 +216,3 @@
         (recur (rest conds))
         false)))
   )
-
