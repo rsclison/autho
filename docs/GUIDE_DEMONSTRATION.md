@@ -115,7 +115,140 @@ L'IHM contient les sections suivantes :
 | Infrastructure | Statut des caches, circuit breakers et actions d'administration. |
 | Settings | Theme et session courante. |
 
-## 4 bis. Variante recommandee : demonstration complete en containers
+## 4 bis. Parcours IHM a derouler pendant la demonstration
+
+Ce parcours peut etre execute apres la creation de `DossierDemo` et apres quelques appels `/v1/authz/decisions`, afin que le Dashboard et l'Audit contiennent deja des donnees a montrer.
+
+### 4 bis.1 Connexion et session
+
+1. ouvrir `http://localhost:3000/admin/ui` en mode developpement ou `http://localhost:8080/admin/ui` en mode embarque ;
+2. selectionner `API Key` ;
+3. saisir `abcdefghijklmnopqrstuvwxyz123456` ;
+4. valider.
+
+Points a commenter :
+
+- l'IHM n'utilise pas une identite declaree dans un formulaire metier ;
+- l'API key authentifie l'application d'administration ;
+- les roles de gouvernance viennent de `API_CLIENT_ROLES`.
+
+### 4 bis.2 Dashboard
+
+1. ouvrir `Dashboard` ;
+2. verifier l'indicateur de sante du serveur dans la barre laterale ;
+3. montrer les cartes d'etat : serveur, politiques, audit et cache ;
+4. montrer les dernieres decisions apres avoir execute une decision `allow` et une decision `deny` ;
+5. expliquer qu'un message de licence sur l'audit indique que la demo n'est pas lancee en Pro ou Enterprise.
+
+Resultat attendu avec la configuration de ce guide : les fonctions Enterprise sont visibles, et les dernieres decisions apparaissent apres rafraichissement.
+
+### 4 bis.3 Politiques
+
+1. ouvrir `Politiques` ;
+2. verifier que `DossierDemo` apparait dans la liste laterale ;
+3. selectionner `DossierDemo` ;
+4. montrer le document JSON de politique ;
+5. verifier la strategie `almost_one_allow_no_deny` ;
+6. montrer les regles `ALLOW-APP-DEMO-READ` et `DENY-SECRET` ;
+7. ouvrir l'historique des versions ;
+8. selectionner deux versions si elles existent, puis afficher le diff ;
+9. faire une modification mineure de commentaire ou de regle en demonstration uniquement si un rollback est prevu.
+
+Points a commenter :
+
+- la strategie proposee par l'IHM est celle que le backend valide ;
+- chaque sauvegarde cree une version auditable ;
+- le diff permet de relire les changements avant revue ou deploiement.
+
+### 4 bis.4 Creation d'une politique depuis l'IHM
+
+1. dans `Politiques`, cliquer sur `Nouvelle politique` ;
+2. saisir `DemoIhmTemp` ;
+3. valider ;
+4. ouvrir la politique creee ;
+5. verifier que la strategie par defaut vaut `almost_one_allow_no_deny` ;
+6. supprimer cette politique a la fin de la demonstration si elle ne sert plus.
+
+Point a commenter : la creation depuis l'IHM ne doit plus produire l'erreur `unsupported conflict resolution strategy 'deny-unless-permit'`.
+
+### 4 bis.5 Simulateur
+
+1. ouvrir `Simulateur` ;
+2. saisir le sujet `alice` ;
+3. selectionner ou saisir la classe `DossierDemo` ;
+4. saisir la ressource `DOS-002` ;
+5. saisir l'operation `lire` ;
+6. cliquer sur `Expliquer` ;
+7. montrer le badge `Acces refuse` ;
+8. ouvrir le bloc `Explication de la decision` ;
+9. montrer la strategie, la ressource, l'operation, les regles evaluees et la regle matchante `DENY-SECRET` ;
+10. cliquer ensuite sur `Simuler` pour montrer le mode dry-run.
+
+Points a commenter :
+
+- `Expliquer` analyse la policy active ;
+- `Simuler` execute une evaluation sans modifier la policy active ;
+- le JSON brut reste disponible pour un profil technique.
+
+### 4 bis.6 Audit
+
+1. ouvrir `Audit` ;
+2. filtrer `Classe ressource` avec `DossierDemo` ;
+3. cliquer sur `Rechercher` ;
+4. filtrer successivement sur `Autorise` puis `Refuse` ;
+5. montrer les colonnes horodatage, sujet, ressource, operation, decision et regles ;
+6. cliquer sur `Verifier l'integrite` ;
+7. exporter en CSV.
+
+Points a commenter :
+
+- l'audit permet de retrouver pourquoi une decision a ete prise ;
+- la verification d'integrite detecte une rupture de chaine ;
+- l'export CSV sert aux revues de securite ou de conformite.
+
+### 4 bis.7 Gouvernance et analyse d'impact
+
+1. ouvrir `Politiques` puis `DossierDemo` ;
+2. ouvrir l'onglet ou l'action de gouvernance ;
+3. dans le panneau de preparation, garder la baseline `Courante` ;
+4. coller un jeu de requetes representatif si le champ n'est pas deja rempli ;
+5. cliquer sur `Generer une preview d impact` ;
+6. montrer les compteurs : changements, revocations, sujets touches, ressources touchees ;
+7. dans l'historique, montrer le statut de review et le statut de rollout ;
+8. si le scenario le permet, marquer la preview comme revue ou approuvee, puis expliquer le rollout.
+
+Jeu de requetes simple a coller dans le panneau de gouvernance :
+
+```json
+[
+  {
+    "subject": {"id": "alice", "class": "Person"},
+    "resource": {"class": "DossierDemo", "id": "DOS-001", "classification": "internal"},
+    "operation": "lire",
+    "context": {"on-behalf-of": "alice"}
+  },
+  {
+    "subject": {"id": "alice", "class": "Person"},
+    "resource": {"class": "DossierDemo", "id": "DOS-002", "classification": "secret"},
+    "operation": "lire",
+    "context": {"on-behalf-of": "alice"}
+  }
+]
+```
+
+Point a commenter : l'IHM ne se limite pas a editer une policy ; elle aide a mesurer l'impact avant de deployer.
+
+### 4 bis.8 Infrastructure et parametres
+
+1. ouvrir `Infrastructure` ;
+2. montrer l'etat des composants, caches et actions d'administration disponibles ;
+3. ouvrir `Parametres` ;
+4. changer le theme si utile ;
+5. montrer les informations de session.
+
+Point a commenter : ces ecrans servent a rendre l'exploitation visible pendant une demo technique, sans devoir lire les logs serveur.
+
+## 4 ter. Variante recommandee : demonstration complete en containers
 
 Pour montrer Kafka, LDAP et RocksDB dans le meme scenario, utiliser la stack Docker :
 
@@ -648,12 +781,14 @@ Arreter les processus avec `Ctrl+C` dans les terminaux du serveur et de l'IHM.
 
 1. Lancer le serveur et l'IHM.
 2. Se connecter avec l'API key.
-3. Presenter le Dashboard.
-4. Ouvrir `Policies` et montrer `DossierDemo`.
+3. Presenter le `Dashboard` et l'etat du serveur.
+4. Ouvrir `Politiques`, montrer `DossierDemo`, la strategie et l'historique.
 5. Executer une decision `allow`, puis une decision `deny`.
-6. Executer les trois tests `purpose` : agregation autorisee, export refuse, lecture brute refusee.
-7. Ouvrir `Simulator` et expliquer la decision refusee.
-8. Simuler une politique candidate qui changerait le refus en autorisation.
-9. Montrer le shadow testing via API.
-10. Ouvrir `Audit`, filtrer les decisions, exporter en CSV et verifier la chaine.
-11. Montrer l'analyse d'impact et conclure sur le cycle professionnel : tester, simuler, auditer, approuver, deployer.
+6. Rafraichir le `Dashboard` pour montrer les dernieres decisions.
+7. Executer les trois tests `purpose` : agregation autorisee, export refuse, lecture brute refusee.
+8. Ouvrir `Simulateur`, expliquer la decision refusee et montrer le JSON brut.
+9. Simuler une politique candidate qui changerait le refus en autorisation.
+10. Montrer le shadow testing via API.
+11. Ouvrir `Audit`, filtrer les decisions, exporter en CSV et verifier la chaine.
+12. Ouvrir la gouvernance de `DossierDemo`, generer une preview d'impact et commenter les compteurs.
+13. Ouvrir `Infrastructure` puis `Parametres` pour conclure sur l'exploitation.
