@@ -114,12 +114,23 @@ function VersionHistory({ resourceClass, onDiff, onClose }: {
   const rollback = useRollback()
   const [sel, setSel] = useState<Set<number>>(new Set())
 
-  const toggle = (v: number) => setSel((prev) => {
-    const next = new Set(prev)
-    if (next.has(v)) { next.delete(v); return next }
-    if (next.size < 2) { next.add(v); return next }
-    return new Set([v])
-  })
+  const versionNumber = (version: PolicyVersion): number | null => {
+    const parsed = Number(version.version)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+  }
+
+  const toggle = (v: number | null) => {
+    if (v === null) {
+      toast.error('Version de politique invalide')
+      return
+    }
+    setSel((prev) => {
+      const next = new Set(prev)
+      if (next.has(v)) { next.delete(v); return next }
+      if (next.size < 2) { next.add(v); return next }
+      return new Set([v])
+    })
+  }
 
   const selArr = Array.from(sel).sort((a, b) => a - b)
   const [fromV, toV] = selArr
@@ -144,21 +155,32 @@ function VersionHistory({ resourceClass, onDiff, onClose }: {
         )) : !versions?.length ? (
           <p className="text-xs text-muted-foreground text-center py-6">Aucune version enregistree</p>
         ) : (
-          versions.map((v: PolicyVersion) => (
-            <div key={v.version} onClick={() => toggle(v.version)}
-              className={`group px-3 py-2 cursor-pointer transition-colors ${sel.has(v.version) ? 'bg-autho-dark/10' : 'hover:bg-muted'}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">v{v.version}</span>
-                <button onClick={(e) => { e.stopPropagation(); rollback.mutate({ resourceClass, version: v.version }) }}
-                  title="Rollback" className="p-1 rounded hover:bg-destructive/10 hover:text-destructive opacity-0 group-hover:opacity-100">
-                  <RotateCcw size={11} />
-                </button>
+          versions.map((v: PolicyVersion) => {
+            const parsedVersion = versionNumber(v)
+            const selected = parsedVersion !== null && sel.has(parsedVersion)
+            return (
+              <div key={v.version} onClick={() => toggle(parsedVersion)}
+                className={`group px-3 py-2 cursor-pointer transition-colors ${selected ? 'bg-autho-dark/10' : 'hover:bg-muted'}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">v{v.version}</span>
+                  <button onClick={(e) => {
+                    e.stopPropagation()
+                    if (parsedVersion === null) {
+                      toast.error('Version de politique invalide')
+                      return
+                    }
+                    rollback.mutate({ resourceClass, version: parsedVersion })
+                  }}
+                    title="Rollback" className="p-1 rounded hover:bg-destructive/10 hover:text-destructive opacity-0 group-hover:opacity-100">
+                    <RotateCcw size={11} />
+                  </button>
+                </div>
+                {v.author && <p className="text-xs text-muted-foreground truncate">{v.author}</p>}
+                {v.comment && <p className="text-xs text-muted-foreground truncate italic">{v.comment}</p>}
+                <p className="text-xs text-muted-foreground">{new Date(v.createdAt).toLocaleString('fr-FR')}</p>
               </div>
-              {v.author && <p className="text-xs text-muted-foreground truncate">{v.author}</p>}
-              {v.comment && <p className="text-xs text-muted-foreground truncate italic">{v.comment}</p>}
-              <p className="text-xs text-muted-foreground">{new Date(v.createdAt).toLocaleString('fr-FR')}</p>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
     </div>

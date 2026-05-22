@@ -1141,6 +1141,14 @@
       (is (= 3 (get-in body [:data :summary :totalRuleChanges])))
       (is (= "allow-read" (get-in body [:data :rules :changed 0 :name]))))))
 
+(deftest diff-policy-versions-handler-rejects-empty-version-test
+  (let [response (handlers/diff-policy-versions "Document" "" "2")
+        body (parse-response-body response)]
+    (is (= 400 (:status response)))
+    (is (= "INVALID_POLICY_VERSION" (get-in body [:error :code])))
+    (is (= "Missing policy version parameter 'from'."
+           (get-in body [:error :message])))))
+
 (deftest analyze-policy-impact-handler-persists-history-test
   (let [request (mock-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
                                                                              :resource {:class "Document" :id "doc-1"}

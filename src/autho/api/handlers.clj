@@ -773,12 +773,34 @@
   [resource-class from-v to-v]
   (log/debug "Diffing versions" from-v "->" to-v "for" resource-class)
   (try
-    (if-let [d (pv/diff-versions resource-class
-                                 (Long/parseLong (str from-v))
-                                 (Long/parseLong (str to-v)))]
-      (response/success-response d)
-      (response/error-response "DIFF_NOT_FOUND"
-                               "One or both versions not found" 404))
+    (let [parse-version (fn [label value]
+                          (let [value-str (str value)]
+                            (if (or (nil? value)
+                                    (str/blank? value-str))
+                              (throw (ex-info (str "Missing policy version parameter '" label "'.")
+                                              {:status 400
+                                               :error-code "INVALID_POLICY_VERSION"}))
+                              (try
+                                (let [parsed (Long/parseLong value-str)]
+                                  (when-not (pos? parsed)
+                                    (throw (NumberFormatException.
+                                            (str "Policy version must be positive: " value-str))))
+                                  parsed)
+                                (catch NumberFormatException _
+                                  (throw (ex-info (str "Invalid policy version parameter '" label "': " value-str)
+                                                  {:status 400
+                                                   :error-code "INVALID_POLICY_VERSION"})))))))]
+      (if-let [d (pv/diff-versions resource-class
+                                   (parse-version "from" from-v)
+                                   (parse-version "to" to-v))]
+        (response/success-response d)
+        (response/error-response "DIFF_NOT_FOUND"
+                                 "One or both versions not found" 404)))
+    (catch clojure.lang.ExceptionInfo e
+      (let [{:keys [status error-code]} (ex-data e)]
+        (if (= "INVALID_POLICY_VERSION" error-code)
+          (response/error-response error-code (.getMessage e) (or status 400))
+          (throw e))))
     (catch Exception e
       (log/error e "Error diffing policy versions")
       (response/error-response "DIFF_ERROR"

@@ -32,6 +32,10 @@ function buildTimelineQuery(resourceClass: string, filters?: {
   return `/v1/policies/${resourceClass}/timeline${query ? `?${query}` : ''}`
 }
 
+function isValidVersion(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+}
+
 export function usePolicies() {
   return useQuery({
     queryKey: ['policies'],
@@ -133,16 +137,18 @@ export function useVersionRecord(resourceClass: string | null, version: number |
 
 export function useDiffVersions(
   resourceClass: string | null,
-  fromV: number | null,
-  toV: number | null,
+  fromV: number | null | undefined,
+  toV: number | null | undefined,
 ) {
+  const enabled = !!resourceClass && isValidVersion(fromV) && isValidVersion(toV)
+
   return useQuery({
     queryKey: ['diff', resourceClass, fromV, toV],
     queryFn: () =>
       api.get<DiffResult>(
         `/v1/policies/${resourceClass}/diff?from=${fromV}&to=${toV}`,
       ),
-    enabled: !!resourceClass && fromV !== null && toV !== null,
+    enabled,
   })
 }
 
