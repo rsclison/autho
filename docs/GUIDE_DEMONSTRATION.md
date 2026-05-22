@@ -41,7 +41,8 @@ export API_CLIENT_TENANTS="demo"
 export KAFKA_ENABLED="false"
 export AUDIT_HMAC_SECRET="audit-test-hmac-secret-32-chars-min-ok!!"
 export POLICY_BUNDLE_HMAC_SECRET="policy-bundle-hmac-secret-32-chars-min"
-export AUTHO_LICENSE_KEY="<licence-pro-ou-enterprise>"
+unset AUTHO_LICENSE_KEY
+export AUTHO_DEMO_LICENSE_TIER="enterprise"
 ```
 
 Lancer le serveur :
@@ -60,10 +61,10 @@ Verifier que le serveur repond :
 
 ```bash
 curl http://localhost:8080/health
-curl -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" http://localhost:8080/status
+curl -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" http://localhost:8080/status
 ```
 
-Point a expliquer pendant la demonstration : `API_KEY` authentifie l'application appelante. L'identite effective injectee dans le PDP est construite depuis `API_CLIENT_ID`, `API_CLIENT_CLASS`, `API_CLIENT_ROLES` et `API_CLIENT_TENANTS`. Un utilisateur ne peut donc pas se faire passer pour `app-demo` en postant manuellement un champ `subject`.
+Point a expliquer pendant la demonstration : `API_KEY` authentifie l'application appelante. Les appels HTTP doivent transmettre cette cle avec l'en-tete `Authorization: X-API-Key <cle>`. L'identite effective injectee dans le PDP est construite depuis `API_CLIENT_ID`, `API_CLIENT_CLASS`, `API_CLIENT_ROLES` et `API_CLIENT_TENANTS`. Un utilisateur ne peut donc pas se faire passer pour `app-demo` en postant manuellement un champ `subject`.
 
 ## 4. Lancer l'interface homme-machine
 
@@ -171,7 +172,7 @@ Creer la politique `DossierDemo` via l'API. Cette politique autorise `app-demo` 
 ```bash
 curl -X PUT http://localhost:8080/v1/policies/DossierDemo \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "resourceClass": "DossierDemo",
@@ -230,7 +231,7 @@ Decision autorisee :
 ```bash
 curl -X POST http://localhost:8080/v1/authz/decisions \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "subject": {"id": "alice", "class": "Person", "role": "admin"},
@@ -247,7 +248,7 @@ Decision refusee :
 ```bash
 curl -X POST http://localhost:8080/v1/authz/decisions \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "subject": {"id": "alice", "class": "Person"},
@@ -266,7 +267,7 @@ L'explication sert a comprendre pourquoi Autho autorise ou refuse.
 ```bash
 curl -X POST http://localhost:8080/v1/authz/explain \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "subject": {"id": "alice", "class": "Person"},
@@ -302,7 +303,7 @@ Equivalent API :
 ```bash
 curl -X POST http://localhost:8080/v1/authz/simulate \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "subject": {"id": "alice", "class": "Person"},
@@ -336,7 +337,7 @@ Le shadow testing compare la decision de production avec une politique candidate
 ```bash
 curl -X POST http://localhost:8080/v1/authz/shadow \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "subject": {"id": "alice", "class": "Person"},
@@ -378,14 +379,14 @@ Manipulations IHM :
 Equivalent API :
 
 ```bash
-curl -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+curl -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   "http://localhost:8080/admin/audit/search?resourceClass=DossierDemo&page=1&pageSize=20"
 ```
 
 Verification d'integrite :
 
 ```bash
-curl -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+curl -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   http://localhost:8080/admin/audit/verify
 ```
 
@@ -403,7 +404,7 @@ L'analyse d'impact compare une politique candidate avec la politique active sur 
 ```bash
 curl -X POST http://localhost:8080/v1/policies/DossierDemo/impact \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "candidatePolicy": {
@@ -462,7 +463,7 @@ Puis refaire l'appel avec une API key incorrecte :
 ```bash
 curl -X POST http://localhost:8080/v1/authz/decisions \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: mauvaise-cle-api" \
+  -H "Authorization: X-API-Key mauvaise-cle-api" \
   -d '{
     "subject": {"id": "app-demo", "class": "Application", "client-id": "app-demo"},
     "resource": {"class": "DossierDemo", "id": "DOS-001", "classification": "internal"},
@@ -479,7 +480,7 @@ Revenir a une politique stricte si la demonstration a modifie la politique :
 ```bash
 curl -X PUT http://localhost:8080/v1/policies/DossierDemo \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: abcdefghijklmnopqrstuvwxyz123456" \
+  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
   -H "X-Tenant-ID: demo" \
   -d '{
     "resourceClass": "DossierDemo",

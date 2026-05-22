@@ -124,7 +124,7 @@ curl http://localhost:8080/health
 # Décision d'autorisation application-à-application (avec API Key)
 curl -X POST http://localhost:8080/isAuthorized \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: my-strong-api-key-32-chars-min" \
+  -H "Authorization: X-API-Key my-strong-api-key-32-chars-min" \
   -d '{
     "subject":   {"id": "client-declared-value", "class": "Application"},
     "resource":  {"class": "InformationB", "id": "info-123"},
