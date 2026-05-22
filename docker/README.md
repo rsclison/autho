@@ -6,6 +6,14 @@ La demonstration se lance depuis la racine du depot avec un seul script :
 ./demo_start.sh
 ```
 
+Les donnees Kafka ne sont pas injectees au demarrage. Cela permet de montrer d'abord qu'une regle `Facture` ne peut pas matcher quand les attributs metier ne sont pas encore dans RocksDB.
+
+Injecter ensuite les donnees Kafka avec :
+
+```bash
+./demo_inject_kafka.sh
+```
+
 Elle s'arrete avec :
 
 ```bash
@@ -45,10 +53,10 @@ phpLDAPadmin :
 - Kafka et les topics compactes ;
 - OpenLDAP avec les personnes de demonstration ;
 - Autho en container avec `AUTHO_DEMO_LICENSE_TIER=enterprise` ;
-- RocksDB embarque dans le container Autho, persiste dans le volume Docker `autho_data` ;
-- les objets `FAC-TEST-01` et `FAC-TEST-02` dans Kafka ;
+- RocksDB embarque dans le container Autho, vide au lancement de la demo ;
 - les politiques `DossierDemo` et `FacturePurposeDemo` ;
-- des decisions initiales pour alimenter le Dashboard et l'Audit.
+- des decisions initiales pour alimenter le Dashboard et l'Audit ;
+- une decision `Facture` attendue en refus avant injection Kafka.
 
 ## Donnees LDAP
 
@@ -65,7 +73,7 @@ phpLDAPadmin :
 
 ## Scenario Kafka -> RocksDB -> autorisation
 
-`demo_start.sh` produit deux factures deterministes :
+`demo_inject_kafka.sh` produit deux factures deterministes :
 
 - `FAC-TEST-01` : service `service1`, montant `30000` ;
 - `FAC-TEST-02` : service `service1`, montant `80000`.
@@ -80,6 +88,7 @@ La regle `R1` de `resources/jrules.edn` autorise la lecture d'une `Facture` si l
 
 Resultat attendu :
 
+- avant `demo_inject_kafka.sh`, `FAC-TEST-01` est refusee car les attributs ne sont pas encore disponibles ;
 - `FAC-TEST-01` est autorisee, car `30000 < 50000` ;
 - `FAC-TEST-02` est refusee, car `80000 > 50000`.
 

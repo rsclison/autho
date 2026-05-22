@@ -9,8 +9,8 @@ La demonstration lance tous les composants utiles :
 - Kafka et Kafka UI ;
 - OpenLDAP et phpLDAPadmin ;
 - RocksDB dans le container Autho ;
-- producteur Kafka de donnees de test ;
-- politiques et decisions initiales pour remplir l'IHM.
+- politiques et decisions initiales pour remplir l'IHM ;
+- script separe d'injection Kafka pour montrer progressivement l'arrivee des donnees metier.
 
 ## 1. Prerequis
 
@@ -36,10 +36,10 @@ Le script effectue tout le demarrage :
 
 1. construit et lance Kafka, OpenLDAP, Autho, Kafka UI et phpLDAPadmin ;
 2. attend que le serveur Autho soit pret ;
-3. produit des objets `Facture` dans Kafka ;
-4. laisse le consumer Autho mettre a jour RocksDB ;
-5. cree les politiques `DossierDemo` et `FacturePurposeDemo` ;
-6. execute des decisions `allow` et `deny` pour alimenter l'audit et le Dashboard.
+3. repart de volumes Docker vides pour que RocksDB ne contienne pas encore les factures de demonstration ;
+4. cree les politiques `DossierDemo` et `FacturePurposeDemo` ;
+5. execute des decisions `allow` et `deny` pour alimenter l'audit et le Dashboard ;
+6. execute une decision `Facture` avant injection Kafka, attendue en `deny` car les attributs metier ne sont pas encore presents dans RocksDB.
 
 La stack utilise une licence de demonstration `enterprise`, ce qui active audit, explain, simulate, shadow, metrics, Kafka PIP et fonctions de gouvernance.
 
@@ -78,7 +78,7 @@ Point a commenter : l'API key de demonstration est liee cote serveur au sujet LD
 1. ouvrir `Dashboard` ;
 2. verifier l'indicateur de sante du serveur dans la barre laterale ;
 3. montrer les cartes d'etat ;
-4. montrer les dernieres decisions deja generees par `demo_start.sh`.
+4. montrer les dernieres decisions deja generees par `demo_start.sh`, dont le refus `Facture` avant injection Kafka.
 
 Points a commenter :
 
@@ -145,19 +145,40 @@ Points a commenter :
 
 ### 4.7 Kafka, RocksDB et LDAP
 
+Ce passage se deroule en deux temps.
+
+Avant injection :
+
+1. ouvrir `Audit` ;
+2. filtrer `Classe ressource` avec `Facture` ;
+3. montrer la decision `deny` sur `FAC-TEST-01` generee par `demo_start.sh` ;
+4. expliquer que la requete HTTP ne contient que `{"class": "Facture", "id": "FAC-TEST-01"}` ;
+5. expliquer que la regle a besoin de `service` et `montant`, mais que ces attributs ne sont pas encore dans RocksDB.
+
+Injection :
+
+```bash
+./demo_inject_kafka.sh
+```
+
+Apres injection :
+
 1. ouvrir Kafka UI sur `http://localhost:8090` ;
 2. ouvrir le topic `business-objects-compacted` ;
-3. montrer les objets `FAC-TEST-01` et `FAC-TEST-02` produits par `demo_start.sh` ;
+3. montrer les objets `FAC-TEST-01` et `FAC-TEST-02` ;
 4. revenir dans l'Admin UI ;
 5. ouvrir `Audit` et filtrer sur `Facture` ;
-6. montrer que les decisions ont ete prises sans transmettre `montant` ni `service` dans la requete HTTP.
+6. montrer que `FAC-TEST-01` passe maintenant en `allow` ;
+7. montrer que `FAC-TEST-02` reste en `deny`, car son montant depasse le seuil LDAP.
 
 Points a commenter :
 
-- Kafka recoit les objets metier ;
+- avant injection, la regle ne peut pas matcher car les attributs metier ne sont pas disponibles ;
+- Kafka recoit ensuite les objets metier ;
 - Autho les consomme et les stocke dans RocksDB ;
 - pendant l'autorisation, Autho enrichit la ressource `Facture` depuis RocksDB ;
-- le sujet `001` est enrichi depuis LDAP.
+- le sujet `001` est enrichi depuis LDAP ;
+- `demo_inject_kafka.sh` vide le cache avant de rejouer la decision pour forcer une evaluation avec les donnees fraiches.
 
 ### 4.8 Purpose controle
 
@@ -222,7 +243,7 @@ curl -X POST http://localhost:8080/v1/authz/decisions \
   }'
 ```
 
-Decision Kafka/RocksDB autorisee :
+Decision Kafka/RocksDB avant injection, attendue en refus :
 
 ```bash
 curl -X POST http://localhost:8080/v1/authz/decisions \
@@ -234,6 +255,12 @@ curl -X POST http://localhost:8080/v1/authz/decisions \
     "resource": {"class": "Facture", "id": "FAC-TEST-01"},
     "operation": "lire"
   }'
+```
+
+Puis injecter les donnees et rejouer les decisions Kafka/RocksDB :
+
+```bash
+./demo_inject_kafka.sh
 ```
 
 Purpose refuse :
@@ -278,7 +305,9 @@ Pour arreter et supprimer aussi les volumes persistants de demonstration :
 4. Politiques `DossierDemo` et historique.
 5. Simulateur sur `DOS-002`.
 6. Audit filtre sur `DossierDemo`.
-7. Kafka UI puis audit `Facture`.
-8. Audit `FacturePurposeDemo`.
-9. Gouvernance et preview d'impact.
-10. `./demo_stop.sh`.
+7. Audit filtre sur `Facture` avant injection Kafka : refus attendu.
+8. `./demo_inject_kafka.sh`.
+9. Kafka UI puis audit `Facture` apres injection : `FAC-TEST-01` autorisee, `FAC-TEST-02` refusee.
+10. Audit `FacturePurposeDemo`.
+11. Gouvernance et preview d'impact.
+12. `./demo_stop.sh`.

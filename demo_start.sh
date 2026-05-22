@@ -150,18 +150,10 @@ seed_audit() {
   }'
   echo
 
-  echo "Decision expected: allow (Kafka/RocksDB Facture FAC-TEST-01)"
+  echo "Decision expected before Kafka injection: deny (FAC-TEST-01 is not in RocksDB yet)"
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
     "resource": {"class": "Facture", "id": "FAC-TEST-01"},
-    "operation": "lire"
-  }'
-  echo
-
-  echo "Decision expected: deny (Kafka/RocksDB Facture FAC-TEST-02)"
-  curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
-    "subject": {"id": "ignored-with-api-key", "class": "Person"},
-    "resource": {"class": "Facture", "id": "FAC-TEST-02"},
     "operation": "lire"
   }'
   echo
@@ -186,20 +178,11 @@ seed_audit() {
 }
 
 echo "Starting full Autho demo stack..."
+echo "Resetting persisted demo volumes to start without Kafka business data..."
+docker compose --profile tools down --remove-orphans --volumes >/dev/null 2>&1 || true
 docker compose up -d --build kafka kafka-init kafka-ui openldap phpldapadmin autho
 
 wait_for_autho
-
-echo "Producing deterministic Facture objects to Kafka..."
-docker compose --profile tools build kafka-producer
-docker compose --profile tools run --rm \
-  -v "$ROOT_DIR/docker/kafka-producer/test-factures.json:/data/test-factures.json:ro" \
-  kafka-producer \
-  --bootstrap kafka:29092 \
-  --file /data/test-factures.json
-
-echo "Waiting for the Autho Kafka consumer to update RocksDB..."
-sleep 5
 
 create_demo_policies
 seed_audit
@@ -223,6 +206,9 @@ Credentials:
 
 Stop everything with:
   ./demo_stop.sh
+
+Inject Kafka data and retry Kafka/RocksDB decisions with:
+  ./demo_inject_kafka.sh
 
 Reset persisted demo volumes with:
   ./demo_stop.sh --volumes

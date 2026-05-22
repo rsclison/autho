@@ -84,7 +84,13 @@
 ./demo_start.sh
 ```
 
-Ce script lance la stack Docker complete : Autho, Admin UI, Kafka, Kafka UI, OpenLDAP, phpLDAPadmin, RocksDB embarque dans le container Autho et producteur Kafka de donnees de demonstration. Il cree aussi les politiques de demo et genere des decisions initiales pour alimenter le Dashboard et l'Audit.
+Ce script lance la stack Docker complete : Autho, Admin UI, Kafka, Kafka UI, OpenLDAP, phpLDAPadmin et RocksDB embarque dans le container Autho. Il cree aussi les politiques de demo et genere des decisions initiales pour alimenter le Dashboard et l'Audit. Les donnees Kafka ne sont pas injectees au demarrage afin de pouvoir montrer le refus avant enrichissement RocksDB.
+
+Injecter ensuite les objets metier Kafka et rejouer les decisions `Facture` :
+
+```bash
+./demo_inject_kafka.sh
+```
 
 ```bash
 ./demo_stop.sh
