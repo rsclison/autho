@@ -1,73 +1,42 @@
-# React + TypeScript + Vite
+# Autho Admin UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interface d'administration React utilisée par Autho.
 
-Currently, two official plugins are available:
+## Ce que fait l'UI
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- consultation du statut serveur
+- navigation dans les politiques et leurs versions
+- audit et vérification de la chaîne d'intégrité
+- écrans de gouvernance et de revue
 
-## React Compiler
+L'application est servie par Autho sur :
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `GET /admin/ui`
+- `GET /admin/ui/*`
 
-## Expanding the ESLint configuration
+## Développement local
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Depuis le répertoire `admin-ui` :
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Build
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build
 ```
+
+## Tests
+
+```bash
+npm test
+```
+
+## Remarques
+
+- L'UI consomme les API Autho exposées par le backend principal.
+- `GET /admin/audit/verify` est l'endpoint utilisé pour la vérification de la chaîne d'audit.
+- Le build de production est servi par le backend lorsque les assets sont présents sous `resources/public/admin/`.

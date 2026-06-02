@@ -81,7 +81,7 @@ Entrées (interfaces utilisées par les PEP) :
 Interfaces d'administration (protégées par wrap-admin-auth) :
   POST /admin/reinit        — Réinitialisation du PDP
   POST /admin/reload_rules  — Rechargement des politiques
-  GET  /audit/verify        — Vérification de la chaîne d'audit
+  GET  /admin/audit/verify  — Vérification de la chaîne d'audit
   GET  /audit               — Consultation du journal
   GET  /metrics             — Métriques Prometheus
   GET  /status              — État du serveur
@@ -165,7 +165,7 @@ Ces hypothèses sont des conditions préalables au bon fonctionnement sécurisé
 
 - Toute décision d'autorisation (`isAuthorized`, `whoAuthorized`, `whatAuthorized`) est enregistrée dans le journal d'audit.
 - Le journal est une chaîne HMAC-SHA256 : toute altération d'une entrée est détectable.
-- L'intégrité peut être vérifiée à tout moment via `GET /audit/verify`.
+- L'intégrité peut être vérifiée à tout moment via `GET /admin/audit/verify`.
 
 ### 5.4 Politique de protection des entrées
 
@@ -211,7 +211,7 @@ Ces hypothèses sont des conditions préalables au bon fonctionnement sécurisé
 | Stockage | Base H2 dédiée (`resources/auditdb`) |
 | Chiffrement au repos | AES-128/CIPHER=AES via `H2_AUDIT_CIPHER_KEY` (optionnel, recommandé prod) |
 | Écriture | Asynchrone (agent Clojure) |
-| Vérification | `GET /audit/verify` |
+| Vérification | `GET /admin/audit/verify` |
 | Tests | `test/autho/audit_test.clj` — 14 tests / 30 assertions |
 | Fichier | `src/autho/audit.clj` |
 

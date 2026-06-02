@@ -96,7 +96,7 @@ A rare capability among authorisation servers, made possible by the immutable ev
 ### Audit
 - Every decision is recorded (subject, resource, operation, decision, matched rules)
 - Search by subject, class, decision, date range
-- Cryptographic integrity verification of the audit chain (chained SHA-256 hashes)
+- Cryptographic integrity verification of the audit chain (HMAC-SHA256 chain)
 - CSV export
 
 ### Cache & Performance
@@ -146,7 +146,11 @@ Without `AUTHO_LICENSE_KEY`, the server starts in Free mode — no error, no cra
 ```json
 {
   "status": "success",
-  "data": { "result": true }
+  "data": {
+    "allowed?": true,
+    "decisionType": "allow",
+    "matchedRuleNames": ["R1"]
+  }
 }
 ```
 
@@ -155,10 +159,10 @@ Without `AUTHO_LICENSE_KEY`, the server starts in Free mode — no error, no cra
 {
   "status": "success",
   "data": {
-    "result": true,
-    "rules": [
-      { "name": "R1", "effect": "allow", "priority": 0 }
-    ]
+    "allowed?": true,
+    "decisionType": "allow",
+    "matchedRuleNames": ["R1"],
+    "effectiveSubject": { "id": "alice", "class": "Person" }
   }
 }
 ```

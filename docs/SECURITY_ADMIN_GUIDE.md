@@ -311,7 +311,7 @@ java -cp target/autho-*-standalone.jar org.h2.tools.RunScript \
   -script /tmp/audit_backup.sql
 
 # 5. Vérifier la chaîne d'audit après redémarrage
-curl -H "X-API-Key: $API_KEY" https://autho.example.fr/audit/verify
+curl -H "X-API-Key: $API_KEY" https://autho.example.fr/admin/audit/verify
 ```
 
 #### Migration de la base des politiques
@@ -355,7 +355,7 @@ Ce mécanisme garantit la **détection de toute altération** des entrées d'aud
 ### 9.2 Vérification de l'intégrité
 
 ```bash
-curl -H "X-API-Key: $API_KEY" https://autho.example.fr/audit/verify
+curl -H "X-API-Key: $API_KEY" https://autho.example.fr/admin/audit/verify
 ```
 
 Réponse attendue :
@@ -422,7 +422,7 @@ export AUTHO_LICENSE_KEY=$(vault kv get -field=license_key secret/autho)
 curl -s https://autho.example.fr/health | jq .
 
 # Vérifier la chaîne d'audit
-curl -s -H "X-API-Key: $API_KEY" https://autho.example.fr/audit/verify | jq .
+curl -s -H "X-API-Key: $API_KEY" https://autho.example.fr/admin/audit/verify | jq .
 
 # Métriques Prometheus
 curl -s https://autho.example.fr/metrics | grep autho_

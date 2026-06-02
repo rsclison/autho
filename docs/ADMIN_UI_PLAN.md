@@ -535,25 +535,26 @@ Créer `src/types/status.ts` :
 export type CircuitBreakerState = 'open' | 'closed' | 'half-open'
 
 export interface ServerStatus {
-  status: string
+  service: string
   version: string
-  uptime_seconds: number
-  rules_status: string
-  cache_stats: CacheStats
-  circuit_breakers: Record<string, CircuitBreakerState>
-}
-
-export interface CacheStats {
-  'decision-hits': number
-  'decision-misses': number
-  'decision-ratio': number
-  'decision-size': number
-  'subject-hits': number
-  'subject-misses': number
-  'resource-hits': number
-  'resource-misses': number
-  'policy-hits': number
-  'policy-misses': number
+  status: string
+  uptime: {
+    milliseconds: number
+    seconds: number
+    minutes: number
+    hours: number
+    formatted: string
+  }
+  rulesRepository: string
+  rateLimit: {
+    enabled: boolean
+    requestsPerMinute: number
+  }
+  kafka: {
+    enabled: boolean
+  }
+  circuitBreakers: Record<string, CircuitBreakerState>
+  timestamp: string
 }
 ```
 

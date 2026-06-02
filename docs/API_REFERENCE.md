@@ -146,7 +146,11 @@ curl http://localhost:8080/health
 ```
 
 ```json
-{"status": "ok"}
+{
+  "status": "ok",
+  "service": "autho",
+  "timestamp": "2026-03-18T10:00:00Z"
+}
 ```
 
 ### GET /readiness
@@ -154,27 +158,37 @@ curl http://localhost:8080/health
 Renvoie 503 si le dépôt de règles n'est pas chargé.
 
 ```json
-{"status": "ready", "rules": "loaded"}
+{
+  "status": "ready",
+  "rulesRepository": "loaded",
+  "timestamp": "2026-03-18T10:00:00Z"
+}
 ```
 
 ### GET /status
 
 ```json
 {
-  "status": "ok",
+  "service": "autho",
   "version": "0.1.0-SNAPSHOT",
-  "uptime_seconds": 3612,
-  "rules_status": "loaded",
-  "cache_stats": {
-    "decision-hits": 12450,
-    "decision-misses": 3210,
-    "subject-hits": 8900,
-    "subject-misses": 420
+  "status": "running",
+  "uptime": {
+    "milliseconds": 3612000,
+    "seconds": 3612,
+    "minutes": 60,
+    "hours": 1,
+    "formatted": "1h 0m 12s"
   },
-  "circuit_breakers": {
-    "user-service": "closed",
-    "erp-service": "half-open"
-  }
+  "rulesRepository": "loaded",
+  "rateLimit": {
+    "enabled": true,
+    "requestsPerMinute": 100
+  },
+  "kafka": {
+    "enabled": true
+  },
+  "circuitBreakers": {},
+  "timestamp": "2026-03-18T10:00:00Z"
 }
 ```
 

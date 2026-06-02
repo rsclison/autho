@@ -189,7 +189,7 @@ The **Export CSV** button downloads all entries matching the current filter as a
 
 ### Integrity Verification
 
-The **Verify chain** button runs a cryptographic check of the audit chain (chained SHA-256 hashes). A success or error message indicates whether any entries have been tampered with or deleted.
+The **Verify chain** button runs a cryptographic check of the audit chain (HMAC-SHA256 chain). A success or error message indicates whether any entries have been tampered with or deleted. The endpoint called by the UI is `GET /admin/audit/verify`.
 
 ---
 
