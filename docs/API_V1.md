@@ -727,6 +727,25 @@ Verify a signed policy bundle and activate it on the data plane. The operation c
 }
 ```
 
+#### GET /v1/evidence
+
+Export an evidence package for governance and compliance. The package aggregates audit chain verification, audit replay, audit search, and, when `resourceClass` is provided, the matching policy-change timeline.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": {
+    "kind": "evidence_bundle",
+    "resourceClass": "Document",
+    "auditChain": {"valid": true, "total": 12},
+    "auditReplay": {"returned": 20, "total": 20},
+    "auditSearch": {"total": 20},
+    "policyTimeline": {"count": 5, "events": []}
+  }
+}
+```
+
 The request batch can also come from audit replay:
 
 ```json

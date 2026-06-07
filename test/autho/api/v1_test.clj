@@ -6,6 +6,7 @@
             [autho.api.response :as response]
             [autho.api.pagination :as pagination]
             [autho.api.handlers :as handlers]
+            [autho.audit :as audit]
             [autho.pdp :as pdp]
             [autho.prp :as prp]
             [autho.local-cache :as cache]
@@ -1005,6 +1006,58 @@
         (is (= "/v1/policies/Document/versions/7"
                (get-in response [:headers "Location"])))
         (is (= activation (:data body)))))))
+
+(deftest evidence-package-handler-test
+  (let [timeline-events [{:eventType "policy_version_created"
+                          :resourceClass "Document"
+                          :version 6
+                          :occurredAt "2026-06-07T12:00:00Z"}]]
+    (with-redefs [audit/verify-chain (fn [] {:valid true :total 2})
+                  audit/search (fn [filters]
+                                 {:items [{:id 1}]
+                                  :total 1
+                                  :page 1
+                                  :pageSize 20
+                                  :filters filters})
+                  audit/replay-requests (fn [filters]
+                                          {:requests [{:subject {:id "alice"}}]
+                                           :total 1
+                                           :returned 1
+                                           :filters filters})
+                  handlers/policy-change-events (fn [resource-class request]
+                                                  (is (= "Document" resource-class))
+                                                  (is (= "Document" (get-in request [:params "resourceClass"])))
+                                                  timeline-events)]
+      (let [response (handlers/export-evidence-package
+                      (governance-request
+                       :params {"resourceClass" "Document"
+                                "subject-id" "alice"
+                                "limit" "1"}))
+            body (parse-response-body response)]
+        (is (= 200 (:status response)))
+        (is (= "evidence_bundle" (get-in body [:data :kind])))
+        (is (= {:valid true :total 2} (get-in body [:data :auditChain])))
+        (is (= 1 (get-in body [:data :auditSearch :total])))
+        (is (= 1 (get-in body [:data :auditReplay :returned])))
+        (is (= 1 (get-in body [:data :policyTimeline :count])))
+        (is (= timeline-events (get-in body [:data :policyTimeline :events])))))))
+
+(deftest evidence-package-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/export-evidence-package
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)
+                                                   :method (:request-method request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :get
+                     :uri "/evidence"
+                     :headers {}
+                     :params {"resourceClass" "Document"}}))]
+    (is (= 200 (:status response)))
+    (is (= {:uri "/evidence"
+            :method :get}
+           @captured))))
 
 (deftest policy-bundle-export-route-forwards-request-test
   (let [captured (atom nil)

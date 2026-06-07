@@ -148,6 +148,13 @@
             (handlers/delete-policy resource-class request)))
 
   ;; ===================================================================
+  ;; Evidence Endpoints
+  ;; ===================================================================
+  (context "/evidence" []
+    (GET "/" request
+         (handlers/export-evidence-package request)))
+
+  ;; ===================================================================
   ;; Relationship Management Endpoints
   ;; ===================================================================
   (context "/relations" []

@@ -999,6 +999,15 @@ Réponse de succès:
 }
 ```
 
+### GET /v1/evidence
+
+Exporte un paquet d'évidence pour la gouvernance et la conformité. Le paquet agrège la vérification de chaîne d'audit, un replay d'audit, une recherche d'audit et, si `resourceClass` est fourni, la timeline des changements de politique associée.
+
+```bash
+curl -H "X-API-Key: key" \
+  "http://localhost:8080/v1/evidence?resourceClass=Facture&limit=20"
+```
+
 ### GET /v1/policies/:rc/diff?from=3&to=5
 
 ```bash

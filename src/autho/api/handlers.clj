@@ -5,6 +5,7 @@
             [autho.api.pagination :as pagination]
             [autho.validation :as validation]
             [autho.local-cache :as cache]
+            [autho.audit :as audit]
             [autho.pdp :as pdp]
             [autho.prp :as prp]
             [autho.policy-yaml :as policy-yaml]
@@ -411,6 +412,37 @@
              :deployedVersions (mapv version-record->api
                                      (pv/list-versions-by-analysis resource-class analysis-id)))
       analysis-record)))
+
+(declare timeline-sort-key
+         parse-timeline-event-types
+         event-in-range?
+         filter-timeline-events
+         version->timeline-event
+         analysis->timeline-events
+         risk-profile-revision-visible-for-resource?
+         risk-profile-revision->timeline-event)
+
+(defn- request-resource-class
+  [request]
+  (or (get-in request [:params "resourceClass"])
+      (get-in request [:params :resourceClass])
+      (get-in request [:params "resource-class"])
+      (get-in request [:params :resource-class])))
+
+(defn- policy-change-events
+  [resource-class request]
+  (let [versions (mapv version-record->api (pv/list-versions resource-class))
+        analyses (mapv attach-deployed-versions (impact-history/list-analyses resource-class))
+        risk-profile-events (->> (risk-profiles/list-revisions)
+                                 (filter #(risk-profile-revision-visible-for-resource? resource-class %))
+                                 (map risk-profile-revision->timeline-event))
+        events (->> (concat (mapcat analysis->timeline-events analyses)
+                            (map version->timeline-event versions)
+                            risk-profile-events)
+                    (sort-by timeline-sort-key #(compare %2 %1))
+                    vec)]
+    (filter-timeline-events request events)))
+
 (defn- timeline-sort-key
   [event]
   (str (:occurredAt event)))
@@ -509,17 +541,7 @@
   [resource-class request]
   (log/debug "Building policy change timeline for" resource-class)
   (try
-    (let [versions (mapv version-record->api (pv/list-versions resource-class))
-          analyses (mapv attach-deployed-versions (impact-history/list-analyses resource-class))
-          risk-profile-events (->> (risk-profiles/list-revisions)
-                                   (filter #(risk-profile-revision-visible-for-resource? resource-class %))
-                                   (map risk-profile-revision->timeline-event))
-          events (->> (concat (mapcat analysis->timeline-events analyses)
-                              (map version->timeline-event versions)
-                              risk-profile-events)
-                      (sort-by timeline-sort-key #(compare %2 %1))
-                      vec)
-          filtered-events (filter-timeline-events request events)]
+    (let [filtered-events (policy-change-events resource-class request)]
       (response/success-response {:resourceClass resource-class
                                   :count (count filtered-events)
                                   :events filtered-events}))
@@ -527,6 +549,42 @@
       (log/error e "Error building policy change timeline")
       (response/error-response "POLICY_TIMELINE_ERROR"
                                (str "Failed to build policy change timeline: " (.getMessage e))
+                               500))))
+
+(defn export-evidence-package
+  [request]
+  (log/debug "Exporting evidence package")
+  (try
+    (require-governance-role! request #{"policy-reviewer" "policy-deployer"})
+    (let [params (:params request)
+          resource-class (request-resource-class request)
+          audit-filters {:subject-id (or (get params "subject-id") (get params :subject-id))
+                         :resource-class (or (get params "resource-class")
+                                             (get params :resource-class)
+                                             resource-class)
+                         :decision (or (get params "decision") (get params :decision))
+                         :from (or (get params "from") (get params :from))
+                         :to (or (get params "to") (get params :to))
+                         :limit (or (get params "limit") (get params :limit))}
+          audit-summary (audit/search audit-filters)
+          timeline-events (when resource-class
+                            (policy-change-events resource-class request))
+          evidence (cond-> {:kind "evidence_bundle"
+                            :resourceClass resource-class
+                            :auditChain (audit/verify-chain)
+                            :auditReplay (audit/replay-requests audit-filters)
+                            :auditSearch audit-summary}
+                     timeline-events
+                     (assoc :policyTimeline {:resourceClass resource-class
+                                             :count (count timeline-events)
+                                             :events timeline-events}))]
+      (response/success-response evidence))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "EVIDENCE_EXPORT_ERROR" "Failed to export evidence package: "))
+    (catch Exception e
+      (log/error e "Error exporting evidence package")
+      (response/error-response "EVIDENCE_EXPORT_ERROR"
+                               (str "Failed to export evidence package: " (.getMessage e))
                                500))))
 (def max-batch-size
   (try (Long/parseLong (or (System/getenv "MAX_BATCH_SIZE") "100"))
