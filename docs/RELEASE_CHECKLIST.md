@@ -19,6 +19,15 @@ It executes:
 
 The Leiningen test profile uses an in-memory H2 policy database via `-Dautho.policy.db.path=mem:autho-policy-test;DB_CLOSE_DELAY=-1`, so tests must not modify `resources/h2db.mv.db`.
 
+Before publishing a release, also confirm that the documentation pack is consistent:
+
+- `docs/OPERATIONS_RUNBOOK.md`
+- `docs/DEPLOYMENT_REFERENCE.md`
+- `docs/BACKUP_RESTORE.md`
+- `docs/UPGRADE_ROLLBACK.md`
+- the public docs still prefer `/v1/*` for new integrations
+- legacy routes remain clearly labeled as compatibility routes
+
 ## Demo scenario
 
 Start the server with explicit secrets:

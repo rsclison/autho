@@ -178,6 +178,18 @@
       (is (= "old" (:value merged)))  ; Preserved from cache
       (is (= "new" (:new-field merged))))))
 
+(deftest merge-entity-with-cache-tenant-aware-test
+  (testing "Tenant-aware entity cache entries stay isolated"
+    (cache/init-caches)
+    (cache/mergeEntityWithCache {:id "tenant-1" :name "Acme Subject"} :subject "acme")
+    (cache/mergeEntityWithCache {:id "tenant-1" :name "Globex Subject"} :subject "globex")
+
+    (is (= "Acme Subject"
+           (:name (cache/getCachedSubject "tenant-1" "acme"))))
+    (is (= "Globex Subject"
+           (:name (cache/getCachedSubject "tenant-1" "globex"))))
+    (is (nil? (cache/getCachedSubject "tenant-1")))))
+
 (deftest decision-cache-is-tenant-scoped-test
   (testing "Decision cache separates identical requests by tenant"
     (cache/init-caches)

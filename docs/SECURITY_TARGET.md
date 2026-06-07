@@ -68,6 +68,8 @@ Autho est un serveur d'autorisation implémentant le modèle **ABAC (Attribute-B
 | Système d'exploitation hôte | Hors périmètre produit |
 | Reverse proxy | Hors périmètre produit |
 
+Les procédures d'exploitation associées à ces composants sont documentées dans `docs/OPERATIONS_RUNBOOK.md`, `docs/BACKUP_RESTORE.md` et `docs/UPGRADE_ROLLBACK.md`.
+
 ### 2.3 Interfaces de la TOE
 
 ```

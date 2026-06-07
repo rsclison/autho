@@ -4,6 +4,8 @@
 **Base URL :** `http://localhost:8080`
 **OpenAPI :** `GET /openapi.yaml` | `GET /openapi.json`
 
+Ce document couvre la référence complète de l'API, mais la voie recommandée pour les nouvelles intégrations reste `/v1/*`. Les routes historiques sont maintenues pour compatibilité et doivent être considérées comme legacy.
+
 ---
 
 ## Authentification

@@ -6,6 +6,8 @@ Autho est positionnable comme serveur d'autorisation ABAC/XACML open-core avec P
 
 Le point le plus important avant commercialisation est de clarifier le packaging produit : le depot expose a la fois des endpoints historiques (`/isAuthorized`, `/policy/:class`) et une API v1 standardisee (`/v1/authz/decisions`, `/v1/policies/...`). Cette compatibilite est utile, mais la documentation doit distinguer clairement "legacy" et "v1 recommandee" pour eviter une integration client confuse.
 
+Depuis cet audit, la documentation commerciale doit aussi pointer vers un pack operateur explicite: runbook, backup/restore, upgrade/rollback et reference de deploiement. L'objectif est d'eviter que la promesse produit repose uniquement sur des captures d'ecran ou une demo, sans chemin d'exploitation durable.
+
 ## Fonctionnalites verifiees
 
 - Evaluation d'autorisation : `isAuthorized`, `whoAuthorized`, `whatAuthorized`, `explain`, `simulate`, batch v1.
@@ -55,6 +57,7 @@ npm test
 ## Ecarts restants
 
 - L'OpenAPI expose maintenant les chemins reels `/v1/*` et documente les principaux endpoints admin, audit et time-travel. Les guides doivent continuer a privilegier `/v1`.
+- Le pack operateur doit etre utilise comme source de verite pour l'exploitation quotidienne: `docs/OPERATIONS_RUNBOOK.md`, `docs/BACKUP_RESTORE.md`, `docs/UPGRADE_ROLLBACK.md` et `docs/DEPLOYMENT_REFERENCE.md`.
 - Les tests automatises ne valident pas encore une stack complete Kafka/LDAP via Docker Compose ; les tests locaux couvrent les modules, pas une installation client de bout en bout.
 - Le lint UI conserve un avertissement React Compiler sur `useReactTable`. Il n'est pas bloquant, mais il doit etre decide : accepter l'avertissement, desactiver la regle localement, ou isoler le composant.
 - Le build UI produit des assets hashes dans `resources/public/admin`; le processus de release doit definir si ces assets sont versionnes ou generes en CI.

@@ -16,6 +16,18 @@
   [env-key default-value]
   (or (System/getenv env-key) default-value))
 
+(defn- normalize-tenant-id
+  [tenant-id]
+  (let [value (some-> tenant-id str clojure.string/trim)]
+    (when-not (clojure.string/blank? value)
+      value)))
+
+(defn- cache-key
+  [tenant-id cache-key]
+  (if-let [tenant-id (normalize-tenant-id tenant-id)]
+    [tenant-id cache-key]
+    cache-key))
+
 ;; Forward declaration for handle-invalidation (defined later, used in init-caches)
 (declare handle-invalidation)
 
@@ -334,35 +346,53 @@
 
 (defn getCachedSubject
   "Get subject from cache. Backward compatible function."
-  [id]
-  (get (:subject-cache @cache-state) id))
+  ([id]
+   (getCachedSubject id nil))
+  ([id tenant-id]
+   (let [cache (:subject-cache @cache-state)
+         tenant-key (cache-key tenant-id id)]
+     (or (get cache tenant-key)
+         (get cache id)))))
 
 (defn getCachedResource
   "Get resource from cache. Backward compatible function."
-  [id]
-  (get (:resource-cache @cache-state) id))
+  ([id]
+   (getCachedResource id nil))
+  ([id tenant-id]
+   (let [cache (:resource-cache @cache-state)
+         tenant-key (cache-key tenant-id id)]
+     (or (get cache tenant-key)
+         (get cache id)))))
 
 (defn getCachedPolicy
   "Get policy from cache."
-  [id]
-  (get (:policy-cache @cache-state) id))
+  ([id]
+   (getCachedPolicy id nil))
+  ([id tenant-id]
+   (let [cache (:policy-cache @cache-state)
+         tenant-key (cache-key tenant-id id)]
+     (or (get cache tenant-key)
+         (get cache id)))))
 
 (defn mergeEntityWithCache
   "Merge entity with cached version and update cache.
    Backward compatible function from cache.clj"
-  [ent cache-type]
+  ([ent cache-type]
+   (mergeEntityWithCache ent cache-type nil))
+  ([ent cache-type tenant-id]
   (if-let [ent-id (:id ent)]
     (let [cache-kw (case cache-type
                      :subject :subject-cache
                      :resource :resource-cache
                      nil)
           cache (when cache-kw (cache-kw @cache-state))
-          cached-entity (get cache ent-id)
+          ent-cache-key (cache-key tenant-id ent-id)
+          cached-entity (get cache ent-cache-key)
           merged (merge cached-entity ent)]
       ;; Update cache with merged entity
       (when (and cache-kw cache)
-        (swap! cache-state update cache-kw assoc ent-id merged))
+        (swap! cache-state update cache-kw assoc ent-cache-key merged))
       merged)
     (do
       (log/warn "Entity without ID cannot be cached:" ent)
-      ent)))
+      ent))))

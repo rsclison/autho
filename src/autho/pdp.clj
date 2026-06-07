@@ -100,39 +100,41 @@
 (defn- apply-filler
   "Applies a filler to the entity and merges with cache.
   Returns the enriched+merged entity, or the original entity on error."
-  [filler entity cache-type]
+  [filler entity cache-type tenant-id]
   (if-not filler
-    (local-cache/mergeEntityWithCache entity cache-type)
+    (local-cache/mergeEntityWithCache entity cache-type tenant-id)
     (try
       (let [filler-fn (resolve-filler-fn (:type filler))
             enriched  (when filler-fn (filler-fn filler entity))]
-        (local-cache/mergeEntityWithCache (or enriched entity) cache-type))
+        (local-cache/mergeEntityWithCache (or enriched entity) cache-type tenant-id))
       (catch Exception e
         (.warn (org.slf4j.LoggerFactory/getLogger "autho.pdp")
                "Filler call failed, falling back to cache-only: {}" (.getMessage e))
-        (local-cache/mergeEntityWithCache entity cache-type)))))
+        (local-cache/mergeEntityWithCache entity cache-type tenant-id)))))
 
 (defn- callFillers
   "Enriches subject and resource using configured fillers, in parallel.
   Both enrichments are launched as futures and joined with a 5s timeout.
   Falls back to cache-only merge on timeout or error."
   [request]
-  (let [subfill  (prp/getSubjectFiller  (:class (:subject request)))
+  (let [tenant-id (:tenantId request)
+        subfill  (prp/getSubjectFiller  (:class (:subject request)))
         ressfill (prp/getResourceFiller (:class (:resource request)))
         ;; Launch both enrichments in parallel
-        subj-f   (future (apply-filler subfill  (:subject  request) :subject))
-        res-f    (future (apply-filler ressfill (:resource request) :resource))
+        subj-f   (future (apply-filler subfill  (:subject  request) :subject tenant-id))
+        res-f    (future (apply-filler ressfill (:resource request) :resource tenant-id))
         ;; Join with 5s timeout; fall back to cache-only on timeout
-        cs       (deref subj-f 5000 (local-cache/mergeEntityWithCache (:subject  request) :subject))
-        cr       (deref res-f  5000 (local-cache/mergeEntityWithCache (:resource request) :resource))]
+        cs       (deref subj-f 5000 (local-cache/mergeEntityWithCache (:subject  request) :subject tenant-id))
+        cr       (deref res-f  5000 (local-cache/mergeEntityWithCache (:resource request) :resource tenant-id))]
     (assoc request :subject cs :resource cr)))
 
 (defn passThroughCache
   "Merges subject and resource with their cache entries (no external PIP calls).
   Used when no fillers are configured for the request's classes."
   [request]
-  (let [cs (local-cache/mergeEntityWithCache (:subject request) :subject)
-        cr (local-cache/mergeEntityWithCache (:resource request) :resource)]
+  (let [tenant-id (:tenantId request)
+        cs (local-cache/mergeEntityWithCache (:subject request) :subject tenant-id)
+        cr (local-cache/mergeEntityWithCache (:resource request) :resource tenant-id)]
     (assoc request :subject cs :resource cr)))
 
 (defn- enrich-request

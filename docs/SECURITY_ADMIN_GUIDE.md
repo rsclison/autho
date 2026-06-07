@@ -428,6 +428,17 @@ curl -s -H "X-API-Key: $API_KEY" https://autho.example.fr/admin/audit/verify | j
 curl -s https://autho.example.fr/metrics | grep autho_
 ```
 
+### 11.3 Références opérationnelles
+
+Les procédures opérateurs complètes sont séparées pour rester lisibles et maintenables:
+
+- `docs/OPERATIONS_RUNBOOK.md` : point d'entrée opérateur unique;
+- `docs/DEPLOYMENT_REFERENCE.md` : topologies et variables d'environnement;
+- `docs/BACKUP_RESTORE.md` : sauvegarde et restauration;
+- `docs/UPGRADE_ROLLBACK.md` : montée de version et retour arrière.
+
+En cas de divergence entre ce guide et les runbooks dédiés, les runbooks dédiés priment pour l'exploitation quotidienne.
+
 ### 11.3 Réponse à un incident de sécurité
 
 En cas de suspicion de compromission d'un secret :

@@ -8,6 +8,16 @@ The current product direction is **Authorization Operations**: Autho should not 
 
 The core idea: business applications **fully delegate the authorisation decision** to Autho. They embed no access logic of their own — they ask a question (`Can Alice read invoice FAC-123?`) and receive an answer (`allow` or `deny`) together with the list of rules that drove the decision.
 
+## Product Packaging
+
+Autho is documented as an open-core product with three practical tiers:
+
+- **Free** for basic decisions and evaluation;
+- **Pro** for audit, explain, simulate, shadow and policy lifecycle;
+- **Enterprise** for Kafka-backed PIP, cache synchronisation and multi-instance operation.
+
+For new integrations, use the `/v1/*` API. Historical routes are kept for compatibility and should be treated as legacy entry points.
+
 ---
 
 ## Core Concepts

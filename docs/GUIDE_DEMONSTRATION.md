@@ -12,6 +12,8 @@ La demonstration lance tous les composants utiles :
 - politiques et decisions initiales pour remplir l'IHM ;
 - script separe d'injection Kafka pour montrer progressivement l'arrivee des donnees metier.
 
+La demonstration suit la voie API `v1` et sert aussi a illustrer le packaging commercial: le mode de licence `enterprise` active les fonctions avancees pendant le parcours, tandis que les endpoints historiques restent visibles seulement pour compatibilite.
+
 ## 1. Prerequis
 
 - Docker avec le plugin `docker compose`.
@@ -63,6 +65,7 @@ Identifiants :
 | LDAP password | `admin` |
 
 Point a commenter : l'API key de demonstration est liee cote serveur au sujet LDAP `Person` `001`. Les champs `subject` envoyes dans les requetes de test sont volontairement ignores pour les appels API key. L'identite effective vient du serveur.
+Point a commenter supplementaire : toute nouvelle integration doit preferer les exemples `v1` de ce guide plutot que les endpoints historiques.
 
 ## 4. Parcours IHM
 

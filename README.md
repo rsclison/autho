@@ -1,6 +1,12 @@
-# Autho — Serveur d'Autorisation XACML/ABAC
+# Autho — Serveur d'Authorization Operations XACML/ABAC
 
-**Autho** est un serveur d'autorisation haute performance basé sur les modèles XACML et ABAC (Attribute-Based Access Control). Il fournit une décision d'autorisation centralisée, indépendante des applications métier, avec une capacité d'audit, de versionnage et d'observabilité complète.
+**Autho** est une plateforme d'Authorization Operations basee sur les modèles XACML et ABAC (Attribute-Based Access Control). Elle fournit une décision d'autorisation centralisée, indépendante des applications métier, avec audit, versionnage, simulation, replay, ReBAC et observabilité.
+
+Le positionnement produit est open-core :
+
+- la voie recommandée pour les nouvelles intégrations est l'API `v1` ;
+- les endpoints historiques restent présents pour compatibilité ;
+- les offres Free, Pro et Enterprise sont distinguées dans la documentation de licensing.
 
 ---
 
@@ -170,7 +176,7 @@ curl -X POST http://localhost:8080/isAuthorized \
 
 ### Décisions d'autorisation
 
-Les endpoints `/v1/*` sont l'API stable recommandée pour les nouvelles intégrations. Les endpoints historiques restent disponibles pour compatibilité.
+Les endpoints `/v1/*` sont l'API stable et recommandée pour les nouvelles intégrations. Les endpoints historiques restent disponibles pour compatibilité seulement et ne doivent pas servir de point d'entrée principal pour une nouvelle intégration.
 
 | Endpoint | Description |
 |----------|-------------|
@@ -223,6 +229,14 @@ La relation `member` permet les groupes imbriqués ; la relation `parent` permet
 Les rewrites de relations sont persistés dans `REBAC_RELATION_REWRITES` et administrables via `/v1/relations/rewrites`.
 Les endpoints `list-objects` et `list-subjects` appliquent les tuples directs, rewrites, groupes imbriqués et héritage parent.
 Le endpoint `traverse` suit des chemins relationnels explicites en sens sortant ou inverse.
+
+### Packaging produit
+
+| Edition | Usage cible | Capacites principales |
+|---|---|---|
+| Free | Evaluation et usage de base | Décisions de base |
+| Pro | Déploiements avancés mono-instance | Audit, versioning, explain, simulate, shadow, impact analysis |
+| Enterprise | Déploiements critiques et multi-instance | Kafka PIP, synchronisation de cache, fonctions enterprise détaillées dans la doc de licensing |
 
 ### Time-Travel (Kafka activé)
 

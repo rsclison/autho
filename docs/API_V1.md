@@ -2,6 +2,8 @@
 
 RESTful API v1 for the autho authorization server.
 
+This is the canonical API surface for new integrations. Historical endpoints remain available for compatibility only and are treated as legacy in the wider documentation set.
+
 ## Base URL
 
 ```
