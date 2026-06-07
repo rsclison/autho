@@ -10,6 +10,7 @@
             [autho.circuit-breaker :as cb]
             [autho.person :as person]
             [autho.time-travel :as time-travel]
+            [autho.topology :as topology]
             [autho.validation :as validation]
             [autho.api.v1 :as api-v1]
             [clojure.java.io :as io]
@@ -368,6 +369,7 @@
                                   :rateLimit {:enabled rate-limit-enabled
                                               :requestsPerMinute rate-limit-requests-per-minute}
                                   :kafka {:enabled kafka-enabled}
+                                  :topology (topology/current-config)
                                   :circuitBreakers (cb/get-all-status)
                                   :timestamp (str (java.time.Instant/now))})))
 
@@ -711,6 +713,7 @@
 
 (defn init []
   (.info logger "autho is starting")
+  (topology/init!)
   (reset! server-start-time (System/currentTimeMillis))
   (.info logger "Rate limiting: {} (max {} requests/minute per IP)"
          (if rate-limit-enabled "enabled" "disabled")

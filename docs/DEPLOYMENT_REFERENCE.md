@@ -33,6 +33,18 @@ Recommended for production-like use:
 - `API_CLIENT_ROLES`
 - `API_CLIENT_TENANTS` or `API_CLIENT_TENANT_ID`
 - `AUTHO_DEFAULT_TENANT_ID`
+- `AUTHO_ENABLED_PLANES`
+
+`AUTHO_ENABLED_PLANES` controls which deployment planes are exposed by the
+instance. Accepted values are `data`, `control`, and `evidence`, separated by
+commas or spaces. When unset, Autho enables all three planes. For example:
+
+```bash
+AUTHO_ENABLED_PLANES=data,control
+```
+
+In this mode, evidence export endpoints return `503 PLANE_DISABLED` until the
+evidence plane is re-enabled.
 
 Advanced features:
 
@@ -91,6 +103,10 @@ The enterprise target is a roadmap direction, not a claim that every element is 
 - `/metrics`
 - audit integrity verification
 - one representative `v1` decision request
+
+The `/status` endpoint now includes a `topology` section that reports the
+supported planes, the active planes, the disabled planes, and the canonical
+route grouping used by the server.
 
 ## 6. Notes for operators
 

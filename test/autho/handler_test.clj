@@ -1,6 +1,7 @@
 (ns autho.handler-test
   (:require [clojure.test :refer :all]
             [autho.handler :refer :all]
+            [autho.topology :as topology]
             [autho.pdp :as pdp]
             [autho.prp :as prp]
             [jsonista.core :as json]
@@ -77,3 +78,18 @@
           (is (= 503 (:status response)))
           (is (= "Rule repository is not loaded. Please check server logs."
                  (get-in response-body [:error :message]))))))))
+
+(deftest status-includes-topology-summary-test
+  (let [app (auth/wrap-authentication app-routes)]
+    (with-redefs [topology/current-config (fn []
+                                           {:supportedPlanes [:control :data :evidence]
+                                            :enabledPlanes #{:control :evidence}})]
+      (let [response (app {:request-method :get
+                           :uri "/status"
+                           :headers {}})
+            body (json/read-value (:body response) json/keyword-keys-object-mapper)]
+        (is (= 200 (:status response)))
+        (is (= ["control" "data" "evidence"]
+               (get-in body [:topology :supportedPlanes])))
+        (is (= ["control" "evidence"]
+               (sort (get-in body [:topology :enabledPlanes]))))))))

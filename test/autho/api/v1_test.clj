@@ -17,6 +17,7 @@
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.rebac :as rebac]
             [autho.features :as features]
+            [autho.topology :as topology]
             [jsonista.core :as json]
             [clojure.string :as str])
   (:import (java.io ByteArrayInputStream)))
@@ -1058,6 +1059,28 @@
     (is (= {:uri "/evidence"
             :method :get}
            @captured))))
+
+(deftest evidence-route-is-disabled-when-evidence-plane-is-off-test
+  (let [enabled-var #'autho.topology/active-planes
+        original @(var-get enabled-var)]
+    (try
+      (topology/set-enabled-planes! #{:data :control})
+      (let [called? (atom false)
+            response (with-redefs [handlers/export-evidence-package
+                                   (fn [_]
+                                     (reset! called? true)
+                                     (response/success-response {:ok true}))]
+                       (api-v1/v1-routes
+                        {:request-method :get
+                         :uri "/evidence"
+                         :headers {}
+                         :params {"resourceClass" "Document"}}))
+            body (parse-response-body response)]
+        (is (= 503 (:status response)))
+        (is (false? @called?))
+        (is (= "PLANE_DISABLED" (get-in body [:error :code]))))
+      (finally
+        (reset! (var-get enabled-var) original)))))
 
 (deftest policy-bundle-export-route-forwards-request-test
   (let [captured (atom nil)

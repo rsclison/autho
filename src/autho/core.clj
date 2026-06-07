@@ -1,7 +1,8 @@
 (ns autho.core
   (:require [autho.handler :as handler]
             [autho.pdp :as pdp]
-            [autho.features :as features])
+            [autho.features :as features]
+            [autho.topology :as topology])
   (:import (org.slf4j LoggerFactory))
   (:gen-class))
 
@@ -9,6 +10,7 @@
 
 (defn -main [& args]
   (features/init!)
+  (topology/init!)
   (pdp/init)
   (let [mode (or (pdp/getProperty :autho.mode) "rest")]
     (if (= mode "rest")

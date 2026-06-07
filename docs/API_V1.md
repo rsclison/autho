@@ -76,6 +76,19 @@ For API-key clients, bind allowed tenants server-side with `API_CLIENT_TENANTS` 
 
 The PDP injects `tenantId` into `context.tenantId` and scopes the decision cache by tenant. This is the enterprise isolation baseline; policies can also assert tenant equality explicitly through subject/resource attributes.
 
+### Deployment Planes
+
+Autho now makes the deployment plane split explicit:
+
+- `data` covers authorization decisions and subject/resource lookup endpoints;
+- `control` covers policy, relation, and cache administration endpoints;
+- `evidence` covers compliance export endpoints.
+
+The active plane set is controlled by `AUTHO_ENABLED_PLANES`. When a plane is
+disabled, its routes return `503 PLANE_DISABLED` instead of silently falling
+through. This lets operators run a reduced-footprint instance while keeping the
+API surface explicit.
+
 ## Response Format
 
 All responses follow a standard format:

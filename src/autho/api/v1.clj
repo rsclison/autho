@@ -3,6 +3,7 @@
    Provides standardized endpoints with proper HTTP semantics."
   (:require [compojure.core :refer [defroutes context GET POST PUT DELETE]]
             [clojure.string :as str]
+            [autho.topology :as topology]
             [autho.api.handlers :as handlers]
             [autho.api.subject-handlers :as subject-handlers]
             [autho.api.resource-handlers :as resource-handlers]))
@@ -26,6 +27,10 @@
         (get decoded-query k)
         (get decoded-query (keyword k)))))
 
+(defn- plane-call
+  [plane thunk]
+  (topology/call-with-plane plane thunk))
+
 ;; =============================================================================
 ;; v1 API Routes
 ;; =============================================================================
@@ -36,205 +41,207 @@
   ;; ===================================================================
   (context "/authz" []
     (POST "/decisions" request
-          (handlers/is-authorized request))
+          (plane-call :data #(handlers/is-authorized request)))
 
     (POST "/subjects" request
-          (handlers/who-authorized request))
+          (plane-call :data #(handlers/who-authorized request)))
 
     (POST "/permissions" request
-          (handlers/what-authorized request))
+          (plane-call :data #(handlers/what-authorized request)))
 
     (POST "/explain" request
-          (handlers/explain-decision request))
+          (plane-call :data #(handlers/explain-decision request)))
 
     (POST "/simulate" request
-          (handlers/simulate-decision request))
+          (plane-call :data #(handlers/simulate-decision request)))
 
     (POST "/shadow" request
-          (handlers/shadow-decision request))
+          (plane-call :data #(handlers/shadow-decision request)))
 
     (POST "/batch" request
-          (handlers/batch-decisions)))
+          (plane-call :data #(handlers/batch-decisions request))))
 
   ;; ===================================================================
   ;; Policy Management Endpoints
   ;; ===================================================================
   (context "/policies" []
     (GET "/" request
-         (handlers/list-policies request))
+         (plane-call :control #(handlers/list-policies request)))
 
     (POST "/" request
-          (handlers/create-policy request))
+          (plane-call :control #(handlers/create-policy request)))
 
     (POST "/import" request
-          (handlers/import-yaml-policies request))
+          (plane-call :control #(handlers/import-yaml-policies request)))
 
     (POST "/bundles/verify" request
-          (handlers/verify-policy-bundle request))
+          (plane-call :control #(handlers/verify-policy-bundle request)))
 
     (POST "/bundles/apply" request
-          (handlers/apply-policy-bundle request))
+          (plane-call :control #(handlers/apply-policy-bundle request)))
 
     (GET "/:resource-class/versions" [resource-class]
-         (handlers/list-policy-versions resource-class))
+         (plane-call :control #(handlers/list-policy-versions resource-class)))
 
     (GET "/:resource-class/versions/:version/bundle" [resource-class version :as request]
-         (handlers/export-policy-version-bundle resource-class version request))
+         (plane-call :control #(handlers/export-policy-version-bundle resource-class version request)))
 
     (GET "/:resource-class/versions/:version" [resource-class version]
-         (handlers/get-policy-version resource-class version))
+         (plane-call :control #(handlers/get-policy-version resource-class version)))
 
     (GET "/:resource-class/diff" [resource-class :as request]
-         (handlers/diff-policy-versions resource-class
-                                         (request-param request :from)
-                                         (request-param request :to)))
+         (plane-call :control #(handlers/diff-policy-versions resource-class
+                                                              (request-param request :from)
+                                                              (request-param request :to))))
 
     (GET "/:resource-class/timeline" [resource-class :as request]
-         (handlers/get-policy-change-timeline resource-class request))
+         (plane-call :control #(handlers/get-policy-change-timeline resource-class request)))
 
     (POST "/:resource-class/impact" [resource-class :as request]
-          (handlers/analyze-policy-impact resource-class request))
+          (plane-call :control #(handlers/analyze-policy-impact resource-class request)))
 
     (GET "/risk-profiles" []
-         (handlers/list-policy-risk-profiles))
+         (plane-call :control handlers/list-policy-risk-profiles))
 
     (GET "/risk-profiles/revisions" []
-         (handlers/list-policy-risk-profile-revisions))
+         (plane-call :control handlers/list-policy-risk-profile-revisions))
 
     (PUT "/risk-profiles/default" request
-         (handlers/upsert-policy-risk-profile "default" "*" request))
+         (plane-call :control #(handlers/upsert-policy-risk-profile "default" "*" request)))
 
     (DELETE "/risk-profiles/default" request
-            (handlers/delete-policy-risk-profile "default" "*" request))
+            (plane-call :control #(handlers/delete-policy-risk-profile "default" "*" request)))
 
     (PUT "/risk-profiles/environments/:environment" [environment :as request]
-         (handlers/upsert-policy-risk-profile "environment" environment request))
+         (plane-call :control #(handlers/upsert-policy-risk-profile "environment" environment request)))
 
     (DELETE "/risk-profiles/environments/:environment" [environment :as request]
-            (handlers/delete-policy-risk-profile "environment" environment request))
+            (plane-call :control #(handlers/delete-policy-risk-profile "environment" environment request)))
 
     (PUT "/risk-profiles/resource-classes/:resource-class" [resource-class :as request]
-         (handlers/upsert-policy-risk-profile "resource_class" resource-class request))
+         (plane-call :control #(handlers/upsert-policy-risk-profile "resource_class" resource-class request)))
 
     (DELETE "/risk-profiles/resource-classes/:resource-class" [resource-class :as request]
-            (handlers/delete-policy-risk-profile "resource_class" resource-class request))
+            (plane-call :control #(handlers/delete-policy-risk-profile "resource_class" resource-class request)))
 
     (GET "/:resource-class/impact/history" [resource-class]
-         (handlers/list-policy-impact-history resource-class))
+         (plane-call :control #(handlers/list-policy-impact-history resource-class)))
 
     (GET "/:resource-class/impact/history/:analysis-id" [resource-class analysis-id]
-         (handlers/get-policy-impact-history-entry resource-class analysis-id))
+         (plane-call :control #(handlers/get-policy-impact-history-entry resource-class analysis-id)))
 
 
     (POST "/:resource-class/impact/history/:analysis-id/review" [resource-class analysis-id :as request]
-          (handlers/update-policy-impact-review resource-class analysis-id request))
+          (plane-call :control #(handlers/update-policy-impact-review resource-class analysis-id request)))
 
     (POST "/:resource-class/impact/history/:analysis-id/rollout" [resource-class analysis-id :as request]
-          (handlers/rollout-policy-impact-preview resource-class analysis-id request))
+          (plane-call :control #(handlers/rollout-policy-impact-preview resource-class analysis-id request)))
 
     (POST "/:resource-class/rollback/:version" [resource-class version :as request]
-          (handlers/rollback-policy resource-class version request))
+          (plane-call :control #(handlers/rollback-policy resource-class version request)))
 
     (POST "/:resource-class/validate" [resource-class :as request]
-          (handlers/validate-policy resource-class request))
+          (plane-call :control #(handlers/validate-policy resource-class request)))
 
     (GET "/:resource-class" [resource-class :as request]
-         (handlers/get-policy resource-class request))
+         (plane-call :control #(handlers/get-policy resource-class request)))
 
     (PUT "/:resource-class" [resource-class :as request]
-          (handlers/update-policy resource-class request))
+          (plane-call :control #(handlers/update-policy resource-class request)))
 
     (DELETE "/:resource-class" [resource-class :as request]
-            (handlers/delete-policy resource-class request)))
+            (plane-call :control #(handlers/delete-policy resource-class request))))
 
   ;; ===================================================================
   ;; Evidence Endpoints
   ;; ===================================================================
   (context "/evidence" []
     (GET "/" request
-         (handlers/export-evidence-package request)))
+         (plane-call :evidence #(handlers/export-evidence-package request))))
 
   ;; ===================================================================
   ;; Relationship Management Endpoints
   ;; ===================================================================
   (context "/relations" []
     (GET "/" []
-         (handlers/list-relations))
+         (plane-call :control handlers/list-relations))
 
     (GET "/rewrites" []
-         (handlers/list-relation-rewrites))
+         (plane-call :control handlers/list-relation-rewrites))
 
     (PUT "/rewrites/:relation" [relation :as request]
-         (handlers/upsert-relation-rewrite relation request))
+         (plane-call :control #(handlers/upsert-relation-rewrite relation request)))
 
     (DELETE "/rewrites/:relation" [relation :as request]
-            (handlers/delete-relation-rewrite relation request))
+            (plane-call :control #(handlers/delete-relation-rewrite relation request)))
 
     (POST "/" request
-          (handlers/create-relation request))
+          (plane-call :control #(handlers/create-relation request)))
 
     (POST "/check" request
-          (handlers/check-relation request))
+          (plane-call :control #(handlers/check-relation request)))
 
     (POST "/list-objects" request
-          (handlers/list-relation-objects request))
+          (plane-call :control #(handlers/list-relation-objects request)))
 
     (POST "/list-subjects" request
-          (handlers/list-relation-subjects request))
+          (plane-call :control #(handlers/list-relation-subjects request)))
 
     (POST "/traverse" request
-          (handlers/traverse-relations request))
+          (plane-call :control #(handlers/traverse-relations request)))
 
     (DELETE "/" request
-            (handlers/delete-relation request)))
+            (plane-call :control #(handlers/delete-relation request))))
 
   ;; ===================================================================
   ;; Cache Management Endpoints
   ;; ===================================================================
   (context "/cache" []
     (GET "/stats" []
-         (handlers/get-cache-stats))
+         (plane-call :control handlers/get-cache-stats))
 
     (DELETE "/" []
-            (handlers/clear-cache))
+            (plane-call :control handlers/clear-cache))
 
     (DELETE "/:type/:key" [type key]
-            (handlers/invalidate-cache-entry type key)))
+            (plane-call :control #(handlers/invalidate-cache-entry type key))))
 
   ;; ===================================================================
   ;; Subject Management Endpoints
   ;; ===================================================================
   (context "/subjects" []
     (GET "/" request
-         (subject-handlers/list-subjects request))
+         (plane-call :data #(subject-handlers/list-subjects request)))
 
     (GET "/:id" [id]
-         (subject-handlers/get-subject id))
+         (plane-call :data #(subject-handlers/get-subject id)))
 
     (GET "/search" request
-         (subject-handlers/search-subjects-handler request))
+         (plane-call :data #(subject-handlers/search-subjects-handler request)))
 
     (POST "/batch-get" request
-          (subject-handlers/batch-get-subjects request)))
+          (plane-call :data #(subject-handlers/batch-get-subjects request))))
 
   ;; ===================================================================
   ;; Resource Management Endpoints
   ;; ===================================================================
   (context "/resources" []
     (GET "/" []
-         (resource-handlers/list-resource-classes))
+         (plane-call :data resource-handlers/list-resource-classes))
 
     (GET "/search" request
-         (resource-handlers/search-resources-handler request))
+         (plane-call :data #(resource-handlers/search-resources-handler request)))
 
     (GET "/:class" [class :as request]
-         (resource-handlers/list-resources-by-class class request))
+         (plane-call :data #(resource-handlers/list-resources-by-class class request)))
 
     (GET "/:class/:id" [class id]
-         (resource-handlers/get-resource class id))
+         (plane-call :data #(resource-handlers/get-resource class id)))
 
     (POST "/batch-get" request
-          (resource-handlers/batch-get-resources request))))
+          (plane-call :data #(resource-handlers/batch-get-resources request))))
+
+  )
 
 
 
