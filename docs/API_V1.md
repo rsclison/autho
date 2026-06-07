@@ -710,6 +710,23 @@ Verify a signed policy bundle before accepting it on a PDP or in CI.
 }
 ```
 
+#### POST /v1/policies/bundles/apply
+
+Verify a signed policy bundle and activate it on the data plane. The operation creates a new policy version, preserves history, and annotates the deployed version with bundle provenance.
+
+**Response:** `201 Created`
+```json
+{
+  "status": "success",
+  "data": {
+    "status": "activated",
+    "resourceClass": "Document",
+    "bundleVersion": 6,
+    "activatedVersion": 7
+  }
+}
+```
+
 The request batch can also come from audit replay:
 
 ```json

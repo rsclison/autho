@@ -201,6 +201,7 @@ Les endpoints `/v1/*` sont l'API stable et recommandée pour les nouvelles inté
 | `GET  /v1/policies/:rc/versions/:v` | Récupérer la version v |
 | `GET  /v1/policies/:rc/versions/:v/bundle` | Exporter une version signée |
 | `POST /v1/policies/bundles/verify` | Vérifier un bundle signé |
+| `POST /v1/policies/bundles/apply` | Vérifier puis appliquer un bundle signé sur le data plane |
 | `GET  /v1/policies/:rc/diff?from=1&to=3` | Diff entre deux versions |
 | `POST /v1/policies/:rc/rollback/:v` | Rollback à la version v |
 | `POST /v1/policies/:rc/validate` | Validation pré-déploiement sans persistence |

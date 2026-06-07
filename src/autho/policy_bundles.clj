@@ -2,6 +2,7 @@
   "Signed policy bundle export and verification.
    Bundles are intended for control-plane to data-plane distribution."
   (:require [clojure.data.json :as json]
+            [autho.prp :as prp]
             [autho.policy-versions :as pv])
   (:import (java.security MessageDigest)
            (javax.crypto Mac)
@@ -130,3 +131,33 @@
                (not valid-format?) (conj "INVALID_BUNDLE_FORMAT")
                (not valid-digest?) (conj "PAYLOAD_DIGEST_MISMATCH")
                (not valid-signature?) (conj "SIGNATURE_MISMATCH"))}))
+
+(defn activate-bundle!
+  [bundle author comment]
+  (let [verification (verify-bundle bundle)]
+    (when-not (:valid verification)
+      (throw (ex-info "Invalid policy bundle"
+                      {:status 400
+                       :error-code "POLICY_BUNDLE_INVALID"
+                       :verification verification})))
+    (let [{:keys [resourceClass policy metadata version]} (:payload bundle)
+          policy-json (json/write-str policy)
+          bundle-author (or author (:author metadata) "bundle-import")
+          bundle-comment (or comment (:comment metadata) "Activated from signed bundle")
+          before-version (pv/latest-version-number resourceClass)]
+      (prp/submit-policy resourceClass policy-json bundle-author bundle-comment)
+      (let [activated-version (pv/latest-version-number resourceClass)
+            deployed-version (or (and (pos? activated-version) activated-version)
+                                 (inc before-version))
+            _ (pv/annotate-version! resourceClass
+                                    deployed-version
+                                    {:deploymentKind "bundle_activation"
+                                     :sourceCandidateVersion version
+                                     :lifecycleStatus "deployed"
+                                     :workflowAction "bundle_activate"})]
+        {:status "activated"
+         :resourceClass resourceClass
+         :bundleVersion version
+         :activatedVersion deployed-version
+         :verification verification
+         :policyVersion (pv/get-version-details resourceClass deployed-version)}))))

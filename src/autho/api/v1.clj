@@ -2,9 +2,29 @@
   "RESTful API v1 routes for autho authorization server.
    Provides standardized endpoints with proper HTTP semantics."
   (:require [compojure.core :refer [defroutes context GET POST PUT DELETE]]
+            [clojure.string :as str]
             [autho.api.handlers :as handlers]
             [autho.api.subject-handlers :as subject-handlers]
             [autho.api.resource-handlers :as resource-handlers]))
+
+(defn- decode-query-string [query-string]
+  (when (seq query-string)
+    (->> (str/split query-string #"&")
+         (map (fn [pair]
+                (let [[k v] (str/split pair #"=" 2)
+                      decode #(java.net.URLDecoder/decode (or % "") "UTF-8")]
+                  [(decode k) (decode v)])))
+         (into {}))))
+
+(defn- request-param [request key]
+  (let [k (name key)
+        decoded-query (decode-query-string (:query-string request))]
+    (or (get-in request [:query-params k])
+        (get-in request [:query-params key])
+        (get-in request [:params k])
+        (get-in request [:params key])
+        (get decoded-query k)
+        (get decoded-query (keyword k)))))
 
 ;; =============================================================================
 ;; v1 API Routes
@@ -52,6 +72,9 @@
     (POST "/bundles/verify" request
           (handlers/verify-policy-bundle request))
 
+    (POST "/bundles/apply" request
+          (handlers/apply-policy-bundle request))
+
     (GET "/:resource-class/versions" [resource-class]
          (handlers/list-policy-versions resource-class))
 
@@ -63,8 +86,8 @@
 
     (GET "/:resource-class/diff" [resource-class :as request]
          (handlers/diff-policy-versions resource-class
-                                         (get-in request [:params :from])
-                                         (get-in request [:params :to])))
+                                         (request-param request :from)
+                                         (request-param request :to)))
 
     (GET "/:resource-class/timeline" [resource-class :as request]
          (handlers/get-policy-change-timeline resource-class request))

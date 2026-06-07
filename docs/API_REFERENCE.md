@@ -974,6 +974,31 @@ curl -X POST http://localhost:8080/v1/policies/bundles/verify \
   -d @policy-bundle.json
 ```
 
+### POST /v1/policies/bundles/apply
+
+Vérifie un bundle signé puis applique sa politique sur le data plane. L'opération crée une nouvelle version de politique, conserve l'historique et annote la version avec sa provenance de déploiement.
+
+```bash
+curl -X POST http://localhost:8080/v1/policies/bundles/apply \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @policy-bundle.json
+```
+
+Réponse de succès:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "status": "activated",
+    "resourceClass": "Facture",
+    "bundleVersion": 3,
+    "activatedVersion": 7
+  }
+}
+```
+
 ### GET /v1/policies/:rc/diff?from=3&to=5
 
 ```bash

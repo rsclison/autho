@@ -769,6 +769,32 @@
                                    (str "Failed to verify policy bundle: " (.getMessage e))
                                    500))))))
 
+(defn apply-policy-bundle
+  [request]
+  (log/debug "Applying signed policy bundle")
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (require-governance-role! request #{"policy-deployer"})
+        (let [author (get-in request [:identity :client-id] "api")
+              comment (or (:comment body-or-response)
+                          (get-in body-or-response [:payload :metadata :comment]))
+              bundle (dissoc body-or-response :comment)
+              result (policy-bundles/activate-bundle! bundle author comment)
+              location (str "/v1/policies/"
+                            (:resourceClass result)
+                            "/versions/"
+                            (:activatedVersion result))]
+          (response/created-response result location))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "POLICY_BUNDLE_APPLY_ERROR" "Failed to apply policy bundle: "))
+        (catch Exception e
+          (log/error e "Error applying policy bundle")
+          (response/error-response "POLICY_BUNDLE_APPLY_ERROR"
+                                   (str "Failed to apply policy bundle: " (.getMessage e))
+                                   500)))))) 
+
 (defn diff-policy-versions
   [resource-class from-v to-v]
   (log/debug "Diffing versions" from-v "->" to-v "for" resource-class)

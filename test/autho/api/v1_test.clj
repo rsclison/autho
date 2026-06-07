@@ -980,6 +980,32 @@
         (is (= 200 (:status verify-response)))
         (is (= verification (:data verify-body)))))))
 
+(deftest policy-bundle-handler-apply-test
+  (let [bundle {:payload {:format "autho.policy.bundle.v1"
+                          :resourceClass "Document"
+                          :version 6
+                          :policy {:resourceClass "Document" :rules []}}
+                :integrity {:algorithm "HMAC-SHA256"
+                            :payloadSha256 "abc"
+                            :signature "sig"}}
+        activation {:status "activated"
+                    :resourceClass "Document"
+                    :bundleVersion 6
+                    :activatedVersion 7}]
+    (with-redefs [policy-bundles/activate-bundle! (fn [received author comment]
+                                                    (is (= (dissoc bundle :comment) received))
+                                                    (is (= "test-admin" author))
+                                                    (is (= "promoted" comment))
+                                                    activation)]
+      (let [response (handlers/apply-policy-bundle
+                      (governance-request
+                       :body (json/write-value-as-string (assoc bundle :comment "promoted"))))
+            body (parse-response-body response)]
+        (is (= 201 (:status response)))
+        (is (= "/v1/policies/Document/versions/7"
+               (get-in response [:headers "Location"])))
+        (is (= activation (:data body)))))))
+
 (deftest policy-bundle-export-route-forwards-request-test
   (let [captured (atom nil)
         response (with-redefs [handlers/export-policy-version-bundle
@@ -996,6 +1022,23 @@
     (is (= {:resourceClass "Document"
             :version "6"
             :uri "/policies/Document/versions/6/bundle"}
+           @captured))))
+
+(deftest policy-bundle-apply-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/apply-policy-bundle
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)
+                                                   :method (:request-method request)})
+                                 (response/created-response {:status "activated"} "/v1/policies/bundles/apply"))]
+                   (api-v1/v1-routes
+                    {:request-method :post
+                     :uri "/policies/bundles/apply"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{\"payload\":{},\"integrity\":{}}" "UTF-8"))}))]
+    (is (= 201 (:status response)))
+    (is (= {:uri "/policies/bundles/apply"
+            :method :post}
            @captured))))
 
 (deftest get-policy-change-timeline-handler-returns-unified-events-test
@@ -1148,6 +1191,20 @@
     (is (= "INVALID_POLICY_VERSION" (get-in body [:error :code])))
     (is (= "Missing policy version parameter 'from'."
            (get-in body [:error :message])))))
+
+(deftest diff-policy-versions-route-reads-query-params-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/diff-policy-versions
+                               (fn [_ from to]
+                                 (reset! captured [from to])
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes {:request-method :get
+                                      :uri "/policies/Document/diff"
+                                      :query-string "from=1&to=2"}))
+        body (parse-response-body response)]
+    (is (= 200 (:status response)))
+    (is (= ["1" "2"] @captured))
+    (is (= true (get-in body [:data :ok])))))
 
 (deftest analyze-policy-impact-handler-persists-history-test
   (let [request (mock-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
