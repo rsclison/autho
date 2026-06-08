@@ -158,6 +158,10 @@
     (GET "/" request
          (plane-call :evidence #(handlers/export-evidence-package request))))
 
+  (context "/evidence" []
+    (POST "/verify" request
+          (plane-call :evidence #(handlers/verify-evidence-package request))))
+
   ;; ===================================================================
   ;; Relationship Management Endpoints
   ;; ===================================================================

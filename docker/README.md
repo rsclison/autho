@@ -56,6 +56,7 @@ phpLDAPadmin :
 - RocksDB embarque dans le container Autho, vide au lancement de la demo ;
 - les politiques `DossierDemo` et `FacturePurposeDemo` ;
 - des decisions initiales pour alimenter le Dashboard et l'Audit ;
+- un paquet d'evidence signe exporte puis verifie pour montrer la chaine de preuve ;
 - une decision `Facture` attendue en refus avant injection Kafka.
 
 ## Donnees LDAP
@@ -93,6 +94,18 @@ Resultat attendu :
 - `FAC-TEST-02` est refusee, car `80000 > 50000`.
 
 Dans l'Admin UI, l'ecran `Données PIP` permet ensuite de selectionner la classe `Facture` et de visualiser les objets presents dans RocksDB.
+
+## Scenario evidence -> preuve verifiable
+
+`demo_start.sh` exporte aussi un paquet d'evidence signe pour `DossierDemo`, puis le revalide via `GET /v1/evidence` et `POST /v1/evidence/verify`.
+
+Le paquet contient :
+
+- la verification de la chaine d'audit ;
+- le replay d'audit ;
+- la recherche d'audit ;
+- la timeline de politique pour la classe choisie ;
+- une section `integrity` avec digest canonique et signature HMAC.
 
 ## Configuration utilisee
 

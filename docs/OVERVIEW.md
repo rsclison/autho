@@ -107,6 +107,7 @@ A rare capability among authorisation servers, made possible by the immutable ev
 - Every decision is recorded (subject, resource, operation, decision, matched rules)
 - Search by subject, class, decision, date range
 - Cryptographic integrity verification of the audit chain (HMAC-SHA256 chain)
+- Signed evidence bundles can be exported and verified for governance and compliance workflows
 - CSV export
 
 ### Cache & Performance

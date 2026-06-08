@@ -1008,6 +1008,17 @@ curl -H "X-API-Key: key" \
   "http://localhost:8080/v1/evidence?resourceClass=Facture&limit=20"
 ```
 
+Le paquet exporté contient aussi une section `integrity` signée avec `AUDIT_HMAC_SECRET`. Le même corps JSON peut ensuite être envoyé à `POST /v1/evidence/verify` pour vérifier la signature et le digest canonique.
+
+### POST /v1/evidence/verify
+
+```bash
+curl -X POST http://localhost:8080/v1/evidence/verify \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @evidence-bundle.json
+```
+
 ### GET /v1/policies/:rc/diff?from=3&to=5
 
 ```bash

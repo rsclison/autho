@@ -750,11 +750,48 @@ Export an evidence package for governance and compliance. The package aggregates
   "status": "success",
   "data": {
     "kind": "evidence_bundle",
+    "format": "autho.evidence.bundle.v1",
     "resourceClass": "Document",
     "auditChain": {"valid": true, "total": 12},
     "auditReplay": {"returned": 20, "total": 20},
     "auditSearch": {"total": 20},
-    "policyTimeline": {"count": 5, "events": []}
+    "policyTimeline": {"count": 5, "events": []},
+    "integrity": {
+      "algorithm": "HMAC-SHA256",
+      "canonicalization": "json-sorted-keys-v1",
+      "payloadSha256": "…",
+      "signature": "…",
+      "signedAt": "2026-06-07T12:00:00Z"
+    }
+  }
+}
+```
+
+#### POST /v1/evidence/verify
+
+Vérifie l'intégrité d'un paquet d'evidence exporté. Le corps peut contenir soit le paquet brut, soit la réponse `success-response` complète avec une clé `data`.
+
+```bash
+curl -X POST http://localhost:8080/v1/evidence/verify \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key" \
+  -d @evidence-bundle.json
+```
+
+Réponse de succès:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "valid": true,
+    "format": "autho.evidence.bundle.v1",
+    "resourceClass": "Document",
+    "algorithm": "HMAC-SHA256",
+    "signatureValid": true,
+    "digestValid": true,
+    "formatValid": true,
+    "errors": []
   }
 }
 ```

@@ -14,6 +14,7 @@
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.policy-versions :as pv]
             [autho.policy-bundles :as policy-bundles]
+            [autho.evidence :as evidence]
             [autho.rebac :as rebac]
             [autho.features :as features]
             [jsonista.core :as json]
@@ -569,7 +570,7 @@
           audit-summary (audit/search audit-filters)
           timeline-events (when resource-class
                             (policy-change-events resource-class request))
-          evidence (cond-> {:kind "evidence_bundle"
+         evidence (cond-> {:kind "evidence_bundle"
                             :resourceClass resource-class
                             :auditChain (audit/verify-chain)
                             :auditReplay (audit/replay-requests audit-filters)
@@ -578,7 +579,7 @@
                      (assoc :policyTimeline {:resourceClass resource-class
                                              :count (count timeline-events)
                                              :events timeline-events}))]
-      (response/success-response evidence))
+      (response/success-response (evidence/sign-bundle evidence)))
     (catch clojure.lang.ExceptionInfo e
       (policy-exception->response e "EVIDENCE_EXPORT_ERROR" "Failed to export evidence package: "))
     (catch Exception e
@@ -586,6 +587,26 @@
       (response/error-response "EVIDENCE_EXPORT_ERROR"
                                (str "Failed to export evidence package: " (.getMessage e))
                                500))))
+
+(defn verify-evidence-package
+  [request]
+  (log/debug "Verifying evidence package")
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (require-governance-role! request #{"policy-reviewer" "policy-deployer"})
+        (let [bundle (if (map? (:data body-or-response))
+                       (:data body-or-response)
+                       body-or-response)]
+          (response/success-response (evidence/verify-bundle bundle)))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "EVIDENCE_VERIFY_ERROR" "Failed to verify evidence package: "))
+        (catch Exception e
+          (log/error e "Error verifying evidence package")
+          (response/error-response "EVIDENCE_VERIFY_ERROR"
+                                   (str "Failed to verify evidence package: " (.getMessage e))
+                                   500))))))
 (def max-batch-size
   (try (Long/parseLong (or (System/getenv "MAX_BATCH_SIZE") "100"))
        (catch NumberFormatException _ 100)))

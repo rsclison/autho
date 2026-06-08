@@ -177,6 +177,20 @@ seed_audit() {
   echo
 }
 
+show_evidence_bundle() {
+  local evidence_bundle_file
+  evidence_bundle_file="$(mktemp)"
+  trap 'rm -f "$evidence_bundle_file"' RETURN
+
+  echo "Exporting signed evidence bundle for DossierDemo..."
+  curl_json "$BASE_URL/v1/evidence?resourceClass=DossierDemo&subject-id=001&limit=1" | tee "$evidence_bundle_file"
+  echo
+
+  echo "Verifying the same signed evidence bundle..."
+  curl_json -X POST "$BASE_URL/v1/evidence/verify" -d @"$evidence_bundle_file"
+  echo
+}
+
 echo "Starting full Autho demo stack..."
 echo "Resetting persisted demo volumes to start without Kafka business data..."
 docker compose --profile tools down --remove-orphans --volumes >/dev/null 2>&1 || true
@@ -186,6 +200,7 @@ wait_for_autho
 
 create_demo_policies
 seed_audit
+show_evidence_bundle
 
 cat <<EOF
 

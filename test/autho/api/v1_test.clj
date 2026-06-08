@@ -15,6 +15,7 @@
             [autho.policy-bundles :as policy-bundles]
             [autho.policy-impact-history :as impact-history]
             [autho.policy-risk-profiles :as risk-profiles]
+            [autho.evidence :as evidence]
             [autho.rebac :as rebac]
             [autho.features :as features]
             [autho.topology :as topology]
@@ -1013,7 +1014,8 @@
                           :resourceClass "Document"
                           :version 6
                           :occurredAt "2026-06-07T12:00:00Z"}]]
-    (with-redefs [audit/verify-chain (fn [] {:valid true :total 2})
+    (with-redefs [evidence/bundle-secret "audit-hmac-secret-32-chars-min-ok!!"
+                  audit/verify-chain (fn [] {:valid true :total 2})
                   audit/search (fn [filters]
                                  {:items [{:id 1}]
                                   :total 1
@@ -1037,11 +1039,58 @@
             body (parse-response-body response)]
         (is (= 200 (:status response)))
         (is (= "evidence_bundle" (get-in body [:data :kind])))
+        (is (= "autho.evidence.bundle.v1" (get-in body [:data :format])))
+        (is (= "HMAC-SHA256" (get-in body [:data :integrity :algorithm])))
         (is (= {:valid true :total 2} (get-in body [:data :auditChain])))
         (is (= 1 (get-in body [:data :auditSearch :total])))
         (is (= 1 (get-in body [:data :auditReplay :returned])))
         (is (= 1 (get-in body [:data :policyTimeline :count])))
         (is (= timeline-events (get-in body [:data :policyTimeline :events])))))))
+
+(deftest evidence-package-verification-handler-test
+  (with-redefs [evidence/bundle-secret "audit-hmac-secret-32-chars-min-ok!!"
+                audit/verify-chain (fn [] {:valid true :total 2})
+                audit/search (fn [_]
+                               {:items []
+                                :total 0
+                                :page 1
+                                :pageSize 20})
+                audit/replay-requests (fn [_]
+                                        {:requests []
+                                         :total 0
+                                         :returned 0})
+                handlers/policy-change-events (fn [_ _] [])]
+    (let [bundle (get-in (parse-response-body
+                          (handlers/export-evidence-package
+                           (governance-request
+                            :params {"resourceClass" "Document"
+                                     "subject-id" "alice"})))
+                         [:data])
+          response (handlers/verify-evidence-package
+                    (governance-request
+                     :body (json/write-value-as-string {:data bundle})))
+          body (parse-response-body response)]
+      (is (= 200 (:status response)))
+      (is (= true (get-in body [:data :valid])))
+      (is (= true (get-in body [:data :signatureValid])))
+      (is (= true (get-in body [:data :digestValid]))))))
+
+(deftest evidence-verification-route-forwards-request-test
+  (let [captured (atom nil)
+        response (with-redefs [handlers/verify-evidence-package
+                               (fn [request]
+                                 (reset! captured {:uri (:uri request)
+                                                   :method (:request-method request)})
+                                 (response/success-response {:ok true}))]
+                   (api-v1/v1-routes
+                    {:request-method :post
+                     :uri "/evidence/verify"
+                     :headers {}
+                     :body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))}))]
+    (is (= 200 (:status response)))
+    (is (= {:uri "/evidence/verify"
+            :method :post}
+           @captured))))
 
 (deftest evidence-package-route-forwards-request-test
   (let [captured (atom nil)
