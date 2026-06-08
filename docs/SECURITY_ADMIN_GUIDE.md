@@ -81,7 +81,7 @@ Le champ `subject` du body n'est pas une preuve d'identité et n'est pas utilis�
 
 Pour les decisions, Autho resout aussi un tenant effectif depuis `X-Tenant-ID`, `?tenantId=`, le body `tenantId`, ou `context.tenantId`. Si l'identité contient des tenants autorisés, le tenant demandé doit être dans cette liste; sinon la requête est refusée avec `TENANT_FORBIDDEN`. Le cache de decisions est séparé par tenant.
 
-Les endpoints de gouvernance qui modifient l'état exigent un rôle applicatif ou JWT. `governance-admin` autorise tout ; en production, préférez des rôles minimaux : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer` ou `relation-admin`.
+Les endpoints de gouvernance qui modifient l'état exigent un rôle applicatif ou JWT. Les routes `/admin/*` exigent désormais soit une API key applicative portant `governance-admin`, soit un JWT avec le rôle `admin`. Pour les endpoints de gouvernance `/v1/*`, `governance-admin` autorise tout ; en production, préférez des rôles minimaux : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer` ou `relation-admin`.
 
 ### 3.1.1 Variable de licence (optionnelle)
 

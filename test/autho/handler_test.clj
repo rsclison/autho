@@ -39,7 +39,9 @@
   ;; through the inner auth middleware inside app-routes.
   (let [base-request {:request-method :post
                       :headers {}
-                      :identity {:auth-method :api-key :client-id :trusted-internal-app}}
+                      :identity {:auth-method :api-key
+                                 :client-id :trusted-internal-app
+                                 :roles ["governance-admin"]}}
         app app-routes]
     (testing "POST /admin/reinit"
       (let [init-call-counter (atom 0)]
@@ -64,6 +66,29 @@
             (is (= 200 (:status response)))
             (is (= {:status "ok" :message "Rule repository reloaded."}
                    (json/read-value (:body response) json/keyword-keys-object-mapper)))))))))
+
+(deftest admin-routes-require-governance-admin-or-admin-jwt-test
+  (let [app (auth/wrap-authentication app-routes)]
+    (testing "API key without governance-admin cannot access admin routes"
+      (let [response (app {:request-method :post
+                           :uri "/admin/reinit"
+                           :headers {}
+                           :identity {:auth-method :api-key
+                                      :client-id "trusted-internal-app"
+                                      :roles ["policy-deployer"]}})
+            body (json/read-value (:body response) json/keyword-keys-object-mapper)]
+        (is (= 403 (:status response)))
+        (is (= "FORBIDDEN" (get-in body [:error :code])))))
+
+    (testing "JWT admin can access admin routes"
+      (let [init-call-counter (atom 0)]
+        (with-redefs [pdp/init (fn [] (swap! init-call-counter inc))]
+          (let [response (app {:request-method :post
+                               :uri "/admin/reinit"
+                               :headers {}
+                               :identity {:role "admin"}})]
+            (is (= 1 @init-call-counter))
+            (is (= 200 (:status response)))))))))
 
 (deftest rule-loading-failure-test
   (let [app (auth/wrap-authentication app-routes)]

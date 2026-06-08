@@ -714,6 +714,7 @@
             body (cond-> (assoc body-or-response :resourceClass resource-class)
                    environment (assoc :environment environment))]
         (try
+          (require-governance-role! request #{"policy-admin" "policy-reviewer"})
           (let [policy-json (json/write-value-as-string body)
                 analysis (prp/validate-policy-submission resource-class policy-json)]
             (response/success-response {:valid true
@@ -918,6 +919,7 @@
     (if (response-map? body-or-response)
       body-or-response
       (try
+        (require-governance-role! request #{"policy-admin" "policy-reviewer"})
         (let [environment (request-environment request body-or-response)
               body (cond-> (assoc body-or-response :resourceClass resource-class)
                      environment (assoc :environment environment))

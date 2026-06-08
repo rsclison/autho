@@ -527,6 +527,8 @@ Policies can target `dev`, `staging` or `prod` with the `environment` field or t
 
 Validate a candidate policy without persisting it. This endpoint runs JSON Schema validation, static policy safety checks and declarative policy tests, but does not create a policy version and does not invalidate decision caches.
 
+Requires `policy-admin` or `policy-reviewer`.
+
 **Request:**
 ```json
 {
@@ -619,6 +621,8 @@ For API-key callers, `$s` is still the server-bound application identity. A call
 #### POST /v1/policies/:resource-class/impact
 
 Compare the current or versioned baseline with a candidate policy over a request batch. The response includes `impactReport` for change review and rollout gates.
+
+Requires `policy-admin` or `policy-reviewer`.
 
 **Request:**
 ```json

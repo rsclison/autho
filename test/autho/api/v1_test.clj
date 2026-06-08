@@ -484,9 +484,9 @@
 
 (deftest validate-policy-handler-runs-predeployment-validation-test
   (let [captured (atom nil)
-        request (mock-request :body (json/write-value-as-string {:strategy "almost_one_allow_no_deny"
-                                                                 :rules []
-                                                                 :tests []}))]
+        request (governance-request :body (json/write-value-as-string {:strategy "almost_one_allow_no_deny"
+                                                                       :rules []
+                                                                       :tests []}))]
     (with-redefs [prp/validate-policy-submission
                   (fn [resource-class policy-json]
                     (reset! captured {:resourceClass resource-class
@@ -518,8 +518,8 @@
         (is (nil? (get-in body [:data :validation :policy])))))))
 
 (deftest validate-policy-handler-returns-validation-errors-test
-  (let [request (mock-request :body (json/write-value-as-string {:strategy "almost_one_allow_no_deny"
-                                                                 :rules []}))]
+  (let [request (governance-request :body (json/write-value-as-string {:strategy "almost_one_allow_no_deny"
+                                                                       :rules []}))]
     (with-redefs [prp/validate-policy-submission
                   (fn [& _]
                     (throw (ex-info "Policy tests failed"
@@ -533,6 +533,17 @@
         (is (= "POLICY_TESTS_FAILED" (get-in body [:error :code])))
         (is (= "POLICY_TEST_FAILED" (get-in body [:error :details :issues 0 :code])))
         (is (= "failed" (get-in body [:error :details :report :status])))))))
+
+(deftest validate-policy-requires-governance-role-test
+  (let [request (mock-request :body (json/write-value-as-string {:strategy "almost_one_allow_no_deny"
+                                                                 :rules []})
+                              :identity {:auth-method :api-key
+                                         :client-id "test-admin"
+                                         :roles ["policy-deployer"]})]
+    (let [response (handlers/validate-policy "Document" request)
+          body (parse-response-body response)]
+      (is (= 403 (:status response)))
+      (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code]))))))
 
 (deftest validate-policy-route-forwards-request-test
   (let [request-body (ByteArrayInputStream. (.getBytes "{}" "UTF-8"))
@@ -584,10 +595,10 @@
 
 (deftest analyze-policy-impact-handler-returns-impact-summary-test
   (let [captured (atom nil)
-        request (mock-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
-                                                                             :resource {:class "Document" :id "doc-1"}
-                                                                             :operation "read"}]
-                                                                 :candidatePolicy {:strategy "permit-unless-deny"}})
+        request (governance-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
+                                                                                   :resource {:class "Document" :id "doc-1"}
+                                                                                   :operation "read"}]
+                                                                       :candidatePolicy {:strategy "permit-unless-deny"}})
                               :params {:environment "staging"})]
     (with-redefs [policy-impact/analyze-impact (fn [_ body]
                                                  (reset! captured body)
@@ -605,6 +616,20 @@
         (is (= "staging" (get-in body [:data :environment])))
         (is (= "staging" (:environment @captured)))
         (is (= 1 (get-in body [:data :summary :grants])))))))
+
+(deftest analyze-policy-impact-requires-governance-role-test
+  (let [request (mock-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
+                                                                             :resource {:class "Document" :id "doc-1"}
+                                                                             :operation "read"}]
+                                                                 :candidatePolicy {:strategy "permit-unless-deny"}})
+                              :params {:environment "staging"}
+                              :identity {:auth-method :api-key
+                                         :client-id "test-admin"
+                                         :roles ["policy-deployer"]})]
+    (let [response (handlers/analyze-policy-impact "Document" request)
+          body (parse-response-body response)]
+      (is (= 403 (:status response)))
+      (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code]))))))
 
 (deftest policy-risk-profile-handlers-manage-persisted-profiles-test
   (with-redefs [risk-profiles/list-profiles (fn []
@@ -1327,10 +1352,10 @@
     (is (= true (get-in body [:data :ok])))))
 
 (deftest analyze-policy-impact-handler-persists-history-test
-  (let [request (mock-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
-                                                                             :resource {:class "Document" :id "doc-1"}
-                                                                             :operation "read"}]
-                                                                 :candidatePolicy {:strategy "permit-unless-deny"}}))]
+  (let [request (governance-request :body (json/write-value-as-string {:requests [{:subject {:id "user1"}
+                                                                                   :resource {:class "Document" :id "doc-1"}
+                                                                                   :operation "read"}]
+                                                                       :candidatePolicy {:strategy "permit-unless-deny"}}))]
     (with-redefs [policy-impact/analyze-impact (fn [_ body]
                                                  {:resourceClass (:resourceClass body)
                                                   :summary {:totalRequests 1

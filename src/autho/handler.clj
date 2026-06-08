@@ -201,20 +201,39 @@
                 (validation/validation-error->response e))
             (throw e)))))))
 
+(defn- identity-roles
+  [identity]
+  (->> [(:role identity)
+        (:roles identity)]
+       (mapcat (fn [roles]
+                 (cond
+                   (nil? roles) []
+                   (string? roles) [roles]
+                   (keyword? roles) [(name roles)]
+                   (sequential? roles) (map name roles)
+                   (set? roles) (map name roles)
+                   :else [(str roles)])))
+       set))
+
+(defn- admin-identity?
+  [identity]
+  (let [roles (identity-roles identity)]
+    (or (and (= :api-key (:auth-method identity))
+             (contains? roles "governance-admin"))
+        (contains? roles "admin"))))
+
 (defn wrap-admin-auth
   "Middleware that restricts access to admin routes.
-  Requires either a trusted API key client or a JWT identity with role 'admin'."
+  Requires either a governance-admin API key client or a JWT identity with role 'admin'."
   [handler]
   (fn [request]
     (let [identity (:identity request)]
-      (if (and identity
-               (or (= :api-key (:auth-method identity))
-                   (= "admin" (:role identity))))
+      (if (and identity (admin-identity? identity))
         (handler request)
         (do
           (.warn logger "Unauthorized admin access attempt from identity: {}" identity)
           (error-response "FORBIDDEN"
-                          "Admin access requires a trusted API key or an identity with role 'admin'."
+                          "Admin access requires a governance-admin API key or a JWT identity with role 'admin'."
                           403))))))
 
 (defn wrap-metrics [handler]
