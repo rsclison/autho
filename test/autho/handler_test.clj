@@ -83,7 +83,7 @@
   (let [app (auth/wrap-authentication app-routes)]
     (with-redefs [topology/current-config (fn []
                                            {:supportedPlanes [:control :data :evidence]
-                                            :enabledPlanes #{:control :evidence}})]
+                                           :enabledPlanes #{:control :evidence}})]
       (let [response (app {:request-method :get
                            :uri "/status"
                            :headers {}})
@@ -93,3 +93,16 @@
                (get-in body [:topology :supportedPlanes])))
         (is (= ["control" "evidence"]
                (sort (get-in body [:topology :enabledPlanes]))))))))
+
+(deftest v1-routes-are-plane-gated-at-app-level-test
+  (let [app (auth/wrap-authentication app-routes)]
+    (try
+      (topology/set-enabled-planes! #{:data :control})
+      (let [response (app {:request-method :get
+                           :uri "/v1/evidence"
+                           :headers {}})
+            body (json/read-value (:body response) json/keyword-keys-object-mapper)]
+        (is (= 503 (:status response)))
+        (is (= "PLANE_DISABLED" (get-in body [:error :code]))))
+      (finally
+        (topology/set-enabled-planes! #{:control :data :evidence})))))

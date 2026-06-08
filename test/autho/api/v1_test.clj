@@ -1066,18 +1066,13 @@
     (try
       (topology/set-enabled-planes! #{:data :control})
       (let [called? (atom false)
-            response (with-redefs [handlers/export-evidence-package
-                                   (fn [_]
-                                     (reset! called? true)
-                                     (response/success-response {:ok true}))]
-                       (api-v1/v1-routes
-                        {:request-method :get
-                         :uri "/evidence"
-                         :headers {}
-                         :params {"resourceClass" "Document"}}))
+            response ((topology/wrap-v1-plane-gating api-v1/v1-routes)
+                      {:request-method :get
+                       :uri "/v1/evidence"
+                       :headers {}
+                       :params {"resourceClass" "Document"}})
             body (parse-response-body response)]
         (is (= 503 (:status response)))
-        (is (false? @called?))
         (is (= "PLANE_DISABLED" (get-in body [:error :code]))))
       (finally
         (reset! (var-get enabled-var) original)))))

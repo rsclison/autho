@@ -707,7 +707,8 @@
    (-> protected-routes
        (auth/wrap-authentication))
    (-> (context "/v1" [] api-v1/v1-routes)
-       (auth/wrap-authentication))
+       (auth/wrap-authentication)
+       (topology/wrap-v1-plane-gating))
    (route/not-found "Not Found")))
 
 

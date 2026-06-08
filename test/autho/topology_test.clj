@@ -36,3 +36,29 @@
                (get-in body [:error :message]))))
       (finally
         (reset! (var-get enabled-var) original)))))
+
+(deftest route-plane-resolution-test
+  (is (= :data (topology/route-plane-for-uri "/v1/authz/decisions")))
+  (is (= :control (topology/route-plane-for-uri "/v1/policies")))
+  (is (= :evidence (topology/route-plane-for-uri "/v1/evidence")))
+  (is (nil? (topology/route-plane-for-uri "/health"))))
+
+(deftest wrap-v1-plane-gating-blocks-disabled-plane-test
+  (let [enabled-var #'autho.topology/active-planes
+        original @(var-get enabled-var)
+        called? (atom false)]
+    (try
+      (topology/set-enabled-planes! #{:data})
+      (let [handler (topology/wrap-v1-plane-gating
+                     (fn [_]
+                       (reset! called? true)
+                       {:status 200
+                        :headers {}
+                        :body "ok"}))
+            response (handler {:uri "/v1/evidence"})
+            body (json/read-value (:body response) json/keyword-keys-object-mapper)]
+        (is (false? @called?))
+        (is (= 503 (:status response)))
+        (is (= "PLANE_DISABLED" (get-in body [:error :code]))))
+      (finally
+        (reset! (var-get enabled-var) original)))))

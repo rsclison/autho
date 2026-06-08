@@ -14,6 +14,11 @@
 
 (def ^:private supported-planes #{:control :data :evidence})
 
+(def ^:private plane-route-prefixes
+  [[:data ["/v1/authz" "/v1/subjects" "/v1/resources"]]
+   [:control ["/v1/policies" "/v1/relations" "/v1/cache"]]
+   [:evidence ["/v1/evidence"]]])
+
 (def ^:private route-topology
   {:data ["/v1/authz" "/v1/subjects" "/v1/resources"]
    :control ["/v1/policies" "/v1/relations" "/v1/cache"]
@@ -85,6 +90,15 @@
    :disabledPlanes (ordered-planes (set/difference supported-planes (enabled-planes)))
    :routeTopology route-topology})
 
+(defn route-plane-for-uri
+  "Returns the deployment plane governing a v1 URI, or nil when unknown."
+  [uri]
+  (when (string? uri)
+    (some (fn [[plane prefixes]]
+            (when (some #(str/starts-with? uri %) prefixes)
+              plane))
+          plane-route-prefixes)))
+
 (defn plane-disabled-response
   [plane]
   (response/error-response "PLANE_DISABLED"
@@ -98,3 +112,11 @@
   (if (plane-enabled? plane)
     (thunk)
     (plane-disabled-response plane)))
+
+(defn wrap-v1-plane-gating
+  "Middleware that blocks requests to disabled v1 planes before route dispatch."
+  [handler]
+  (fn [request]
+    (if-let [plane (route-plane-for-uri (:uri request))]
+      (call-with-plane plane #(handler request))
+      (handler request))))

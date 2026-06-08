@@ -3,7 +3,6 @@
    Provides standardized endpoints with proper HTTP semantics."
   (:require [compojure.core :refer [defroutes context GET POST PUT DELETE]]
             [clojure.string :as str]
-            [autho.topology :as topology]
             [autho.api.handlers :as handlers]
             [autho.api.subject-handlers :as subject-handlers]
             [autho.api.resource-handlers :as resource-handlers]))
@@ -28,8 +27,8 @@
         (get decoded-query (keyword k)))))
 
 (defn- plane-call
-  [plane thunk]
-  (topology/call-with-plane plane thunk))
+  [_plane thunk]
+  (thunk))
 
 ;; =============================================================================
 ;; v1 API Routes
