@@ -6,7 +6,7 @@ La demonstration se lance depuis la racine du depot avec un seul script :
 ./demo_start.sh
 ```
 
-Les donnees Kafka ne sont pas injectees au demarrage. Cela permet de montrer d'abord qu'une regle `Facture` ne peut pas matcher quand les attributs metier ne sont pas encore dans RocksDB.
+Les donnees Kafka ne sont pas injectees au demarrage. Cela permet de montrer d'abord le parcours principal sans objets metier publies, puis de basculer vers le mode Kafka dans un second chapitre.
 
 Injecter ensuite les donnees Kafka avec :
 
@@ -55,9 +55,10 @@ phpLDAPadmin :
 - Autho en container avec `AUTHO_DEMO_LICENSE_TIER=enterprise` ;
 - RocksDB embarque dans le container Autho, vide au lancement de la demo ;
 - les politiques `DossierDemo` et `FacturePurposeDemo` ;
-- des decisions initiales pour alimenter le Dashboard et l'Audit ;
-- un paquet d'evidence signe exporte puis verifie pour montrer la chaine de preuve ;
-- une decision `Facture` attendue en refus avant injection Kafka.
+- un premier chapitre de decisions pour montrer le comportement de base ;
+- un paquet d'evidence signe exporte puis verifie ;
+- une analyse d'impact avant changement de politique ;
+- un chapitre Kafka pour l'alimentation d'objets metier.
 
 ## Donnees LDAP
 
@@ -97,7 +98,7 @@ Dans l'Admin UI, l'ecran `Données PIP` permet ensuite de selectionner la classe
 
 ## Scenario evidence -> preuve verifiable
 
-`demo_start.sh` exporte aussi un paquet d'evidence signe pour `DossierDemo`, puis le revalide via `GET /v1/evidence` et `POST /v1/evidence/verify`.
+`demo_start.sh` exporte un paquet d'evidence signe pour `DossierDemo`, puis le revalide via `GET /v1/evidence` et `POST /v1/evidence/verify`.
 
 Le paquet contient :
 

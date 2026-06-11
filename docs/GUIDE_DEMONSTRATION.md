@@ -1,6 +1,6 @@
 # Guide de demonstration Autho
 
-Ce guide decrit une seule maniere de lancer et d'arreter la demonstration : la stack Docker complete via `demo_start.sh` et `demo_stop.sh`.
+Ce guide decrit la demonstration commerciale principale via `demo_start.sh`, puis le chapitre Kafka secondaire via `demo_inject_kafka.sh`. `demo_stop.sh` arrete l'ensemble.
 
 La demonstration lance tous les composants utiles :
 
@@ -12,7 +12,7 @@ La demonstration lance tous les composants utiles :
 - politiques et decisions initiales pour remplir l'IHM ;
 - script separe d'injection Kafka pour montrer progressivement l'arrivee des donnees metier.
 
-La demonstration suit la voie API `v1` et sert aussi a illustrer le packaging commercial: le mode de licence `enterprise` active les fonctions avancees pendant le parcours, tandis que les endpoints historiques restent visibles seulement pour compatibilite.
+La demonstration suit la voie API `v1` et sert aussi a illustrer le packaging commercial: le mode de licence `enterprise` active les fonctions avancees pendant le parcours, tandis que les endpoints historiques restent visibles seulement pour compatibilite. Le fil narratif met l'accent sur quatre points: decision, evidence, impact/simulation et ingestion Kafka.
 
 ## 1. Prerequis
 
@@ -40,8 +40,10 @@ Le script effectue tout le demarrage :
 2. attend que le serveur Autho soit pret ;
 3. repart de volumes Docker vides pour que RocksDB ne contienne pas encore les factures de demonstration ;
 4. cree les politiques `DossierDemo` et `FacturePurposeDemo` ;
-5. execute des decisions `allow` et `deny` pour alimenter l'audit et le Dashboard ;
-6. execute une decision `Facture` avant injection Kafka, attendue en `deny` car les attributs metier ne sont pas encore presents dans RocksDB.
+5. execute un premier chapitre de decisions pour montrer le comportement de base et l'enrichissement externe ;
+6. exporte puis verifie un paquet d'evidence signe ;
+7. lance une analyse d'impact avant changement de politique ;
+8. presente le cas `Facture` avant injection Kafka, attendu en `deny` car les attributs metier ne sont pas encore presents dans RocksDB.
 
 La stack utilise une licence de demonstration `enterprise`, ce qui active audit, explain, simulate, shadow, metrics, Kafka PIP et fonctions de gouvernance.
 
@@ -145,10 +147,11 @@ Points a commenter :
 - l'audit est append-only ;
 - chaque entree est chainee pour detecter une modification ;
 - l'export CSV sert aux revues de securite ou de conformite.
+- le paquet d'evidence exporte par `demo_start.sh` complete l'audit par une verifiabilite machine et pas seulement une consultation humaine.
 
 ### 4.7 Kafka, RocksDB et LDAP
 
-Ce passage se deroule en deux temps.
+Ce passage se deroule en deux temps et constitue le chapitre final de la demonstration.
 
 Avant injection :
 
@@ -206,7 +209,7 @@ Point a commenter : une application ou un client authentifie ne peut pas obtenir
 5. montrer les compteurs : changements, revocations, sujets touches, ressources touchees ;
 6. montrer l'historique, le statut de review et le statut de rollout.
 
-Point a commenter : l'IHM ne sert pas seulement a editer une politique. Elle aide a mesurer l'impact avant de deployer.
+Point a commenter : l'IHM ne sert pas seulement a editer une politique. Elle aide a mesurer l'impact avant de deployer, ce qui est utile face a une solution concurrente plus centree sur la decision brute.
 
 ### 4.10 Infrastructure et parametres
 

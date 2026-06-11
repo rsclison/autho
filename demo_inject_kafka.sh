@@ -20,6 +20,8 @@ echo "Checking that Autho is running..."
 curl -fsS "$BASE_URL/health"
 echo
 
+echo "Kafka mode: publishing business objects for applications that can emit them directly."
+echo "This is the alternative to PIP-based enrichment for resource data."
 echo "Producing deterministic Facture objects to Kafka..."
 docker compose --profile tools build kafka-producer
 docker compose --profile tools run --rm \
@@ -55,7 +57,7 @@ echo
 
 cat <<EOF
 
-Kafka demo data has been injected.
+Kafka demo data has been injected and the decision path now uses business objects from RocksDB.
 
 You can now show:
 - Kafka UI topic: http://localhost:8090

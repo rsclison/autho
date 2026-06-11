@@ -129,8 +129,9 @@ create_demo_policies() {
   }' >/dev/null
 }
 
-seed_audit() {
-  echo "Running deterministic authorization calls..."
+show_pip_decision_flow() {
+  echo "Chapter 1: decision flow with PIP-enriched identity and business context"
+  echo "The API key is bound server-side to the LDAP-backed subject Person 001, so the request body stays minimal."
 
   echo "Decision expected: allow (DossierDemo internal)"
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
@@ -178,6 +179,7 @@ seed_audit() {
 }
 
 show_evidence_bundle() {
+  echo "Chapter 2: signed evidence export and verification"
   local evidence_bundle_file
   evidence_bundle_file="$(mktemp)"
   trap 'rm -f "$evidence_bundle_file"' RETURN
@@ -191,6 +193,61 @@ show_evidence_bundle() {
   echo
 }
 
+show_impact_simulation() {
+  echo "Chapter 3: impact analysis before policy rollout"
+  curl_json -X POST "$BASE_URL/v1/policies/DossierDemo/impact" -d '{
+    "candidatePolicy": {
+      "resourceClass": "DossierDemo",
+      "strategy": "almost_one_allow_no_deny",
+      "rules": [
+        {
+          "name": "ALLOW-DEMO-CLIENT-READ-INTERNAL",
+          "operation": "lire",
+          "priority": 10,
+          "effect": "allow",
+          "conditions": [
+            ["=", "$s.client-id", "002"],
+            ["diff", "$r.classification", "secret"]
+          ]
+        },
+        {
+          "name": "DENY-SECRET",
+          "operation": "lire",
+          "priority": 100,
+          "effect": "deny",
+          "conditions": [
+            ["=", "$r.classification", "secret"]
+          ]
+        }
+      ]
+    },
+    "requests": [
+      {
+        "subject": {"id": "001", "class": "Person", "client-id": "001"},
+        "resource": {"id": "DOS-001", "class": "DossierDemo", "classification": "internal"},
+        "operation": "lire"
+      },
+      {
+        "subject": {"id": "001", "class": "Person", "client-id": "001"},
+        "resource": {"id": "DOS-002", "class": "DossierDemo", "classification": "secret"},
+        "operation": "lire"
+      }
+    ]
+  }'
+  echo
+}
+
+show_kafka_mode_preview() {
+  echo "Chapter 4 preview: Kafka mode will replace missing resource enrichment with business objects"
+  echo "Before Kafka injection, FAC-TEST-01 is denied because the resource attributes are not yet present."
+  curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
+    "subject": {"id": "ignored-with-api-key", "class": "Person"},
+    "resource": {"class": "Facture", "id": "FAC-TEST-01"},
+    "operation": "lire"
+  }'
+  echo
+}
+
 echo "Starting full Autho demo stack..."
 echo "Resetting persisted demo volumes to start without Kafka business data..."
 docker compose --profile tools down --remove-orphans --volumes >/dev/null 2>&1 || true
@@ -199,8 +256,10 @@ docker compose up -d --build kafka kafka-init kafka-ui openldap phpldapadmin aut
 wait_for_autho
 
 create_demo_policies
-seed_audit
+show_pip_decision_flow
 show_evidence_bundle
+show_impact_simulation
+show_kafka_mode_preview
 
 cat <<EOF
 
