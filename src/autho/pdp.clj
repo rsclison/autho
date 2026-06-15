@@ -7,6 +7,7 @@
             [autho.metrics :as metrics]
             [autho.audit :as audit]
             [autho.policy-yaml :as policy-yaml]
+            [autho.policy-format :as policy-format]
             [autho.policy-versions :as pv]
             [autho.policy-impact-history :as pih]
             [autho.policy-risk-profiles :as risk-profiles]
@@ -66,7 +67,7 @@
 (defn resolve-conflict [policy success-rules]
   (if (empty? success-rules)
     false
-  (case (:strategy policy)
+  (case (policy-format/normalize-strategy (:strategy policy))
     :almost_one_allow_no_deny (if (not (some (fn [rule] (= "allow" (:effect rule))) success-rules))
                                 false
                                 (let [fa (filter (fn [r] (= "allow" (:effect r))) success-rules)

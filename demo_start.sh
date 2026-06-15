@@ -12,7 +12,7 @@ cd "$COMPOSE_DIR"
 wait_for_autho() {
   echo "Waiting for Autho health endpoint..."
   for _ in $(seq 1 90); do
-    if curl -fsS "$BASE_URL/health" >/dev/null; then
+    if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
       curl -fsS "$BASE_URL/health"
       echo
       return 0

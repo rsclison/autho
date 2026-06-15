@@ -43,6 +43,28 @@
         (is (= "new-rule" (get-in result [:impactReport :rulesResponsible :winningRules 0 :ruleName])))
         (is (= "user1" (get-in result [:riskSignals :topImpactedSubjects 0 :key])))))))
 
+(deftest analyze-impact-normalizes-string-strategy-in-provided-policy-test
+  (let [policy {:strategy "almost_one_allow_no_deny"
+                :rules [{:name "allow-read"
+                         :effect "allow"
+                         :priority 10
+                         :operation "read"
+                         :conditions [["=" "$s.id" "user1"]]}]}
+        request {:identity {:id "user1"}
+                 :resourceClass "Document"
+                 :candidatePolicy policy
+                 :requests [{:subject {:id "user1"}
+                             :resource {:class "Document" :id "doc-1"}
+                             :operation "read"}]}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] policy)
+                  pv/latest-version-number (fn [_] 0)]
+      (let [result (impact/analyze-impact request request)]
+        (is (= "Document" (:resourceClass result)))
+        (is (= "provided" (get-in result [:candidate :source])))
+        (is (= 1 (get-in result [:summary :totalRequests])))
+        (is (= 0 (get-in result [:summary :changedDecisions])))
+        (is (= 0 (count (:changes result))))))))
+
 (deftest analyze-impact-uses-versioned-baseline-and-candidate-test
   (with-redefs [pv/get-version (fn [_ version]
                                  (case version
