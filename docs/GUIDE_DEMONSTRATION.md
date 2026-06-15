@@ -1,6 +1,6 @@
 # Guide de demonstration Autho
 
-Ce guide decrit la demonstration commerciale principale via `demo_start.sh`, puis le chapitre Kafka secondaire via `demo_inject_kafka.sh`. `demo_stop.sh` arrete l'ensemble.
+Ce guide decrit la demonstration principale via `demo_start.sh`, puis le chapitre Kafka secondaire via `demo_inject_kafka.sh`. `demo_stop.sh` arrete l'ensemble.
 
 La demonstration lance tous les composants utiles :
 
@@ -12,7 +12,7 @@ La demonstration lance tous les composants utiles :
 - politiques et decisions initiales pour remplir l'IHM ;
 - script separe d'injection Kafka pour montrer progressivement l'arrivee des donnees metier.
 
-La demonstration suit la voie API `v1` et sert aussi a illustrer le packaging commercial: le mode de licence `enterprise` active les fonctions avancees pendant le parcours, tandis que les endpoints historiques restent visibles seulement pour compatibilite. Le fil narratif met l'accent sur quatre points: decision, evidence, impact/simulation et ingestion Kafka.
+La demonstration suit la voie API `v1` et sert aussi a illustrer le packaging commercial: le mode de licence `enterprise` active les fonctions avancees pendant le parcours, tandis que les endpoints historiques restent visibles seulement pour compatibilite. Le fil narratif met d'abord l'accent sur l'auditabilite, puis sur l'impact/simulation et enfin sur l'ingestion Kafka. Le comportement de decision et l'enrichissement PIP restent visibles comme fond technique du parcours.
 
 ## 1. Prerequis
 
@@ -40,8 +40,8 @@ Le script effectue tout le demarrage :
 2. attend que le serveur Autho soit pret ;
 3. repart de volumes Docker vides pour que RocksDB ne contienne pas encore les factures de demonstration ;
 4. cree les politiques `DossierDemo` et `FacturePurposeDemo` ;
-5. execute un premier chapitre de decisions pour montrer le comportement de base et l'enrichissement externe ;
-6. exporte puis verifie un paquet d'evidence signe ;
+5. execute un premier chapitre de decisions pour generer la trace d'audit utile a la preuve ;
+6. exporte puis verifie un paquet d'evidence signe, en montrant aussi le replay d'audit ;
 7. lance une analyse d'impact avant changement de politique ;
 8. presente le cas `Facture` avant injection Kafka, attendu en `deny` car les attributs metier ne sont pas encore presents dans RocksDB.
 
@@ -83,7 +83,7 @@ Point a commenter supplementaire : toute nouvelle integration doit preferer les 
 1. ouvrir `Dashboard` ;
 2. verifier l'indicateur de sante du serveur dans la barre laterale ;
 3. montrer les cartes d'etat ;
-4. montrer les dernieres decisions deja generees par `demo_start.sh`, dont le refus `Facture` avant injection Kafka.
+4. montrer les dernieres decisions deja generees par `demo_start.sh`, dont la trace d'audit signable et le refus `Facture` avant injection Kafka.
 
 Points a commenter :
 
@@ -132,7 +132,7 @@ Points a commenter :
 - `Simuler` n'ecrit pas une nouvelle politique et ne remplace pas la production ;
 - le JSON brut reste disponible pour une demonstration technique.
 
-### 4.6 Audit
+### 4.6 Audit et evidence
 
 1. ouvrir `Audit` ;
 2. filtrer `Classe ressource` avec `DossierDemo` ;
@@ -146,8 +146,9 @@ Points a commenter :
 
 - l'audit est append-only ;
 - chaque entree est chainee pour detecter une modification ;
-- l'export CSV sert aux revues de securite ou de conformite.
-- le paquet d'evidence exporte par `demo_start.sh` complete l'audit par une verifiabilite machine et pas seulement une consultation humaine.
+- l'export CSV sert aux revues de securite ou de conformite ;
+- le paquet d'evidence exporte par `demo_start.sh` relie la trace humaine au replay machine ;
+- la verification du bundle signe montre que la preuve est transportable et verifiable.
 
 ### 4.7 Kafka, RocksDB et LDAP
 

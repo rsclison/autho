@@ -55,9 +55,9 @@ phpLDAPadmin :
 - Autho en container avec `AUTHO_DEMO_LICENSE_TIER=enterprise` ;
 - RocksDB embarque dans le container Autho, vide au lancement de la demo ;
 - les politiques `DossierDemo` et `FacturePurposeDemo` ;
-- un premier chapitre de decisions pour montrer le comportement de base ;
-- un paquet d'evidence signe exporte puis verifie ;
+- un premier chapitre d'auditabilite avec decisions, bundle signe et verification machine ;
 - une analyse d'impact avant changement de politique ;
+- un chapitre de decisions pour montrer le comportement de base et l'enrichissement PIP ;
 - un chapitre Kafka pour l'alimentation d'objets metier.
 
 ## Donnees LDAP

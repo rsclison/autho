@@ -129,8 +129,9 @@ create_demo_policies() {
   }' >/dev/null
 }
 
-show_pip_decision_flow() {
-  echo "Chapter 1: decision flow with PIP-enriched identity and business context"
+show_auditability_story() {
+  echo "Chapter 1: auditability in practice"
+  echo "I generate live decisions first, then export a signed evidence bundle and verify the same trace machine-side."
   echo "The API key is bound server-side to the LDAP-backed subject Person 001, so the request body stays minimal."
 
   echo "Decision expected: allow (DossierDemo internal)"
@@ -176,13 +177,16 @@ show_pip_decision_flow() {
     "context": {"purpose": "export_invoice_details", "requestingUser": "alice"}
   }'
   echo
+
+  echo "The decisions above are now persisted in the audit trail."
+  show_evidence_bundle
 }
 
 show_evidence_bundle() {
-  echo "Chapter 2: signed evidence export and verification"
+  echo "Signed evidence export and verification"
   local evidence_bundle_file
   evidence_bundle_file="$(mktemp)"
-  trap 'rm -f "$evidence_bundle_file"' RETURN
+  trap 'rm -f "${evidence_bundle_file:-}"' RETURN
 
   echo "Exporting signed evidence bundle for DossierDemo..."
   curl_json "$BASE_URL/v1/evidence?resourceClass=DossierDemo&subject-id=001&limit=1" | tee "$evidence_bundle_file"
@@ -194,7 +198,7 @@ show_evidence_bundle() {
 }
 
 show_impact_simulation() {
-  echo "Chapter 3: impact analysis before policy rollout"
+  echo "Chapter 2: impact analysis before policy rollout"
   curl_json -X POST "$BASE_URL/v1/policies/DossierDemo/impact" -d '{
     "candidatePolicy": {
       "resourceClass": "DossierDemo",
@@ -238,7 +242,7 @@ show_impact_simulation() {
 }
 
 show_kafka_mode_preview() {
-  echo "Chapter 4 preview: Kafka mode will replace missing resource enrichment with business objects"
+  echo "Chapter 3 preview: Kafka mode will replace missing resource enrichment with business objects"
   echo "Before Kafka injection, FAC-TEST-01 is denied because the resource attributes are not yet present."
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
@@ -256,8 +260,7 @@ docker compose up -d --build kafka kafka-init kafka-ui openldap phpldapadmin aut
 wait_for_autho
 
 create_demo_policies
-show_pip_decision_flow
-show_evidence_bundle
+show_auditability_story
 show_impact_simulation
 show_kafka_mode_preview
 
