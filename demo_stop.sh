@@ -12,10 +12,10 @@ if [[ "$REMOVE_VOLUMES" == "--volumes" || "$REMOVE_VOLUMES" == "-v" ]]; then
   DOWN_ARGS+=(--volumes)
 fi
 
-echo "Stopping Autho demo stack..."
+echo "Arrêt de la stack de démonstration Autho…"
 docker compose "${DOWN_ARGS[@]}"
 
-echo "Removing any remaining named demo containers..."
+echo "Nettoyage des éventuels conteneurs nommés restants…"
 docker rm -f \
   autho-server \
   autho-kafka \
@@ -25,4 +25,8 @@ docker rm -f \
   autho-ldap-ui \
   >/dev/null 2>&1 || true
 
-echo "Demo stack stopped."
+if [[ "$REMOVE_VOLUMES" == "--volumes" || "$REMOVE_VOLUMES" == "-v" ]]; then
+  echo "Stack arrêtée et volumes de démonstration supprimés."
+else
+  echo "Stack arrêtée. Les volumes sont conservés ; utilisez --volumes pour les supprimer."
+fi

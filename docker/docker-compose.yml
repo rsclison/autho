@@ -78,6 +78,18 @@ services:
           --replication-factor 1
         echo "✓ autho-cache-invalidation"
 
+        # Topic compacté des projections relationnelles issues des outbox métier
+        /opt/kafka/bin/kafka-topics.sh --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic authorization-relationships \
+          --partitions 3 \
+          --replication-factor 1 \
+          --config cleanup.policy=compact \
+          --config min.cleanable.dirty.ratio=0.01 \
+          --config segment.ms=100 \
+          --config delete.retention.ms=100
+        echo "✓ authorization-relationships"
+
         echo ""
         echo "=== Topics disponibles ==="
         /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:29092
@@ -164,6 +176,10 @@ services:
       API_CLIENT_ROLES: "governance-admin,policy-admin,policy-reviewer,policy-deployer,relation-admin"
       API_CLIENT_TENANTS: "demo"
       KAFKA_ENABLED: "true"
+      REBAC_KAFKA_ENABLED: "true"
+      REBAC_KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      REBAC_KAFKA_TOPIC: "authorization-relationships"
+      REBAC_KAFKA_GROUP_ID: "autho-demo-rebac-projection"
       AUTHO_DEMO_LICENSE_TIER: "enterprise"
       PDP_CONFIG_PATH: "resources/pdp-prop.docker.properties"
       PIPS_CONFIG_PATH: "resources/pips.docker.edn"

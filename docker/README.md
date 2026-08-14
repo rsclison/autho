@@ -6,7 +6,9 @@ La demonstration se lance depuis la racine du depot avec un seul script :
 ./demo_start.sh
 ```
 
-Les donnees Kafka ne sont pas injectees au demarrage. Cela permet de montrer d'abord le parcours principal sans objets metier publies, puis de basculer vers le mode Kafka dans un second chapitre.
+Les données Kafka ne sont pas injectées au démarrage. Cela permet de montrer
+d'abord le parcours principal sans objets métier ni projection relationnelle,
+puis de basculer vers le mode Kafka dans un second chapitre.
 
 Injecter ensuite les donnees Kafka avec :
 
@@ -55,18 +57,20 @@ phpLDAPadmin :
 - OpenLDAP avec les personnes de demonstration ;
 - Autho en container avec `AUTHO_DEMO_LICENSE_TIER=enterprise` ;
 - RocksDB embarque dans le container Autho, vide au lancement de la demo ;
-- les politiques `DossierDemo` et `FacturePurposeDemo` ;
+- les politiques `DossierDemo`, `FacturePurposeDemo` et `DocumentPartageDemo` ;
+- le rewrite relationnel tenantisé `can-read -> viewer` ;
 - un premier chapitre d'auditabilite avec decisions, bundle signe et verification machine ;
 - une analyse d'impact avant changement de politique ;
 - un chapitre de decisions pour montrer le comportement de base et l'enrichissement PIP ;
-- un chapitre Kafka pour l'alimentation d'objets metier.
+- un chapitre Kafka pour l'alimentation d'objets métier et de projections ReBAC.
 
 Ordre de lecture recommande :
 
 1. auditabilite ;
 2. impact/simulation ;
 3. PIP et enrichissement ;
-4. Kafka comme second mode d'alimentation.
+4. Kafka comme second mode d'alimentation ;
+5. ReBAC hybride : projection, santé, journal et réconciliation.
 
 ## Donnees LDAP
 
@@ -103,6 +107,21 @@ Resultat attendu :
 - `FAC-TEST-02` est refusee, car `80000 > 50000`.
 
 Dans l'Admin UI, l'ecran `Données PIP` permet ensuite de selectionner la classe `Facture` et de visualiser les objets presents dans RocksDB.
+
+## Scénario ReBAC hybride -> projection -> autorisation
+
+Le même `demo_inject_kafka.sh` publie trois événements d’outbox idempotents
+dans le topic compacté `authorization-relationships` : un membre `001` du
+groupe `finance-demo`, ce groupe lecteur de `workspace-demo`, et le document
+`DOC-PARTAGE-001` rattaché à cet espace. Chaque événement est tenantisé,
+attribué à sa source et versionné.
+
+La politique `DocumentPartageDemo` vérifie `can-read`. Son rewrite vers
+`viewer`, les groupes et l’héritage `parent` conduisent à un accès autorisé pour
+`Person:001`; un document sans relation reste refusé. La source métier reste
+propriétaire des faits : Autho ne maintient qu’une projection locale. L’écran
+**Relations** expose son état Kafka, le journal, la quarantaine et une
+réconciliation en lecture seule de `demo-iam`.
 
 ## Scenario evidence -> preuve verifiable
 

@@ -10,7 +10,7 @@ TENANT_ID="${TENANT_ID:-demo}"
 cd "$COMPOSE_DIR"
 
 wait_for_autho() {
-  echo "Waiting for Autho health endpoint..."
+  echo "Attente du point de santé d’Autho…"
   for _ in $(seq 1 90); do
     if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
       curl -fsS "$BASE_URL/health"
@@ -20,7 +20,7 @@ wait_for_autho() {
     sleep 2
   done
 
-  echo "Autho did not become healthy in time." >&2
+  echo "Autho n’est pas devenu disponible à temps." >&2
   docker compose logs --tail=120 autho >&2
   return 1
 }
@@ -33,7 +33,7 @@ curl_json() {
 }
 
 create_demo_policies() {
-  echo "Creating demo policies..."
+  echo "Création des politiques de démonstration…"
 
   curl_json -X PUT "$BASE_URL/v1/policies/DossierDemo" -d '{
     "resourceClass": "DossierDemo",
@@ -127,14 +127,48 @@ create_demo_policies() {
       }
     ]
   }' >/dev/null
+
+  curl_json -X PUT "$BASE_URL/v1/policies/DocumentPartageDemo" -d '{
+    "resourceClass": "DocumentPartageDemo",
+    "strategy": "almost_one_allow_no_deny",
+    "rules": [
+      {
+        "name": "ALLOW-READ-VIA-BUSINESS-RELATION",
+        "operation": "lire",
+        "priority": 10,
+        "effect": "allow",
+        "conditions": [["relation", "$s", "can-read", "$r"]]
+      }
+    ],
+    "tests": [
+      {
+        "name": "membre du groupe finance lit le document partage",
+        "subject": {"id": "001", "class": "Person"},
+        "resource": {"id": "DOC-PARTAGE-001", "class": "DocumentPartageDemo"},
+        "operation": "lire",
+        "expect": "allow"
+      },
+      {
+        "name": "un document sans relation est refuse",
+        "subject": {"id": "001", "class": "Person"},
+        "resource": {"id": "DOC-PARTAGE-REFUSE", "class": "DocumentPartageDemo"},
+        "operation": "lire",
+        "expect": "deny"
+      }
+    ]
+  }' >/dev/null
+
+  curl_json -X PUT "$BASE_URL/v1/relations/rewrites/can-read" -d '{
+    "relations": ["viewer"]
+  }' >/dev/null
 }
 
 show_auditability_story() {
-  echo "Chapter 1: auditability in practice"
-  echo "I generate live decisions first, then export a signed evidence bundle and verify the same trace machine-side."
-  echo "The API key is bound server-side to the LDAP-backed subject Person 001, so the request body stays minimal."
+  echo "Chapitre 1 : auditabilité et preuve"
+  echo "Génération de décisions, puis export et vérification machine d’un bundle d’évidence signé."
+  echo "L’API key est liée côté serveur au sujet LDAP Person 001 ; le corps de requête reste minimal."
 
-  echo "Decision expected: allow (DossierDemo internal)"
+  echo "Décision attendue : allow (DossierDemo interne)"
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
     "resource": {"class": "DossierDemo", "id": "DOS-001", "classification": "internal"},
@@ -143,7 +177,7 @@ show_auditability_story() {
   }'
   echo
 
-  echo "Decision expected: deny (DossierDemo secret)"
+  echo "Décision attendue : deny (DossierDemo secret)"
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
     "resource": {"class": "DossierDemo", "id": "DOS-002", "classification": "secret"},
@@ -152,7 +186,7 @@ show_auditability_story() {
   }'
   echo
 
-  echo "Decision expected before Kafka injection: deny (FAC-TEST-01 is not in RocksDB yet)"
+  echo "Décision attendue avant injection Kafka : deny (FAC-TEST-01 n’est pas encore dans RocksDB)"
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
     "resource": {"class": "Facture", "id": "FAC-TEST-01"},
@@ -160,7 +194,7 @@ show_auditability_story() {
   }'
   echo
 
-  echo "Decision expected: allow (authorized purpose)"
+  echo "Décision attendue : allow (finalité autorisée)"
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
     "resource": {"class": "FacturePurposeDemo", "id": "FAC-001"},
@@ -169,7 +203,7 @@ show_auditability_story() {
   }'
   echo
 
-  echo "Decision expected: deny (forbidden purpose)"
+  echo "Décision attendue : deny (finalité interdite)"
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
     "resource": {"class": "FacturePurposeDemo", "id": "FAC-002"},
@@ -178,27 +212,27 @@ show_auditability_story() {
   }'
   echo
 
-  echo "The decisions above are now persisted in the audit trail."
+  echo "Les décisions ci-dessus sont maintenant dans le journal d’audit."
   show_evidence_bundle
 }
 
 show_evidence_bundle() {
-  echo "Signed evidence export and verification"
+  echo "Export et vérification d’une evidence signée"
   local evidence_bundle_file
   evidence_bundle_file="$(mktemp)"
   trap 'rm -f "${evidence_bundle_file:-}"' RETURN
 
-  echo "Exporting signed evidence bundle for DossierDemo..."
+  echo "Export du bundle signé pour DossierDemo…"
   curl_json "$BASE_URL/v1/evidence?resourceClass=DossierDemo&subject-id=001&limit=1" | tee "$evidence_bundle_file"
   echo
 
-  echo "Verifying the same signed evidence bundle..."
+  echo "Vérification du même bundle signé…"
   curl_json -X POST "$BASE_URL/v1/evidence/verify" -d @"$evidence_bundle_file"
   echo
 }
 
 show_impact_simulation() {
-  echo "Chapter 2: impact analysis before policy rollout"
+  echo "Chapitre 2 : analyse d’impact avant déploiement"
   curl_json -X POST "$BASE_URL/v1/policies/DossierDemo/impact" -d '{
     "candidatePolicy": {
       "resourceClass": "DossierDemo",
@@ -242,8 +276,8 @@ show_impact_simulation() {
 }
 
 show_kafka_mode_preview() {
-  echo "Chapter 3 preview: Kafka mode will replace missing resource enrichment with business objects"
-  echo "Before Kafka injection, FAC-TEST-01 is denied because the resource attributes are not yet present."
+  echo "Chapitre 3 (aperçu) : Kafka alimente les projections d’objets et de relations"
+  echo "Avant injection, FAC-TEST-01 est refusée car ses attributs ne sont pas encore disponibles."
   curl_json -X POST "$BASE_URL/v1/authz/decisions" -d '{
     "subject": {"id": "ignored-with-api-key", "class": "Person"},
     "resource": {"class": "Facture", "id": "FAC-TEST-01"},
@@ -252,8 +286,8 @@ show_kafka_mode_preview() {
   echo
 }
 
-echo "Starting full Autho demo stack..."
-echo "Resetting persisted demo volumes to start without Kafka business data..."
+echo "Démarrage de la stack complète Autho…"
+echo "Réinitialisation des volumes de démonstration pour partir sans projection Kafka…"
 docker compose --profile tools down --remove-orphans --volumes >/dev/null 2>&1 || true
 docker compose up -d --build kafka kafka-init kafka-ui openldap phpldapadmin autho
 
@@ -266,7 +300,7 @@ show_kafka_mode_preview
 
 cat <<EOF
 
-Demo stack is ready.
+La stack de démonstration est prête.
 
 URLs:
 - Autho API:       $BASE_URL
@@ -275,16 +309,16 @@ URLs:
 - phpLDAPadmin:    http://localhost:8091
 
 Credentials:
-- Admin UI mode:   API Key
-- API key:         $API_KEY
-- Tenant:          $TENANT_ID
-- LDAP login DN:   cn=admin,dc=example,dc=com
-- LDAP password:   admin
+- Mode Admin UI :   API Key
+- API key :         $API_KEY
+- Tenant :          $TENANT_ID
+- LDAP login DN :   cn=admin,dc=example,dc=com
+- LDAP password :   admin
 
-Stop everything with:
+Arrêter l’ensemble avec :
   ./demo_stop.sh
 
-Inject Kafka data and retry Kafka/RocksDB decisions with:
+Injecter les objets métier et les projections relationnelles Kafka avec :
   ./demo_inject_kafka.sh
 
 Reset persisted demo volumes with:

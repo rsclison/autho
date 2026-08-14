@@ -90,9 +90,10 @@ Le positionnement produit est open-core :
 ./demo_start.sh
 ```
 
-Ce script lance la stack Docker complete : Autho, Admin UI, Kafka, Kafka UI, OpenLDAP, phpLDAPadmin et RocksDB embarque dans le container Autho. Il cree aussi les politiques de demo et genere des decisions initiales pour alimenter le Dashboard et l'Audit. Les donnees Kafka ne sont pas injectees au demarrage afin de pouvoir montrer le refus avant enrichissement RocksDB.
+Ce script lance la stack Docker complete : Autho, Admin UI, Kafka, Kafka UI, OpenLDAP, phpLDAPadmin et RocksDB embarque dans le container Autho. Il crée les politiques de démo et génère des décisions initiales pour alimenter le Dashboard et l’Audit. Les données Kafka ne sont pas injectées au démarrage afin de montrer le refus avant enrichissement RocksDB et une projection ReBAC initialement vide.
 
-Injecter ensuite les objets metier Kafka et rejouer les decisions `Facture` :
+Injecter ensuite les objets métier Kafka, les événements relationnels d’outbox
+et rejouer les décisions `Facture` et `DocumentPartageDemo` :
 
 ```bash
 ./demo_inject_kafka.sh
@@ -105,6 +106,12 @@ Injecter ensuite les objets metier Kafka et rejouer les decisions `Facture` :
 Utiliser `./demo_stop.sh --volumes` pour arreter la stack et supprimer les volumes persistants de demonstration.
 
 La stack positionne `AUTHO_DEMO_LICENSE_TIER=enterprise` afin de rendre disponibles les fonctionnalites avancees pendant la demonstration.
+
+La démonstration active aussi le consommateur Kafka ReBAC sur le topic
+`authorization-relationships`. Les tuples relationnels sont des projections
+tenantisées, attribuées à leur source et versionnées ; les systèmes métier
+restent propriétaires des relations. Consultez le parcours pas à pas dans
+[GUIDE_DEMONSTRATION.md](docs/GUIDE_DEMONSTRATION.md).
 
 `API_KEY` authentifie une application cliente de confiance. L'identité applicative exposée au PDP est configurée par `API_CLIENT_ID` et `API_CLIENT_CLASS`. Avec une API key standard, Autho ignore le champ `subject` fourni dans le body : un appelant ne peut donc pas se faire passer pour une autre application en postant manuellement `{"subject": {"id": "app-A"}}`.
 

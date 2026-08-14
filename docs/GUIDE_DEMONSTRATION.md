@@ -1,332 +1,221 @@
-# Guide de demonstration Autho
+# Guide de démonstration Autho
 
-Ce guide decrit la demonstration principale via `demo_start.sh`, puis le chapitre Kafka secondaire via `demo_inject_kafka.sh`. `demo_stop.sh` arrete l'ensemble.
+Ce guide décrit le parcours de démonstration complet d’Autho : politiques ABAC,
+audit et preuve, ReBAC hybride, ingestion Kafka, gouvernance et interface
+d’administration. Il est conçu pour un échange de 15 à 20 minutes avec une
+équipe sécurité, IAM ou produit.
 
-La demonstration lance tous les composants utiles :
+Le scénario garde une frontière importante : les applications métier restent
+propriétaires de leurs objets et relations. Autho évalue les règles et maintient
+une projection d’autorisation locale, alimentée ici par des événements Kafka
+qui représenteraient en production une outbox métier.
 
-- Autho avec licence de demonstration `enterprise` ;
-- Admin UI embarquee ;
-- Kafka et Kafka UI ;
-- OpenLDAP et phpLDAPadmin ;
-- RocksDB dans le container Autho ;
-- politiques et decisions initiales pour remplir l'IHM ;
-- script separe d'injection Kafka pour montrer progressivement l'arrivee des donnees metier.
+## Démarrage
 
-La demonstration suit la voie API `v1` et sert aussi a illustrer le packaging commercial: le mode de licence `enterprise` active les fonctions avancees pendant le parcours, tandis que les endpoints historiques restent visibles seulement pour compatibilite. Le fil narratif met d'abord l'accent sur l'auditabilite, puis sur l'impact/simulation et enfin sur l'ingestion Kafka. Le comportement de decision et l'enrichissement PIP restent visibles comme fond technique du parcours.
+Prérequis : Docker avec le plugin `docker compose`, `curl`, et les ports
+locaux `8080`, `8090`, `8091`, `9092` et `389` disponibles.
 
-Ordre de demonstration a commenter a l'oral :
-
-1. decisions live pour generer la trace ;
-2. export du bundle d'evidence signe ;
-3. verification machine du bundle et replay d'audit ;
-4. impact avant rollout ;
-5. Kafka comme second mode d'alimentation metier.
-
-## 1. Prerequis
-
-- Docker avec le plugin `docker compose`.
-- `curl`.
-- Acces aux ports locaux `8080`, `8090`, `8091`, `9092` et `389`.
-
-Depuis la racine du depot :
-
-```bash
-cd /home/rsclison/autho
-```
-
-## 2. Lancer toute la demonstration
-
-Executer uniquement :
+Depuis la racine du dépôt :
 
 ```bash
 ./demo_start.sh
 ```
 
-Le script effectue tout le demarrage :
+Le script repart volontairement de volumes neufs, démarre Autho, Kafka,
+OpenLDAP, Kafka UI et phpLDAPadmin, puis crée les politiques et décisions de
+base. Les objets métier et les relations ne sont pas injectés à ce stade : cela
+permet de rendre visible l’arrivée contrôlée des projections.
 
-1. construit et lance Kafka, OpenLDAP, Autho, Kafka UI et phpLDAPadmin ;
-2. attend que le serveur Autho soit pret ;
-3. repart de volumes Docker vides pour que RocksDB ne contienne pas encore les factures de demonstration ;
-4. cree les politiques `DossierDemo` et `FacturePurposeDemo` ;
-5. execute un premier chapitre d'auditabilite pour generer la trace utile a la preuve ;
-6. exporte puis verifie un paquet d'evidence signe, en montrant aussi le replay d'audit ;
-7. lance une analyse d'impact avant changement de politique ;
-8. presente le cas `Facture` avant injection Kafka, attendu en `deny` car les attributs metier ne sont pas encore presents dans RocksDB.
-
-La stack utilise une licence de demonstration `enterprise`, ce qui active audit, explain, simulate, shadow, metrics, Kafka PIP et fonctions de gouvernance.
-
-## 3. Acces utiles
-
-| Service | URL |
-| --- | --- |
-| Autho API | `http://localhost:8080` |
-| Admin UI | `http://localhost:8080/admin/ui` |
-| Kafka UI | `http://localhost:8090` |
-| phpLDAPadmin | `http://localhost:8091` |
-
-Identifiants :
-
-| Usage | Valeur |
-| --- | --- |
-| Mode de connexion Admin UI | `API Key` |
-| API key | `abcdefghijklmnopqrstuvwxyz123456` |
-| Tenant | `demo` |
-| LDAP login DN | `cn=admin,dc=example,dc=com` |
-| LDAP password | `admin` |
-
-Point a commenter : l'API key de demonstration est liee cote serveur au sujet LDAP `Person` `001`. Les champs `subject` envoyes dans les requetes de test sont volontairement ignores pour les appels API key. L'identite effective vient du serveur.
-Point a commenter supplementaire : toute nouvelle integration doit preferer les exemples `v1` de ce guide plutot que les endpoints historiques.
-
-## 4. Parcours IHM
-
-### 4.1 Connexion
-
-1. ouvrir `http://localhost:8080/admin/ui` ;
-2. choisir le mode `API Key` ;
-3. saisir `abcdefghijklmnopqrstuvwxyz123456` ;
-4. valider.
-
-### 4.2 Dashboard
-
-1. ouvrir `Dashboard` ;
-2. verifier l'indicateur de sante du serveur dans la barre laterale ;
-3. montrer les cartes d'etat ;
-4. montrer les dernieres decisions deja generees par `demo_start.sh`, dont la trace d'audit signable et le refus `Facture` avant injection Kafka.
-
-Points a commenter :
-
-- la licence de demonstration active les fonctions avancees ;
-- l'audit est deja alimente par des decisions `allow` et `deny` ;
-- le Dashboard sert de vue d'exploitation rapide.
-
-### 4.3 Politiques
-
-1. ouvrir `Politiques` ;
-2. selectionner `DossierDemo` ;
-3. montrer la strategie `almost_one_allow_no_deny` ;
-4. montrer les regles `ALLOW-DEMO-CLIENT-READ-INTERNAL` et `DENY-SECRET` ;
-5. ouvrir l'historique de versions ;
-6. selectionner deux versions si elles existent et afficher le diff.
-
-Point a commenter : la creation et la sauvegarde d'une politique passent par validation, versioning et audit. La strategie proposee par l'IHM est une strategie supportee par le backend.
-
-### 4.4 Creation d'une politique depuis l'IHM
-
-1. dans `Politiques`, cliquer sur `Nouvelle politique` ;
-2. saisir `DemoIhmTemp` ;
-3. valider ;
-4. ouvrir la politique creee ;
-5. verifier que la strategie par defaut vaut `almost_one_allow_no_deny` ;
-6. supprimer cette politique si elle n'est plus utile.
-
-Point a commenter : cette manipulation verifie que l'IHM ne cree plus de policy avec l'ancienne strategie `deny-unless-permit`.
-
-### 4.5 Simulateur et explication
-
-1. ouvrir `Simulateur` ;
-2. saisir le sujet `alice` ;
-3. saisir la classe `DossierDemo` ;
-4. saisir la ressource `DOS-002` ;
-5. saisir l'operation `lire` ;
-6. cliquer sur `Expliquer` ;
-7. montrer le badge `Acces refuse` ;
-8. ouvrir le bloc `Explication de la decision` ;
-9. montrer la regle matchante `DENY-SECRET` ;
-10. cliquer sur `Simuler` pour montrer l'evaluation dry-run.
-
-Points a commenter :
-
-- `Expliquer` analyse la politique active ;
-- `Simuler` n'ecrit pas une nouvelle politique et ne remplace pas la production ;
-- le JSON brut reste disponible pour une demonstration technique.
-
-### 4.6 Audit et evidence
-
-1. ouvrir `Audit` ;
-2. filtrer `Classe ressource` avec `DossierDemo` ;
-3. cliquer sur `Rechercher` ;
-4. filtrer successivement sur `Autorise` puis `Refuse` ;
-5. montrer les colonnes horodatage, sujet, ressource, operation, decision et regles ;
-6. cliquer sur `Verifier l'integrite` ;
-7. exporter en CSV.
-
-Points a commenter :
-
-- l'audit est append-only ;
-- chaque entree est chainee pour detecter une modification ;
-- l'export CSV sert aux revues de securite ou de conformite ;
-- le paquet d'evidence exporte par `demo_start.sh` relie la trace humaine au replay machine ;
-- la verification du bundle signe montre que la preuve est transportable et verifiable.
-
-### 4.7 Kafka, RocksDB et LDAP
-
-Ce passage se deroule en deux temps et constitue le chapitre final de la demonstration.
-
-Avant injection :
-
-1. ouvrir `Audit` ;
-2. filtrer `Classe ressource` avec `Facture` ;
-3. montrer la decision `deny` sur `FAC-TEST-01` generee par `demo_start.sh` ;
-4. expliquer que la requete HTTP ne contient que `{"class": "Facture", "id": "FAC-TEST-01"}` ;
-5. expliquer que la regle a besoin de `service` et `montant`, mais que ces attributs ne sont pas encore dans RocksDB.
-
-Injection :
+Pour injecter les données Kafka du second chapitre :
 
 ```bash
 ./demo_inject_kafka.sh
 ```
 
-Apres injection :
-
-1. ouvrir Kafka UI sur `http://localhost:8090` ;
-2. ouvrir le topic `business-objects-compacted` ;
-3. montrer les objets `FAC-TEST-01` et `FAC-TEST-02` ;
-4. revenir dans l'Admin UI ;
-5. ouvrir `Données PIP` ;
-6. selectionner la classe `Facture` ;
-7. montrer les objets stockes dans RocksDB et le JSON detaille ;
-8. ouvrir `Audit` et filtrer sur `Facture` ;
-9. montrer que `FAC-TEST-01` passe maintenant en `allow` ;
-10. montrer que `FAC-TEST-02` reste en `deny`, car son montant depasse le seuil LDAP.
-
-Points a commenter :
-
-- avant injection, la regle ne peut pas matcher car les attributs metier ne sont pas disponibles ;
-- Kafka recoit ensuite les objets metier ;
-- Autho les consomme et les stocke dans RocksDB ;
-- pendant l'autorisation, Autho enrichit la ressource `Facture` depuis RocksDB ;
-- le sujet `001` est enrichi depuis LDAP ;
-- `demo_inject_kafka.sh` vide le cache avant de rejouer la decision pour forcer une evaluation avec les donnees fraiches.
-
-### 4.8 Purpose controle
-
-La politique `FacturePurposeDemo` montre qu'un `purpose` n'est pas seulement documentaire. Il est evalue par la policy.
-
-Dans `Audit`, filtrer sur `FacturePurposeDemo` et montrer :
-
-- une decision `allow` pour `aggregate_invoice_total` ;
-- une decision `deny` pour `export_invoice_details`.
-
-Point a commenter : une application ou un client authentifie ne peut pas obtenir plus de droits en inventant un `purpose`. La policy verifie le couple identite authentifiee, operation, ressource et `context.purpose`.
-
-### 4.9 Gouvernance et impact
-
-1. ouvrir `Politiques` puis `DossierDemo` ;
-2. ouvrir l'action ou l'onglet de gouvernance ;
-3. garder la baseline `Courante` ;
-4. lancer une preview d'impact avec le jeu de requetes propose dans l'ecran ;
-5. montrer les compteurs : changements, revocations, sujets touches, ressources touchees ;
-6. montrer l'historique, le statut de review et le statut de rollout.
-
-Point a commenter : l'IHM ne sert pas seulement a editer une politique. Elle aide a mesurer l'impact avant de deployer, ce qui est utile face a une solution concurrente plus centree sur la decision brute.
-
-### 4.10 Infrastructure et parametres
-
-1. ouvrir `Infrastructure` ;
-2. montrer l'etat des composants, caches et actions d'administration ;
-3. ouvrir `Parametres` ;
-4. montrer la session et le theme.
-
-## 5. Tests API rapides
-
-Ces commandes sont facultatives : `demo_start.sh` les execute deja pour initialiser la demonstration.
-
-Decision autorisee :
-
-```bash
-curl -X POST http://localhost:8080/v1/authz/decisions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
-  -H "X-Tenant-ID: demo" \
-  -d '{
-    "subject": {"id": "ignored-with-api-key", "class": "Person"},
-    "resource": {"class": "DossierDemo", "id": "DOS-001", "classification": "internal"},
-    "operation": "lire",
-    "context": {"on-behalf-of": "alice"}
-  }'
-```
-
-Decision refusee :
-
-```bash
-curl -X POST http://localhost:8080/v1/authz/decisions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
-  -H "X-Tenant-ID: demo" \
-  -d '{
-    "subject": {"id": "ignored-with-api-key", "class": "Person"},
-    "resource": {"class": "DossierDemo", "id": "DOS-002", "classification": "secret"},
-    "operation": "lire",
-    "context": {"on-behalf-of": "alice"}
-  }'
-```
-
-Decision Kafka/RocksDB avant injection, attendue en refus :
-
-```bash
-curl -X POST http://localhost:8080/v1/authz/decisions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
-  -H "X-Tenant-ID: demo" \
-  -d '{
-    "subject": {"id": "ignored-with-api-key", "class": "Person"},
-    "resource": {"class": "Facture", "id": "FAC-TEST-01"},
-    "operation": "lire"
-  }'
-```
-
-Puis injecter les donnees et rejouer les decisions Kafka/RocksDB :
-
-```bash
-./demo_inject_kafka.sh
-```
-
-Purpose refuse :
-
-```bash
-curl -X POST http://localhost:8080/v1/authz/decisions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456" \
-  -H "X-Tenant-ID: demo" \
-  -d '{
-    "subject": {"id": "ignored-with-api-key", "class": "Person"},
-    "resource": {"class": "FacturePurposeDemo", "id": "FAC-002"},
-    "operation": "process",
-    "context": {
-      "purpose": "export_invoice_details",
-      "requestingUser": "alice"
-    }
-  }'
-```
-
-## 6. Arreter toute la demonstration
-
-Executer uniquement :
+Pour arrêter la démo sans perdre les volumes :
 
 ```bash
 ./demo_stop.sh
 ```
 
-Pour arreter et supprimer aussi les volumes persistants de demonstration :
+Ajouter `--volumes` uniquement pour supprimer les données persistantes de la
+démonstration.
 
-```bash
-./demo_stop.sh --volumes
+| Service | Adresse |
+| --- | --- |
+| API et Admin UI | `http://localhost:8080` et `/admin/ui` |
+| Kafka UI | `http://localhost:8090` |
+| phpLDAPadmin | `http://localhost:8091` |
+
+Dans l’Admin UI, choisir **API Key**, saisir
+`abcdefghijklmnopqrstuvwxyz123456` et sélectionner le tenant `demo`. Cette
+clé représente le sujet LDAP `Person` `001` et porte les rôles de gouvernance
+nécessaires à la démonstration. Le sujet fourni dans le JSON des appels API key
+ne permet donc pas d’usurper une autre identité.
+
+## Données préparées
+
+`demo_start.sh` installe les politiques suivantes :
+
+| Politique | Cas illustré |
+| --- | --- |
+| `DossierDemo` | lecture d’un dossier interne et refus explicite d’un dossier secret |
+| `FacturePurposeDemo` | finalité (`purpose`) contrôlée par la politique |
+| `DocumentPartageDemo` | accès relationnel `can-read`, dérivé de `viewer` |
+
+Le second script publie ensuite des données déterministes :
+
+- `FAC-TEST-01`, montant `30000` : autorisée après enrichissement RocksDB ;
+- `FAC-TEST-02`, montant `80000` : refusée, au-dessus du seuil LDAP `50000` ;
+- `Person:001 --member--> Group:finance-demo` ;
+- `Group:finance-demo --viewer--> Folder:workspace-demo` ;
+- `DocumentPartageDemo:DOC-PARTAGE-001 --parent--> Folder:workspace-demo`.
+
+Le rewrite `can-read -> viewer` permet à la règle de rester orientée métier.
+La décision finale démontre groupe, héritage parent et rewrite, sans que la
+politique n’embarque ces faits métier.
+
+## Parcours dans la GUI
+
+L’interface a été conçue pour rester lisible en démonstration : navigation
+latérale repliable sur petit écran, tailles de texte relevées, états de focus
+visibles et surfaces homogènes.
+
+### 1. Dashboard et audit
+
+1. Ouvrir **Dashboard** après `demo_start.sh`.
+2. Montrer les cartes de santé et les dernières décisions déjà produites.
+3. Ouvrir **Audit**, filtrer la classe `DossierDemo`, puis successivement les
+   décisions autorisées et refusées.
+4. Utiliser **Vérifier l’intégrité** et l’export CSV.
+
+À commenter : l’audit est append-only et chaîné ; le script exporte aussi un
+bundle d’evidence signé, puis le vérifie via l’API. La preuve est donc à la
+fois lisible dans l’IHM et vérifiable par une machine.
+
+### 2. Politique, simulateur et impact
+
+1. Dans **Politiques**, ouvrir `DossierDemo`.
+2. Montrer la stratégie `almost_one_allow_no_deny`, les règles d’autorisation
+   et de refus, puis l’historique de versions.
+3. Dans **Simulateur**, évaluer `DossierDemo` / `DOS-002` / `lire` : le refus
+   est expliqué par `DENY-SECRET`.
+4. Revenir sur `DossierDemo`, ouvrir la vue de gouvernance et lancer la
+   prévisualisation d’impact ; le script a déjà généré une analyse candidate.
+
+Le simulateur est un dry-run, tandis que la gouvernance quantifie les décisions
+changées, les révocations et les sujets ou ressources concernés avant rollout.
+
+### 3. Finalité contrôlée
+
+Dans **Audit**, filtrer `FacturePurposeDemo`. Le jeu initial contient :
+
+- `aggregate_invoice_total` : `allow` ;
+- `export_invoice_details` : `deny`.
+
+La finalité est un attribut de contexte évalué par la policy, non une simple
+étiquette déclarative du client.
+
+### 4. Relations ReBAC hybrides
+
+Avant l’injection Kafka, ouvrir **Relations** : le consommateur Kafka est actif
+mais la projection est vide. Ouvrir ensuite **Politiques** >
+`DocumentPartageDemo` et montrer la clause :
+
+```json
+["relation", "$s", "can-read", "$r"]
 ```
 
-`demo_stop.sh` appelle `docker compose down --remove-orphans` puis supprime les containers nommes de la demo s'ils existent encore.
+Exécuter alors `./demo_inject_kafka.sh`, puis revenir dans **Relations** :
 
-## 7. Deroulement conseille en 15 minutes
+1. consulter les tuples projetés et leurs métadonnées de source/version ;
+2. montrer l’état du consommateur, l’âge de projection et le lag ;
+3. consulter le journal de projection ;
+4. ouvrir la réconciliation et le rapport de la source `demo-iam` : aucun
+   écart est attendu ;
+5. vérifier que la quarantaine est vide.
 
-1. `./demo_start.sh`.
-2. Connexion a l'Admin UI.
-3. Dashboard.
-4. Politiques `DossierDemo` et historique.
-5. Simulateur sur `DOS-002`.
-6. Audit filtre sur `DossierDemo`.
-7. Audit filtre sur `Facture` avant injection Kafka : refus attendu.
-8. `./demo_inject_kafka.sh`.
-9. Kafka UI puis écran `Données PIP` pour visualiser les objets RocksDB.
-10. Audit `Facture` apres injection : `FAC-TEST-01` autorisee, `FAC-TEST-02` refusee.
-11. Audit `FacturePurposeDemo`.
-12. Gouvernance et preview d'impact.
-13. `./demo_stop.sh`.
+Dans **Audit**, filtrer `DocumentPartageDemo` :
+
+- `DOC-PARTAGE-001` est autorisé ;
+- `DOC-PARTAGE-REFUSE` est refusé.
+
+La page Relations est une vue d’exploitation de projection, non l’outil qui
+devrait administrer les droits métier au quotidien. En production, une
+correction se fait à la source, qui publie un nouvel événement idempotent ; la
+réconciliation compare seulement les états et ne modifie jamais la projection.
+
+### 5. Kafka, RocksDB et LDAP
+
+Dans Kafka UI, ouvrir les topics `business-objects-compacted` et
+`authorization-relationships`. Le premier contient les factures ; le second
+contient les événements d’outbox relationnels.
+
+Dans l’Admin UI, ouvrir **Données PIP**, sélectionner `Facture` et montrer les
+objets reçus dans RocksDB. Dans **Audit**, filtrer `Facture` :
+
+- avant injection, `FAC-TEST-01` est refusée car ses attributs sont absents ;
+- après injection, elle est autorisée (`30000 < 50000`) ;
+- `FAC-TEST-02` demeure refusée (`80000 > 50000`).
+
+Kafka sert donc ici aux données à forte volumétrie et aux projections
+asynchrones ; LDAP reste le PIP des attributs du sujet. Le script vide le cache
+avant les décisions finales pour rendre ce changement visible immédiatement.
+
+### 6. Infrastructure et paramètres
+
+Terminer par **Infrastructure** pour les composants et caches, puis
+**Paramètres** pour la session et le thème. Cela positionne Autho comme un
+produit opéré, pas seulement comme une bibliothèque d’évaluation de règles.
+
+## Vérifications API utiles
+
+Après injection, le contrôle ReBAC suivant doit retourner une relation
+satisfaite, avec une preuve de parcours :
+
+```bash
+curl -X POST http://localhost:8080/v1/relations/check \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456' \
+  -H 'X-Tenant-ID: demo' \
+  -d '{
+    "subject": {"class": "Person", "id": "001"},
+    "relation": "can-read",
+    "resource": {"class": "DocumentPartageDemo", "id": "DOC-PARTAGE-001"}
+  }'
+```
+
+L’état opérationnel est disponible via :
+
+```bash
+curl -H 'Authorization: X-API-Key abcdefghijklmnopqrstuvwxyz123456' \
+  -H 'X-Tenant-ID: demo' \
+  http://localhost:8080/v1/relations/status
+```
+
+## PostgreSQL en option
+
+La démo utilise H2 par défaut : cela reste le comportement normal si aucune
+variable n’est positionnée. PostgreSQL est compatible et se prépare à part :
+
+```bash
+docker compose up -d postgres
+export AUTHO_DB_KIND=postgres
+export AUTHO_DATABASE_URL=jdbc:postgresql://localhost:5432/autho
+export AUTHO_DATABASE_USER=autho
+export AUTHO_DATABASE_PASSWORD=autho-dev-password
+```
+
+Ces variables sont destinées à un démarrage Autho hors de la stack de démo
+Docker actuelle. La procédure complète de validation et de retour à H2 se
+trouve dans [POSTGRESQL_COMPATIBILITY.md](POSTGRESQL_COMPATIBILITY.md).
+
+## Fil narratif court
+
+1. Démarrer avec `./demo_start.sh` et se connecter à l’Admin UI.
+2. Dashboard, Audit et evidence signée.
+3. Politique `DossierDemo`, Simulateur et impact.
+4. Purpose contrôlé.
+5. Montrer `DocumentPartageDemo` puis lancer `./demo_inject_kafka.sh`.
+6. Kafka UI, Données PIP, Relations et la décision relationnelle auditée.
+7. Infrastructure, puis `./demo_stop.sh`.

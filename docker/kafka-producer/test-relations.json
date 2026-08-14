@@ -1,0 +1,41 @@
+[
+  {
+    "eventId": "demo-relation-001-member-finance",
+    "eventType": "authorization.relationship.upserted",
+    "tenantId": "demo",
+    "source": "demo-iam",
+    "version": "1",
+    "occurredAt": "2026-01-01T09:00:00Z",
+    "tuple": {
+      "subject": {"class": "Person", "id": "001"},
+      "relation": "member",
+      "resource": {"class": "Group", "id": "finance-demo"}
+    }
+  },
+  {
+    "eventId": "demo-relation-002-finance-viewer-workspace",
+    "eventType": "authorization.relationship.upserted",
+    "tenantId": "demo",
+    "source": "demo-iam",
+    "version": "1",
+    "occurredAt": "2026-01-01T09:00:01Z",
+    "tuple": {
+      "subject": {"class": "Group", "id": "finance-demo"},
+      "relation": "viewer",
+      "resource": {"class": "Folder", "id": "workspace-demo"}
+    }
+  },
+  {
+    "eventId": "demo-relation-003-document-parent-workspace",
+    "eventType": "authorization.relationship.upserted",
+    "tenantId": "demo",
+    "source": "demo-documents",
+    "version": "1",
+    "occurredAt": "2026-01-01T09:00:02Z",
+    "tuple": {
+      "subject": {"class": "DocumentPartageDemo", "id": "DOC-PARTAGE-001"},
+      "relation": "parent",
+      "resource": {"class": "Folder", "id": "workspace-demo"}
+    }
+  }
+]
