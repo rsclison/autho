@@ -1,0 +1,9 @@
+; Read-only exports used to compare a business source with Autho's projection.
+; Manual-only source:
+; {:name "iam" :type :rest :url "https://iam.internal/authz/relations/snapshot" :timeout-ms 5000}
+;
+; Periodic, read-only comparison for declared tenants (corrections still come
+; from source events):
+; {:name "iam" :type :rest :url "https://iam.internal/authz/relations/snapshot"
+;  :timeout-ms 5000 :interval-ms 3600000 :tenant-ids ["tenant-a" "tenant-b"]}
+[]

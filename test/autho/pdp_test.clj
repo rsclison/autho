@@ -8,7 +8,9 @@
             [autho.metrics :as metrics]
             [autho.audit :as audit]
             [autho.policy-versions :as pv]
-            [autho.rebac :as rebac]))
+            [autho.rebac :as rebac]
+            [autho.usage :as usage]
+            [autho.features :as features]))
 
 (deftest evalRequest-test
   (testing "evalRequest function"
@@ -417,8 +419,9 @@
                              :operation "read"
                              :conditions [["relation" "$s" "viewer" "$r"]]}]
                     :strategy :almost_one_allow_no_deny}]
-        (rebac/add-relation! (:resource body) "parent" folder)
-        (rebac/add-relation! (:subject body) "viewer" folder)
+        (rebac/with-tenant "default"
+          (rebac/add-relation! (:resource body) "parent" folder)
+          (rebac/add-relation! (:subject body) "viewer" folder))
         (with-redefs [prp/getGlobalPolicy (fn [_] policy)]
           (let [result (explain ring-req body)
                 proof (get-in result [:rules 0 :relationProofs 0])]
@@ -452,7 +455,8 @@
               explanation (explain ring-req body)
               simulation (simulate ring-req body)
                       shared-keys [:allowed? :decisionType :subjectId :effectiveSubject
-                                   :tenantId :resourceClass :resourceId :operation :strategy
+                                   :tenantId :organizationId :projectId :environment
+                                   :resourceClass :resourceId :operation :strategy
                                    :matchedRuleNames :policySource]]
           (doseq [k shared-keys]
             (is (= (get decision k) (get explanation k)) (str "decision/explain differ on " k))
@@ -480,6 +484,97 @@
                 (let [decision (isAuthorized ring-req body)]
                   (is (= true (:allowed? decision)))
                   (is (= "acme" (:tenantId decision))))))))
+
+(deftest is-authorized-records-usage-on-cache-hit-test
+  (let [recorded (atom nil)
+        body {:subject {:id "user1"}
+              :resource {:class "doc" :id "doc-1"}
+              :operation "read"}
+        ring-req {:identity {:auth-method :api-key
+                             :allow-subject-delegation true
+                             :tenantIds ["acme"]
+                             :organizations ["org-acme"]
+                             :projects ["payments"]
+                             :environments ["production"]}}
+        cached {:allowed? true :decisionType "allow"}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] {:strategy :almost_one_allow_no_deny})
+                  local-cache/get-cached-decision (fn [& _] cached)
+                  autho.usage/record-decision! #(reset! recorded %)]
+      (is (= cached (isAuthorized ring-req body)))
+      (is (= {:tenantId "acme"
+              :organizationId "org-acme"
+              :projectId "payments"
+              :environment "production"}
+             (select-keys @recorded [:tenantId :organizationId :projectId :environment]))))))
+
+(deftest hard-quota-rejects-before-evaluating-a-decision-test
+  (let [body {:subject {:id "user1"}
+              :resource {:class "doc" :id "doc-1"}
+              :operation "read"}
+        ring-req {:identity {:auth-method :api-key
+                             :allow-subject-delegation true}}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] {:strategy :almost_one_allow_no_deny})
+                  features/decision-limit (constantly 10)
+                  features/quota-enforcement-mode (constantly :hard)
+                  usage/reserve-decision! (constantly false)]
+      (try
+        (isAuthorized ring-req body)
+        (is false "Expected hard quota rejection")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= 429 (:status (ex-data e))))
+          (is (= "DECISION_QUOTA_EXCEEDED" (:error-code (ex-data e)))))))))
+
+(deftest hard-quota-reservation-replaces-observation-metering-test
+  (let [reserved (atom nil)
+        observed (atom nil)
+        body {:subject {:id "user1"}
+              :resource {:class "doc" :id "doc-1"}
+              :operation "read"}
+        ring-req {:identity {:auth-method :api-key
+                             :allow-subject-delegation true}}
+        cached {:allowed? true :decisionType "allow"}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] {:strategy :almost_one_allow_no_deny})
+                  features/decision-limit (constantly 10)
+                  features/quota-enforcement-mode (constantly :hard)
+                  usage/reserve-decision! (fn [request limit]
+                                            (reset! reserved [request limit])
+                                            true)
+                  usage/record-decision! #(reset! observed %)
+                  local-cache/get-cached-decision (fn [& _] cached)]
+      (is (= cached (isAuthorized ring-req body)))
+      (is (= 10 (second @reserved)))
+      (is (nil? @observed)))))
+
+(deftest decision-contract-includes-identity-bound-product-scope-test
+  (let [body {:subject {:id "user1"}
+              :resource {:class "doc" :id "doc-1"}
+              :operation "read"}
+        ring-req {:identity {:auth-method :api-key
+                             :allow-subject-delegation true
+                             :tenantIds ["acme"]
+                             :organizations ["org-acme"]
+                             :projects ["payments"]
+                             :environments ["production"]}}
+        policy {:rules [{:name "allow-rule" :effect "allow" :priority 10 :operation "read"}]
+                :strategy :almost_one_allow_no_deny}]
+    (with-redefs [prp/getGlobalPolicy (fn [_] policy)
+                  deleg/findDelegation (fn [_] [])
+                  local-cache/get-cached-decision (fn [& _] nil)
+                  local-cache/cache-decision! (fn [& _] nil)
+                  metrics/record-decision! (fn [& _] nil)
+                  audit/log-decision! (fn [& _] nil)
+                  rule/evaluateRule (fn [_ req]
+                                      {:value (= {:tenantId "acme"
+                                                  :organizationId "org-acme"
+                                                  :projectId "payments"
+                                                  :environment "production"}
+                                                 (select-keys (:context req)
+                                                              [:tenantId :organizationId :projectId :environment]))})]
+      (let [decision (isAuthorized ring-req body)]
+        (is (= true (:allowed? decision)))
+        (is (= "org-acme" (:organizationId decision)))
+        (is (= "payments" (:projectId decision)))
+        (is (= "production" (:environment decision)))))))
 
 (deftest decision-denies-cross-tenant-request-test
   (testing "A requested tenant must be allowed by identity tenant claims"

@@ -57,6 +57,12 @@ Des variables optionnelles lient la clé API à une identité applicative, à se
 | `API_CLIENT_ROLES` | Rôles de gouvernance attribués à l'application API key, séparés par des virgules | `governance-admin` |
 | `API_CLIENT_TENANTS` | Tenants autorisés pour cette application API key, séparés par des virgules | aucun |
 | `API_CLIENT_TENANT_ID` | Raccourci pour une application mono-tenant | aucun |
+| `API_CLIENT_ORGANIZATIONS` | Organisations autorisées pour cette application, séparées par des virgules | aucun |
+| `API_CLIENT_ORGANIZATION_ID` | Raccourci pour une application mono-organisation | aucun |
+| `API_CLIENT_PROJECTS` | Projets autorisés pour cette application, séparés par des virgules | aucun |
+| `API_CLIENT_PROJECT_ID` | Raccourci pour une application mono-projet | aucun |
+| `API_CLIENT_ENVIRONMENTS` | Environnements autorisés pour cette application, séparés par des virgules | aucun |
+| `API_CLIENT_ENVIRONMENT` | Raccourci pour une application mono-environnement | aucun |
 | `AUTHO_DEFAULT_TENANT_ID` | Tenant utilisé si aucun tenant explicite ou lié à l'identité n'existe | `default` |
 
 Exemple :
@@ -66,6 +72,9 @@ export API_CLIENT_ID="app-A"
 export API_CLIENT_CLASS="Application"
 export API_CLIENT_ROLES="policy-admin,policy-deployer"
 export API_CLIENT_TENANTS="acme,globex"
+export API_CLIENT_ORGANIZATION_ID="org-acme"
+export API_CLIENT_PROJECT_ID="payments"
+export API_CLIENT_ENVIRONMENTS="staging,production"
 ```
 
 Avec cette configuration, une requête authentifiée par `X-API-Key` est évaluée comme le sujet :
@@ -79,11 +88,19 @@ Avec cette configuration, une requête authentifiée par `X-API-Key` est évalu�
 
 Le champ `subject` du body n'est pas une preuve d'identité et n'est pas utilisé pour déterminer le sujet d'un appel API key standard. Cette règle empêche un utilisateur ou un script d'appeler manuellement une route REST en déclarant `subject.id = app-A`.
 
+### 3.1.1 Registre de clés API
+
+Le bootstrap par `API_KEY` reste disponible pour le premier administrateur. Les clés applicatives de production doivent ensuite être créées via `POST /v1/api-keys` avec un rôle `governance-admin`. Elles sont persistées dans `API_KEYS` sous forme de hash SHA-256 : la valeur `apiKey` n'est retournée qu'une seule fois à la création. Une clé peut être limitée à des rôles, tenants, organisations, projets et environnements, recevoir une date d'expiration, puis être révoquée immédiatement par `DELETE /v1/api-keys/:key-id` sans redémarrage.
+
+Conserver la valeur retournée exclusivement dans un gestionnaire de secrets. La liste des clés ne retourne jamais le secret ni son hash.
+
 Pour les decisions, Autho resout aussi un tenant effectif depuis `X-Tenant-ID`, `?tenantId=`, le body `tenantId`, ou `context.tenantId`. Si l'identité contient des tenants autorisés, le tenant demandé doit être dans cette liste; sinon la requête est refusée avec `TENANT_FORBIDDEN`. Le cache de decisions est séparé par tenant.
+
+Les identifiants `organizationId`, `projectId` et `environment` sont resolus de la meme maniere via le body, le contexte, les paramètres et les headers `X-Organization-ID`, `X-Project-ID`, `X-Environment`. Lorsqu'une identité est scopee, les valeurs demandées doivent appartenir a ses claims; une identité liée a plusieurs valeurs doit les selectionner explicitement. Les erreurs sont respectivement `ORGANIZATION_FORBIDDEN`, `PROJECT_FORBIDDEN`, `ENVIRONMENT_FORBIDDEN` ou `*_SELECTION_REQUIRED`.
 
 Les endpoints de gouvernance qui modifient l'état exigent un rôle applicatif ou JWT. Les routes `/admin/*` exigent désormais soit une API key applicative portant `governance-admin`, soit un JWT avec le rôle `admin`. Pour les endpoints de gouvernance `/v1/*`, `governance-admin` autorise tout ; en production, préférez des rôles minimaux : `policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer` ou `relation-admin`.
 
-### 3.1.1 Variable de licence (optionnelle)
+### 3.1.2 Variable de licence (optionnelle)
 
 `AUTHO_LICENSE_KEY` active les fonctionnalités Pro ou Enterprise. Sans cette variable, le serveur démarre en mode **Free** (décisions de base uniquement).
 
@@ -379,6 +396,10 @@ Réponse attendue :
 |---|---|---|---|
 | `JWT_SECRET` | **Oui** | — | Secret HMAC-SHA256 pour JWT (≥ 32 chars) |
 | `API_KEY` | **Oui** | — | Clé API applications de confiance (≥ 32 chars) |
+| `AUTHO_QUOTA_ENFORCEMENT` | Non | `observation` | `observation`, `soft` ou `hard`; `hard` bloque les décisions au-delà d'une limite de licence finie |
+| `API_CLIENT_ORGANIZATIONS` | Non | — | Organisations autorisées pour l'API key, séparées par des virgules |
+| `API_CLIENT_PROJECTS` | Non | — | Projets autorisés pour l'API key, séparés par des virgules |
+| `API_CLIENT_ENVIRONMENTS` | Non | — | Environnements autorisés pour l'API key, séparés par des virgules |
 | `AUDIT_HMAC_SECRET` | **Oui** | — | Secret HMAC chaîne d'audit (≥ 32 chars) |
 | `AUTHO_LICENSE_KEY` | Non | — | Token de licence Ed25519 (mode Free si absent) |
 | `H2_AUDIT_CIPHER_KEY` | Non* | — | Clé chiffrement AES base audit (recommandé production) |

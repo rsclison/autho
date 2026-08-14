@@ -14,6 +14,14 @@ La demonstration lance tous les composants utiles :
 
 La demonstration suit la voie API `v1` et sert aussi a illustrer le packaging commercial: le mode de licence `enterprise` active les fonctions avancees pendant le parcours, tandis que les endpoints historiques restent visibles seulement pour compatibilite. Le fil narratif met d'abord l'accent sur l'auditabilite, puis sur l'impact/simulation et enfin sur l'ingestion Kafka. Le comportement de decision et l'enrichissement PIP restent visibles comme fond technique du parcours.
 
+Ordre de demonstration a commenter a l'oral :
+
+1. decisions live pour generer la trace ;
+2. export du bundle d'evidence signe ;
+3. verification machine du bundle et replay d'audit ;
+4. impact avant rollout ;
+5. Kafka comme second mode d'alimentation metier.
+
 ## 1. Prerequis
 
 - Docker avec le plugin `docker compose`.
@@ -40,7 +48,7 @@ Le script effectue tout le demarrage :
 2. attend que le serveur Autho soit pret ;
 3. repart de volumes Docker vides pour que RocksDB ne contienne pas encore les factures de demonstration ;
 4. cree les politiques `DossierDemo` et `FacturePurposeDemo` ;
-5. execute un premier chapitre de decisions pour generer la trace d'audit utile a la preuve ;
+5. execute un premier chapitre d'auditabilite pour generer la trace utile a la preuve ;
 6. exporte puis verifie un paquet d'evidence signe, en montrant aussi le replay d'audit ;
 7. lance une analyse d'impact avant changement de politique ;
 8. presente le cas `Facture` avant injection Kafka, attendu en `deny` car les attributs metier ne sont pas encore presents dans RocksDB.

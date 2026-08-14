@@ -60,6 +60,13 @@ phpLDAPadmin :
 - un chapitre de decisions pour montrer le comportement de base et l'enrichissement PIP ;
 - un chapitre Kafka pour l'alimentation d'objets metier.
 
+Ordre de lecture recommande :
+
+1. auditabilite ;
+2. impact/simulation ;
+3. PIP et enrichissement ;
+4. Kafka comme second mode d'alimentation.
+
 ## Donnees LDAP
 
 | uid | Nom | Role | Service | Dept | Seuil | Clearance |

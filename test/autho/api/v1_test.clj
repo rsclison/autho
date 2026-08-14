@@ -17,8 +17,11 @@
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.evidence :as evidence]
             [autho.rebac :as rebac]
+            [autho.rebac-kafka :as rebac-kafka]
+            [autho.reconciliation :as reconciliation]
             [autho.features :as features]
             [autho.topology :as topology]
+            [autho.usage :as usage]
             [jsonista.core :as json]
             [clojure.string :as str])
   (:import (java.io ByteArrayInputStream)))
@@ -382,6 +385,51 @@
       (is (= "AUTHENTICATION_REQUIRED" (get-in body [:error :code])))
       (is (= "Authentication required" (get-in body [:error :message]))))))
 
+(deftest authorization-handler-adds-soft-quota-notice-test
+  (with-redefs [pdp/isAuthorized (fn [_ _]
+                                   {:allowed? true
+                                    :decisionType "allow"
+                                    :tenantId "acme"
+                                    :organizationId "org-acme"
+                                    :projectId "payments"
+                                    :environment "production"})
+                features/entitlements (fn [] {:monthlyDecisionLimit 100})
+                usage/quota-status (fn [_ _]
+                                           {:status "warning"
+                                            :enforcement "observation"
+                                            :monthlyDecisionLimit 100
+                                            :deploymentDecisionCount 80
+                                            :remaining 20
+                                            :percentUsed 80})]
+    (let [request-body (json/write-value-as-string {:subject {:id "user1"}
+                                                    :resource {:class "doc" :id "doc-1"}
+                                                    :operation "read"})
+          response (handlers/is-authorized (mock-request :body request-body))
+          decision (get-in (parse-response-body response) [:data])]
+      (is (= 200 (:status response)))
+      (is (= {:status "warning"
+              :enforcement "observation"
+              :monthlyDecisionLimit 100
+              :deploymentDecisionCount 80
+              :remaining 20
+              :percentUsed 80}
+             (:quota decision))))))
+
+(deftest authorization-handler-omits-quota-notice-when-normal-test
+  (with-redefs [pdp/isAuthorized (fn [_ _]
+                                   {:allowed? true
+                                    :decisionType "allow"
+                                    :tenantId "acme"})
+                features/entitlements (fn [] {:monthlyDecisionLimit 100})
+                usage/quota-status (fn [_ _] {:status "normal"})]
+    (let [request-body (json/write-value-as-string {:subject {:id "user1"}
+                                                    :resource {:class "doc" :id "doc-1"}
+                                                    :operation "read"})
+          decision (get-in (parse-response-body
+                            (handlers/is-authorized (mock-request :body request-body)))
+                           [:data])]
+      (is (nil? (:quota decision))))))
+
 (deftest batch-authorization-returns-canonical-decisions-test
   (with-redefs [pdp/isAuthorized (fn [_ body]
                                    {:allowed true
@@ -728,8 +776,9 @@
                    :relation "viewer"
                    :resource {:class "Document" :id "doc-1"}}
           folder {:class "Folder" :id "folder-1"}]
-      (rebac/add-relation! (:resource payload) "parent" folder)
-      (rebac/add-relation! (:subject payload) "viewer" folder)
+      (rebac/with-tenant "default"
+        (rebac/add-relation! (:resource payload) "parent" folder)
+        (rebac/add-relation! (:subject payload) "viewer" folder))
       (let [response (handlers/check-relation
                       (mock-request :body (json/write-value-as-string payload)))
             body (parse-response-body response)]
@@ -778,10 +827,11 @@
           team {:class "Group" :id "team-a"}
           folder {:class "Folder" :id "folder-1"}
           doc {:class "Document" :id "doc-1"}]
-      (rebac/set-relation-rewrite! "can-read" ["viewer"])
-      (rebac/add-relation! alice "member" team)
-      (rebac/add-relation! team "viewer" folder)
-      (rebac/add-relation! doc "parent" folder)
+      (rebac/with-tenant "default"
+        (rebac/set-relation-rewrite! "can-read" ["viewer"])
+        (rebac/add-relation! alice "member" team)
+        (rebac/add-relation! team "viewer" folder)
+        (rebac/add-relation! doc "parent" folder))
       (let [objects-response (handlers/list-relation-objects
                               (mock-request :body (json/write-value-as-string
                                                    {:subject alice
@@ -809,8 +859,9 @@
     (let [alice {:class "Person" :id "alice"}
           team {:class "Group" :id "team-a"}
           doc {:class "Document" :id "doc-1"}]
-      (rebac/add-relation! alice "member" team)
-      (rebac/add-relation! team "viewer" doc)
+      (rebac/with-tenant "default"
+        (rebac/add-relation! alice "member" team)
+        (rebac/add-relation! team "viewer" doc))
       (let [response (handlers/traverse-relations
                       (mock-request :body (json/write-value-as-string
                                            {:start alice
@@ -834,6 +885,45 @@
         body (parse-response-body response)]
     (is (= 403 (:status response)))
     (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code])))))
+
+(deftest relation-quarantine-requires-admin-role-test
+  (let [response (handlers/list-relation-quarantine
+                  (mock-request :identity {:roles ["policy-viewer"]}))
+        body (parse-response-body response)]
+    (is (= 403 (:status response)))
+    (is (= "GOVERNANCE_FORBIDDEN" (get-in body [:error :code])))))
+
+(deftest relation-quarantine-replay-is-exposed-to-admins-test
+  (let [request (mock-request :identity {:roles ["relation-admin"]})
+        response (with-redefs [rebac-kafka/replay-quarantined!
+                               (fn [id] {:status :applied :id id})]
+                   (handlers/replay-relation-quarantine "q-1" request))
+        body (parse-response-body response)]
+    (is (= 200 (:status response)))
+    (is (= "applied" (get-in body [:data :status])))
+    (is (= "q-1" (get-in body [:data :id])))))
+
+(deftest relation-projection-governance-endpoints-are-exposed-to-admins-test
+  (let [request (governance-request)
+        status-response (with-redefs [rebac-kafka/status (fn [] {:running true :healthy true})]
+                          (handlers/relation-projection-status request))
+        audit-response (with-redefs [rebac/list-projection-audit-events (fn [] [{:id "audit-1" :action "upserted"}])]
+                         (handlers/list-relation-projection-audit request))
+        sources-response (with-redefs [reconciliation/list-sources (fn [] [{:name "iam" :type :rest}])]
+                           (handlers/list-reconciliation-sources request))]
+    (is (= true (get-in (parse-response-body status-response) [:data :healthy])))
+    (is (= "audit-1" (get-in (parse-response-body audit-response) [:data :events 0 :id])))
+    (is (= "iam" (get-in (parse-response-body sources-response) [:data :sources 0 :name])))))
+
+(deftest relation-reconciliation-source-import-is-tenant-scoped-test
+  (let [request (governance-request :headers {"x-tenant-id" "tenant-a"})
+        response (with-redefs [reconciliation/reconcile-source!
+                                (fn [source] {:source source :tenantId rebac/*tenant-id* :expectedCount 0})]
+                   (handlers/import-reconciliation-source "iam" request))
+        body (parse-response-body response)]
+    (is (= 200 (:status response)))
+    (is (= "iam" (get-in body [:data :source])))
+    (is (= "tenant-a" (get-in body [:data :tenantId])))))
 
 (deftest relation-route-forwards-request-test
   (let [captured (atom nil)

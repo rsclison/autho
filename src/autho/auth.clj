@@ -2,6 +2,7 @@
   (:require [buddy.auth :as auth]
             [buddy.auth.backends :as backends]
             [buddy.auth.middleware :as middleware]
+            [autho.api-keys :as api-keys]
             [clojure.string :as str])
   (:import (java.security MessageDigest)))
 
@@ -56,6 +57,28 @@
          (remove empty?)
          vec)))
 
+(defn- configured-values
+  [& variable-names]
+  (->> variable-names
+       (map #(System/getenv %))
+       (remove nil?)
+       (mapcat #(.split % ","))
+       (map str/trim)
+       (remove empty?)
+       vec))
+
+;; These scope bindings make the existing environment-backed key safe to use
+;; with organization/project/environment aware requests. A persistent key
+;; registry will replace this bootstrap configuration in a later increment.
+(def api-client-organizations
+  (configured-values "API_CLIENT_ORGANIZATIONS" "API_CLIENT_ORGANIZATION_ID"))
+
+(def api-client-projects
+  (configured-values "API_CLIENT_PROJECTS" "API_CLIENT_PROJECT_ID"))
+
+(def api-client-environments
+  (configured-values "API_CLIENT_ENVIRONMENTS" "API_CLIENT_ENVIRONMENT"))
+
 ;; --- Authentication Backends ---
 
 ;; 1. JWT Backend for end-users
@@ -76,18 +99,29 @@
 (def api-key-backend
   (backends/token
     {:authfn (fn [req token]
-               (when (constant-time-equals? token api-key)
-                 {:auth-method :api-key
-                  :client-id api-client-id
-                  :tenants api-client-tenants
-                  :roles api-client-roles
-                  :subject (cond-> {:id api-client-id
-                                     :class api-client-class
-                                     :client-id api-client-id
-                                     :roles api-client-roles}
-                              (= 1 (count api-client-tenants))
-                              (assoc :tenant-id (first api-client-tenants)
-                                     :tenantId (first api-client-tenants)))}))
+               (or (api-keys/authenticate token)
+                   (when (constant-time-equals? token api-key)
+                     (let [subject (cond-> {:id api-client-id
+                                        :class api-client-class
+                                        :client-id api-client-id
+                                        :roles api-client-roles}
+                                 (= 1 (count api-client-tenants))
+                                 (assoc :tenant-id (first api-client-tenants)
+                                        :tenantId (first api-client-tenants))
+                                 (= 1 (count api-client-organizations))
+                                 (assoc :organizationId (first api-client-organizations))
+                                 (= 1 (count api-client-projects))
+                                 (assoc :projectId (first api-client-projects))
+                                 (= 1 (count api-client-environments))
+                                 (assoc :environment (first api-client-environments)))]
+                   {:auth-method :api-key
+                    :client-id api-client-id
+                    :tenants api-client-tenants
+                    :organizations api-client-organizations
+                    :projects api-client-projects
+                    :environments api-client-environments
+                    :roles api-client-roles
+                    :subject subject}))))
      :token-name "X-API-Key"}))
 
 ;; --- Middleware ---

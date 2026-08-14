@@ -14,6 +14,72 @@ http://localhost:8080/v1
 
 All endpoints require authentication via JWT token or API key.
 
+## API key registry
+
+`governance-admin` can manage persistent application keys through the control
+plane. Keys are stored as a SHA-256 digest and are returned in clear text only
+once, in the response to their creation. The legacy `API_KEY` environment
+variable remains supported as a bootstrap credential.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/v1/api-keys` | List key metadata (never the secret) |
+| `POST` | `/v1/api-keys` | Create a scoped key |
+| `DELETE` | `/v1/api-keys/:key-id` | Revoke a key immediately |
+
+Example creation request:
+
+```json
+{
+  "name": "payments production",
+  "clientId": "payments-api",
+  "clientClass": "Application",
+  "roles": ["policy-admin"],
+  "tenants": ["acme"],
+  "organizations": ["org-acme"],
+  "projects": ["payments"],
+  "environments": ["production"],
+  "expiresAt": "2027-08-13T00:00:00"
+}
+```
+
+The response contains `apiKey` once, formatted as `ak_<key-id>_<secret>`.
+Store it in a secret manager; Autho cannot retrieve it afterwards. Requests
+authenticated with this key inherit its roles and tenant/organization/project/
+environment scopes. A revoked or expired key is rejected immediately.
+
+## Decision usage
+
+`GET /v1/usage/decisions` returns the observation-only decision count for the
+authenticated administrator's resolved tenant/organization/project/environment
+scope. An optional `?month=YYYY-MM` selects a prior month. The counter is
+incremented once for every production `isAuthorized` call, including cache
+hits; it does not count simulations or explains. The response also returns
+the safe licence entitlements and a deployment-wide quota status: a signed
+monthly decision limit is compared with the total of every scope, while
+`scopeDecisionCount` remains the count for the selected scope.
+
+`quota.status` is `normal`, `warning` from 80%, `exceeded`, or `unlimited`.
+`quota.enforcement` is currently `observation`: quota enforcement is
+intentionally not enabled yet. This endpoint establishes the durable metering
+baseline that will be reconciled before Free/Pro limits can affect decision
+traffic.
+
+When a production decision reaches `warning` or `exceeded`, `POST
+/v1/authz/decisions` and every entry of `POST /v1/authz/batch` add a compact
+`quota` object to the decision. It contains the status, observation mode,
+limit, global count, remaining volume and percentage used. Normal and
+unlimited decisions omit this field to preserve a small hot-path payload.
+
+### Optional hard enforcement
+
+Set `AUTHO_QUOTA_ENFORCEMENT=hard` only after validating metering for the
+deployment. With a finite signed `decisions` entitlement, Autho atomically
+reserves one decision before evaluating a production request. Once the monthly
+limit is reached, it returns HTTP `429` with `DECISION_QUOTA_EXCEEDED`; cached
+decisions are counted as well. The default `observation` mode and the explicit
+`soft` mode never block authorization traffic.
+
 **Headers:**
 ```
 Authorization: Token <jwt-token>
@@ -567,6 +633,12 @@ This checks that the effective subject has the requested relation to the request
 
 Relation tuples are managed through `GET/POST/DELETE /v1/relations`. Mutating tuples requires `governance-admin` or `relation-admin`. Tuples are persisted in the policy H2 database and reloaded into in-memory indexes by `rebac/init!` during PDP startup.
 
+The local graph is a tenant-scoped authorization projection rather than the
+business source of truth. A policy may resolve a relation from that projection,
+a named relation PIP, or an explicit hybrid strategy. Projected tuples carry
+source, event/version and freshness metadata; they can expire and are never
+allowed to cross tenants.
+
 Policy conditions may reference request context attributes with `$c` or `["Context", "$c", "<attribute>"]`. This is intended for controlled business context such as `purpose`, not for authenticating the caller:
 
 ```json
@@ -1057,7 +1129,37 @@ Delete a direct subject-relation-resource tuple. Requires `governance-admin` or 
 }
 ```
 
-Current limitation: Autho supports direct checks, list objects/list subjects, explicit relation traversals, persisted relation rewrites, nested groups through `member` tuples, and resource-parent inheritance through `parent` tuples. Distributed external relation storage is not implemented yet.
+#### Projection operations and reconciliation
+
+All endpoints in this section require `relation-admin` or `governance-admin`.
+They are intended for operating an authorization projection, not for editing
+business facts directly.
+
+- `GET /v1/relations/status` returns the Kafka consumer state, projection age,
+  lag by partition, quarantine count and the configured health thresholds.
+- `GET /v1/relations/quarantine` lists invalid source events. After correction
+  at the source, `POST /v1/relations/quarantine/:id/replay` retries one entry.
+- `GET /v1/relations/audit` returns the tenant-scoped projection operation log.
+- `POST /v1/relations/reconcile` accepts `{ "source": "…", "tuples": [...] }`
+  and compares the supplied snapshot without modifying Autho. The response
+  contains `missing`, `obsolete`, `conflicts` (when comparable source versions
+  disagree) and `errors`.
+- `GET /v1/relations/reconcile/reports` lists persisted reconciliation
+  summaries. `GET /v1/relations/reconcile/sources` lists configured sources,
+  and `POST /v1/relations/reconcile/:source/import` performs their read-only
+  REST snapshot import.
+
+Sources may configure periodic reconciliation with `interval-ms` and explicit
+`tenant-ids` in `reconciliation-sources.edn`. Autho only reports drift; the
+source must publish corrective events. For a source-driven cascade revocation,
+send `authorization.subject.deleted` with `subject`, or
+`authorization.resource.deleted` with `resource`, together with `eventId`,
+`tenantId`, `source` and `version`.
+
+Autho supports direct checks, list objects/list subjects, explicit relation
+traversals, tenant-isolated persisted rewrites, nested groups through `member`,
+resource-parent inheritance through `parent`, relation PIPs and a governed
+Kafka/outbox projection. It is deliberately not the owner of domain relations.
 
 ### Cache Management Endpoints
 

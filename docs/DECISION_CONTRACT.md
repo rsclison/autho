@@ -21,6 +21,9 @@ Tout endpoint de decision doit exposer les champs suivants :
 | `allowed?` | boolean | Decision booleenne canonique |
 | `decisionType` | string | `allow` ou `deny` |
 | `tenantId` | string | Tenant effectif utilise pour la decision |
+| `organizationId` | string/null | Organisation effective, liee a l'identite quand elle est scopee |
+| `projectId` | string/null | Projet effectif, lie a l'identite quand elle est scopee |
+| `environment` | string/null | Environnement effectif, lie a l'identite quand elle est scopee |
 | `subjectId` | string | Identifiant du sujet effectif |
 | `effectiveSubject` | object | Sujet reel utilise par le PDP apres authentification/enrichissement |
 | `resourceClass` | string | Classe de ressource |
@@ -50,6 +53,7 @@ Ils ne doivent pas etre utilises comme base de nouveaux developpements. Les nouv
 4. `policySource` vaut `current` pour une decision normale, `provided` pour une simulation inline, `version` pour une simulation sur version archivee.
 5. Le batch v1 renvoie une liste de decisions canoniques dans `data.results`.
 6. `tenantId` est resolu cote serveur depuis l'identite, `X-Tenant-ID`, les parametres ou le contexte de requete; si l'identite declare une liste de tenants, le tenant demande doit en faire partie.
+7. `organizationId`, `projectId` et `environment` sont resolves selon le meme principe depuis les claims d'identite et, lorsqu'ils sont presents, une valeur demandee doit appartenir au scope de l'identite. Une identite liee a plusieurs valeurs doit selectionner explicitement celle a utiliser.
 
 ## Strategie de conflit supportee
 

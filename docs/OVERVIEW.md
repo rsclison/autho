@@ -33,7 +33,7 @@ Unlike RBAC (fixed roles), ABAC evaluates dynamic attributes of the subject, the
 
 ### ReBAC — Relationship-Based Access Control
 
-Autho now has a first ReBAC layer for relationship tuples:
+Autho has a hybrid ReBAC layer for relationship tuples:
 
 ```json
 {
@@ -49,7 +49,15 @@ Policies can reference this graph with:
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
 
-Autho checks direct tuples, persisted relation rewrites, nested group membership through `member` tuples, and resource-parent inheritance through `parent` tuples. For example, if `can-read` rewrites to `viewer`, Alice is a member of a team, the team is `viewer` of a folder, and a document belongs to that folder, Alice is treated as having `can-read` on the document. The relation API can also list accessible objects for a subject, list authorized subjects for an object, and traverse explicit relation paths using forward or inverse indexes. Tuples and rewrites are persisted in the policy H2 database and loaded into in-memory indexes at startup. Distributed relation storage is planned follow-up work.
+Autho checks direct tuples, persisted relation rewrites, nested group membership through `member` tuples, and resource-parent inheritance through `parent` tuples. For example, if `can-read` rewrites to `viewer`, Alice is a member of a team, the team is `viewer` of a folder, and a document belongs to that folder, Alice is treated as having `can-read` on the document. The relation API can also list accessible objects for a subject, list authorized subjects for an object, and traverse explicit relation paths using forward or inverse indexes.
+
+The local graph is an authorization projection, not the business source of
+truth. A relation can be resolved from the local projection, a named relation
+PIP, or a deliberate hybrid strategy. Projected tuples and rewrites are tenant
+isolated, attributed to a source, versioned, idempotently ingestible from
+Kafka/outbox, and may expire. Operations users can inspect the projection
+status, quarantine invalid messages and reconcile a read-only source snapshot;
+corrections always return through the source’s event flow.
 
 ### XACML Architecture (PDP / PRP / PIP / PAP)
 
@@ -95,6 +103,9 @@ Autho checks direct tuples, persisted relation rewrites, nested group membership
 - `POST /v1/relations` — add a tuple, protected by `relation-admin` or `governance-admin`
 - `POST /v1/relations/check` — explain a direct or parent-inherited relation check
 - `DELETE /v1/relations` — remove a tuple, protected by `relation-admin` or `governance-admin`
+- `GET /v1/relations/status` — projection/Kafka freshness and lag
+- `GET /v1/relations/quarantine` — rejected event investigation and controlled replay
+- `POST /v1/relations/reconcile` — read-only source/projection comparison
 
 ### Time-Travel
 - **`POST /isAuthorized-at-time`** — decision as it would have been at a past instant T

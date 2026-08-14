@@ -10,6 +10,7 @@ const labels: Record<string, string> = {
   '/simulator':      'Simulateur',
   '/audit':          'Journal d\'audit',
   '/pip-data':       'Données PIP',
+  '/relations':      'Relations',
   '/infrastructure': 'Infrastructure',
   '/settings':       'Paramètres',
 }

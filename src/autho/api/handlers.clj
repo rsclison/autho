@@ -14,8 +14,14 @@
             [autho.policy-risk-profiles :as risk-profiles]
             [autho.policy-versions :as pv]
             [autho.policy-bundles :as policy-bundles]
+            [autho.api-keys :as api-keys]
+            [autho.usage :as usage]
+            [autho.tenant :as tenant]
             [autho.evidence :as evidence]
             [autho.rebac :as rebac]
+            [autho.rebac-kafka :as rebac-kafka]
+            [autho.reconciliation :as reconciliation]
+            [autho.relation-provider :as relation-provider]
             [autho.features :as features]
             [jsonista.core :as json]
             [clojure.set :as set]
@@ -24,6 +30,8 @@
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.api.handlers"))
+
+(declare require-body)
 
 (defn- policy-exception->response
   [exception default-code default-prefix]
@@ -109,6 +117,75 @@
                        :requiredRoles (sort (conj allowed "governance-admin"))
                        :roles (sort roles)})))))
 
+(defn- api-key-payload!
+  [body]
+  (when-not (and (map? body)
+                 (not (str/blank? (str (:name body))))
+                 (not (str/blank? (str (:clientId body)))))
+    (throw (ex-info "API key requires name and clientId"
+                    {:status 400 :error-code "INVALID_API_KEY"})))
+  body)
+
+(defn list-api-keys
+  [request]
+  (try
+    (require-governance-role! request #{"governance-admin"})
+    (response/success-response {:apiKeys (api-keys/list-keys)})
+    (catch clojure.lang.ExceptionInfo e
+      (exception->response e "API_KEY_ERROR" "Failed to list API keys: "))))
+
+(defn create-api-key
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (require-governance-role! request #{"governance-admin"})
+        (let [key-record (api-keys/create-key! (api-key-payload! body-or-response))]
+          (response/created-response key-record
+                                     (str "/v1/api-keys/" (:key_id key-record))))
+        (catch clojure.lang.ExceptionInfo e
+          (exception->response e "API_KEY_ERROR" "Failed to create API key: "))
+        (catch Exception e
+          (log/error e "Failed to create API key")
+          (response/error-response "API_KEY_ERROR" "Failed to create API key" 500))))))
+
+(defn revoke-api-key
+  [key-id request]
+  (try
+    (require-governance-role! request #{"governance-admin"})
+    (response/success-response {:apiKey (api-keys/revoke-key! key-id)})
+    (catch clojure.lang.ExceptionInfo e
+      (exception->response e "API_KEY_ERROR" "Failed to revoke API key: "))
+    (catch Exception e
+      (log/error e "Failed to revoke API key")
+      (response/error-response "API_KEY_ERROR" "Failed to revoke API key" 500))))
+
+(defn decision-usage
+  "Returns observation-only decision usage for the caller's resolved scope.
+   The endpoint is intentionally restricted to organization-level admins until
+   a dedicated billing-admin role is introduced."
+  [request]
+  (try
+    (require-governance-role! request #{"governance-admin"})
+    (let [scope (tenant/resolve-tenant request {})
+          month (or (get-in request [:params :month])
+                    (get-in request [:params "month"]))
+          entitlement (features/entitlements)
+          quota (if month
+                  (usage/quota-status scope month (:monthlyDecisionLimit entitlement))
+                  (usage/quota-status scope (:monthlyDecisionLimit entitlement)))]
+      (response/success-response {:usage (if month
+                                          (usage/usage scope month)
+                                          (usage/usage scope))
+                                  :entitlements entitlement
+                                  :quota quota}))
+    (catch clojure.lang.ExceptionInfo e
+      (exception->response e "USAGE_ERROR" "Failed to retrieve decision usage: "))
+    (catch Exception e
+      (log/error e "Failed to retrieve decision usage")
+      (response/error-response "USAGE_ERROR" "Failed to retrieve decision usage" 500))))
+
 (defn- validate-relation-payload!
   [body]
   (let [subject (:subject body)
@@ -127,7 +204,9 @@
                        :error-code "INVALID_RELATION_TUPLE"})))
     {:subject subject
      :relation relation
-     :resource resource}))
+     :resource resource
+     :metadata (select-keys body [:source :sourceEventId :sourceVersion
+                                  :occurredAt :receivedAt :expiresAt])}))
 
 (defn- valid-relation-entity?
   [entity]
@@ -242,6 +321,13 @@
                        :error-code "INVALID_RELATION_REWRITE"})))
     (mapv str relations)))
 
+(defn- with-relation-tenant
+  "Resolves the authoritative tenant before a relation API operation.
+   Tuple payloads do not select their own tenant."
+  [request body]
+  (let [resolved (tenant/resolve-tenant request (or body {}))]
+    (assoc request :tenant resolved :tenantId (:tenantId resolved))))
+
 (defn require-body
   [request]
   (if-let [body (:body-params request)]
@@ -324,10 +410,32 @@
           (catch Exception e
             (exception->response e error-code error-prefix)))))))
 
+(defn- soft-quota-notice
+  "Returns an additive quota notice only once a finite entitlement needs the
+   caller's attention. Decisions remain authoritative: this is observation and
+   soft-limit signaling, never authorization enforcement."
+  [decision]
+  (let [scope (select-keys decision [:tenantId :organizationId :projectId :environment])
+        limit (:monthlyDecisionLimit (features/entitlements))]
+    (when (and (seq scope) (some? limit))
+      (let [quota (usage/quota-status scope limit)]
+        (when (contains? #{"warning" "exceeded"} (:status quota))
+          (select-keys quota [:status :enforcement :monthlyDecisionLimit
+                              :deploymentDecisionCount :remaining :percentUsed]))))))
+
+(defn- attach-soft-quota-notice
+  [decision]
+  (if-let [notice (soft-quota-notice decision)]
+    (assoc decision :quota notice)
+    decision))
+
 (defn is-authorized
   [request]
   (log/debug "Processing isAuthorized request")
-  (handle-authz-request request :isAuthorized pdp/isAuthorized "AUTHZ_ERROR" "Authorization failed: "))
+  (handle-authz-request request :isAuthorized
+                        (fn [ring-request body]
+                          (attach-soft-quota-notice (pdp/isAuthorized ring-request body)))
+                        "AUTHZ_ERROR" "Authorization failed: "))
 
 (defn who-authorized
   [request]
@@ -629,7 +737,9 @@
                                      (str "Batch size exceeds limit of " max-batch-size) 400)
 
             :else
-            (let [results (doall (pmap #(pdp/isAuthorized request %) requests))]
+            (let [results (doall (pmap #(attach-soft-quota-notice
+                                         (pdp/isAuthorized request %))
+                                      requests))]
               (response/success-response {:results results
                                           :count (count results)}))))
         (catch Exception e
@@ -1226,12 +1336,118 @@
                                (str "Failed to rollback: " (.getMessage e)) 500))))
 
 (defn list-relations
-  []
-  (response/success-response {:relations (rebac/list-relations)}))
+  ([] (response/success-response {:relations (rebac/list-relations)}))
+  ([request]
+   (let [request (with-relation-tenant request {})]
+     (response/success-response
+      {:relations (rebac/with-tenant (:tenantId request)
+                    (rebac/list-relations))}))))
 
 (defn list-relation-rewrites
-  []
-  (response/success-response {:rewrites (rebac/list-relation-rewrites)}))
+  ([] (response/success-response
+       {:rewrites (rebac/with-tenant "default" (rebac/list-relation-rewrites))}))
+  ([request]
+   (let [scoped-request (with-relation-tenant request {})]
+     (response/success-response
+      {:rewrites (rebac/with-tenant (:tenantId scoped-request)
+                   (rebac/list-relation-rewrites))}))))
+
+(defn list-relation-quarantine
+  [request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (let [entries (rebac/quarantined-projection-events)]
+      (response/success-response {:entries entries :count (count entries)}))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RELATION_QUARANTINE_ERROR" "Failed to list relation quarantine: "))
+    (catch Exception e
+      (log/error e "Error listing relation quarantine")
+      (response/error-response "RELATION_QUARANTINE_ERROR"
+                               (str "Failed to list relation quarantine: " (.getMessage e)) 500))))
+
+(defn relation-projection-status
+  [request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (response/success-response (rebac-kafka/status))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RELATION_STATUS_ERROR" "Failed to get relation status: "))))
+
+(defn list-relation-projection-audit
+  [request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (let [scoped-request (with-relation-tenant request {})
+          events (rebac/with-tenant (:tenantId scoped-request)
+                   (rebac/list-projection-audit-events))]
+      (response/success-response {:events events :count (count events)}))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RELATION_AUDIT_ERROR" "Failed to list relation projection audit: "))))
+
+(defn replay-relation-quarantine
+  [id request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (response/success-response (rebac-kafka/replay-quarantined! id))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RELATION_QUARANTINE_ERROR" "Failed to replay relation quarantine: "))
+    (catch Exception e
+      (log/error e "Error replaying relation quarantine")
+      (response/error-response "RELATION_QUARANTINE_ERROR"
+                               (str "Failed to replay relation quarantine: " (.getMessage e)) 500))))
+
+(defn reconcile-relations
+  [request]
+  (let [body-or-response (require-body request)]
+    (if (response-map? body-or-response)
+      body-or-response
+      (try
+        (require-governance-role! request #{"relation-admin"})
+        (let [source (:source body-or-response)
+              tuples (:tuples body-or-response)]
+          (when (or (str/blank? (str source)) (not (sequential? tuples)))
+            (throw (ex-info "Reconciliation requires source and tuples"
+                            {:status 400 :error-code "INVALID_RECONCILIATION_SNAPSHOT"})))
+          (let [scoped-request (with-relation-tenant request body-or-response)
+                report (rebac/with-tenant (:tenantId scoped-request)
+                         (rebac/reconcile-snapshot source tuples))]
+            (response/success-response report)))
+        (catch clojure.lang.ExceptionInfo e
+          (policy-exception->response e "RECONCILIATION_ERROR" "Failed to reconcile relations: "))
+        (catch Exception e
+          (log/error e "Error reconciling relations")
+          (response/error-response "RECONCILIATION_ERROR"
+                                   (str "Failed to reconcile relations: " (.getMessage e)) 500))))))
+
+(defn list-reconciliation-reports
+  [request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (let [scoped-request (with-relation-tenant request {})
+          reports (rebac/with-tenant (:tenantId scoped-request)
+                    (rebac/list-reconciliation-reports))]
+      (response/success-response {:reports reports :count (count reports)}))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RECONCILIATION_ERROR" "Failed to list reconciliation reports: "))))
+
+(defn import-reconciliation-source
+  [source request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (let [scoped-request (with-relation-tenant request {})
+          report (rebac/with-tenant (:tenantId scoped-request)
+                   (reconciliation/reconcile-source! source))]
+      (response/success-response report))
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RECONCILIATION_ERROR" "Failed to import reconciliation source: "))))
+
+(defn list-reconciliation-sources
+  [request]
+  (try
+    (require-governance-role! request #{"relation-admin"})
+    (response/success-response {:sources (reconciliation/list-sources)})
+    (catch clojure.lang.ExceptionInfo e
+      (policy-exception->response e "RECONCILIATION_ERROR" "Failed to list reconciliation sources: "))))
 
 (defn upsert-relation-rewrite
   [relation request]
@@ -1241,7 +1457,9 @@
       (try
         (require-governance-role! request #{"relation-admin"})
         (let [relations (validate-relation-rewrite-payload! relation body-or-response)
-              rewrite (rebac/set-relation-rewrite! relation relations)]
+              scoped-request (with-relation-tenant request body-or-response)
+              rewrite (rebac/with-tenant (:tenantId scoped-request)
+                        (rebac/set-relation-rewrite! relation relations))]
           (response/success-response {:relation relation
                                       :relations rewrite}))
         (catch clojure.lang.ExceptionInfo e
@@ -1256,7 +1474,9 @@
   [relation request]
   (try
     (require-governance-role! request #{"relation-admin"})
-    (rebac/delete-relation-rewrite! relation)
+    (let [scoped-request (with-relation-tenant request {})]
+      (rebac/with-tenant (:tenantId scoped-request)
+        (rebac/delete-relation-rewrite! relation)))
     (response/success-response {:deleted true
                                 :relation relation})
     (catch clojure.lang.ExceptionInfo e
@@ -1274,8 +1494,10 @@
       body-or-response
       (try
         (require-governance-role! request #{"relation-admin"})
-        (let [{:keys [subject relation resource]} (validate-relation-payload! body-or-response)
-              tuple (rebac/add-relation! subject relation resource)]
+        (let [{:keys [subject relation resource metadata]} (validate-relation-payload! body-or-response)
+              scoped-request (with-relation-tenant request body-or-response)
+              tuple (rebac/with-tenant (:tenantId scoped-request)
+                      (rebac/add-relation! subject relation resource metadata))]
           (response/created-response tuple "/v1/relations"))
         (catch clojure.lang.ExceptionInfo e
           (policy-exception->response e "RELATION_ERROR" "Failed to create relation: "))
@@ -1292,7 +1514,8 @@
       body-or-response
       (try
         (let [{:keys [subject relation resource]} (validate-relation-payload! body-or-response)
-              explanation (rebac/explain-relation subject relation resource)]
+              scoped-request (with-relation-tenant request body-or-response)
+              explanation (relation-provider/check-relation scoped-request subject relation resource)]
           (response/success-response explanation))
         (catch clojure.lang.ExceptionInfo e
           (policy-exception->response e "RELATION_CHECK_ERROR" "Failed to check relation: "))
@@ -1309,7 +1532,8 @@
       body-or-response
       (try
         (let [{:keys [subject relation options]} (validate-list-objects-payload! body-or-response)
-              resources (rebac/list-accessible-resources subject relation options)]
+              scoped-request (with-relation-tenant request body-or-response)
+              resources (relation-provider/list-objects scoped-request subject relation options)]
           (response/success-response {:resources resources
                                       :count (count resources)}))
         (catch clojure.lang.ExceptionInfo e
@@ -1327,7 +1551,8 @@
       body-or-response
       (try
         (let [{:keys [resource relation options]} (validate-list-subjects-payload! body-or-response)
-              subjects (rebac/list-authorized-subjects resource relation options)]
+              scoped-request (with-relation-tenant request body-or-response)
+              subjects (relation-provider/list-subjects scoped-request resource relation options)]
           (response/success-response {:subjects subjects
                                       :count (count subjects)}))
         (catch clojure.lang.ExceptionInfo e
@@ -1345,7 +1570,8 @@
       body-or-response
       (try
         (let [{:keys [start steps options]} (validate-traverse-payload! body-or-response)
-              result (rebac/traverse-relations start steps options)]
+              scoped-request (with-relation-tenant request body-or-response)
+              result (relation-provider/traverse scoped-request start steps options)]
           (response/success-response result))
         (catch clojure.lang.ExceptionInfo e
           (policy-exception->response e "RELATION_TRAVERSAL_ERROR" "Failed to traverse relations: "))
@@ -1363,7 +1589,9 @@
       (try
         (require-governance-role! request #{"relation-admin"})
         (let [{:keys [subject relation resource]} (validate-relation-payload! body-or-response)
-              tuple (rebac/remove-relation! subject relation resource)]
+              scoped-request (with-relation-tenant request body-or-response)
+              tuple (rebac/with-tenant (:tenantId scoped-request)
+                      (rebac/remove-relation! subject relation resource))]
           (response/success-response {:deleted true
                                       :relation tuple}))
         (catch clojure.lang.ExceptionInfo e

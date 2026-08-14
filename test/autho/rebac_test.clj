@@ -118,6 +118,21 @@
             :relationPath ["can-read" "viewer"]}
            (rebac/explain-relation subject "can-read" resource)))))
 
+(deftest relation-rewrites-are-tenant-isolated-test
+  (let [subject {:class "Person" :id "alice"}
+        resource {:class "Document" :id "doc-1"}]
+    (rebac/with-tenant "tenant-a"
+      (rebac/set-relation-rewrite! "can-read" ["viewer"])
+      (rebac/add-relation! subject "viewer" resource)
+      (is (true? (rebac/has-relation? subject "can-read" resource))))
+    (rebac/with-tenant "tenant-b"
+      (rebac/set-relation-rewrite! "can-read" ["editor"])
+      (rebac/add-relation! subject "viewer" resource)
+      (is (false? (rebac/has-relation? subject "can-read" resource)))
+      (is (= {"can-read" ["editor"]} (rebac/list-relation-rewrites))))
+    (rebac/with-tenant "tenant-a"
+      (is (= {"can-read" ["viewer"]} (rebac/list-relation-rewrites))))))
+
 (deftest relation-rewrite-stops-on-cycles-test
   (let [subject {:class "Person" :id "alice"}
         resource {:class "Document" :id "doc-1"}]
@@ -232,6 +247,149 @@
           (is (true? (rebac/has-relation? subject "viewer" resource)))
           (finally
             (rebac/clear-relations! {:persist true})))))))
+
+(deftest durable-relations-are-isolated-by-tenant-test
+  (let [test-db {:classname "org.h2.Driver"
+                 :subprotocol "h2:mem"
+                 :subname "rebac-tenant-test;DB_CLOSE_DELAY=-1"
+                 :user "sa"
+                 :password ""}
+        subject {:class "Person" :id "alice"}
+        resource {:class "Document" :id "doc-1"}]
+    (with-redefs-fn {#'rebac/db test-db
+                     #'rebac/persistence-enabled? (atom false)}
+      (fn []
+        (try
+          (jdbc/execute! test-db ["DROP TABLE IF EXISTS REBAC_RELATIONS"])
+          (rebac/init!)
+          (rebac/with-tenant "tenant-a" (rebac/add-relation! subject "viewer" resource))
+          (rebac/with-tenant "tenant-b" (rebac/add-relation! subject "viewer" resource))
+          (rebac/clear-relations!)
+          (rebac/init!)
+          (is (true? (rebac/with-tenant "tenant-a"
+                       (rebac/has-relation? subject "viewer" resource))))
+          (is (true? (rebac/with-tenant "tenant-b"
+                       (rebac/has-relation? subject "viewer" resource))))
+          (is (= 1 (count (rebac/with-tenant "tenant-a" (rebac/list-relations)))))
+          (is (= 1 (count (rebac/with-tenant "tenant-b" (rebac/list-relations)))))
+          (finally
+            (rebac/clear-relations! {:persist true})))))))
+
+(deftest projection-metadata-survives-reinit-and-expiration-revokes-test
+  (let [test-db {:classname "org.h2.Driver"
+                 :subprotocol "h2:mem"
+                 :subname "rebac-metadata-test;DB_CLOSE_DELAY=-1"
+                 :user "sa"
+                 :password ""}
+        subject {:class "Person" :id "alice"}
+        resource {:class "Document" :id "doc-1"}]
+    (with-redefs-fn {#'rebac/db test-db
+                     #'rebac/persistence-enabled? (atom false)}
+      (fn []
+        (try
+          (jdbc/execute! test-db ["DROP TABLE IF EXISTS REBAC_RELATIONS"])
+          (rebac/init!)
+          (rebac/with-tenant "tenant-a"
+            (rebac/add-relation! subject "viewer" resource
+                                 {:source "iam" :sourceEventId "event-42"
+                                  :sourceVersion 48 :occurredAt "2026-08-13T10:00:00Z"}))
+          (rebac/clear-relations!)
+          (rebac/init!)
+          (let [tuple (first (rebac/with-tenant "tenant-a" (rebac/list-relations)))]
+            (is (= {:source "iam" :sourceEventId "event-42"
+                    :sourceVersion "48" :occurredAt "2026-08-13T10:00:00Z"}
+                   (:projection tuple))))
+          (rebac/with-tenant "tenant-a"
+            (rebac/add-relation! subject "viewer" resource
+                                 {:source "iam" :expiresAt "2020-01-01T00:00:00Z"}))
+          (is (false? (rebac/with-tenant "tenant-a"
+                        (rebac/has-relation? subject "viewer" resource))))
+          (finally
+            (rebac/clear-relations! {:persist true})))))))
+
+(deftest projection-events-are-idempotent-and-persist-provenance-test
+  (let [test-db {:classname "org.h2.Driver"
+                 :subprotocol "h2:mem"
+                 :subname "rebac-events-test;DB_CLOSE_DELAY=-1"
+                 :user "sa"
+                 :password ""}
+        event {:eventId "event-upsert-1"
+               :eventType "authorization.relationship.upserted"
+               :tenantId "tenant-a"
+               :source "iam"
+               :version 48
+               :occurredAt "2026-08-13T10:00:00Z"
+               :tuple {:subject {:class "Person" :id "alice"}
+                       :relation "member"
+                       :resource {:class "Group" :id "finance"}}}]
+    (with-redefs-fn {#'rebac/db test-db
+                     #'rebac/persistence-enabled? (atom false)}
+      (fn []
+        (try
+          (jdbc/execute! test-db ["DROP TABLE IF EXISTS REBAC_RELATIONS"])
+          (jdbc/execute! test-db ["DROP TABLE IF EXISTS REBAC_PROJECTION_EVENTS"])
+          (rebac/init!)
+          (is (= :applied (:status (rebac/apply-projection-event! event))))
+          (is (= :duplicate (:status (rebac/apply-projection-event! event))))
+          (is (true? (rebac/with-tenant "tenant-a"
+                       (rebac/has-relation? {:class "Person" :id "alice"}
+                                            "member"
+                                            {:class "Group" :id "finance"}))))
+          (is (= "iam" (get-in (first (rebac/with-tenant "tenant-a" (rebac/list-relations)))
+                                [:projection :source])))
+          (is (= "48" (get-in (first (rebac/with-tenant "tenant-a" (rebac/list-relations)))
+                                [:projection :sourceVersion])))
+          (is (= :applied
+                 (:status (rebac/apply-projection-event!
+                           (assoc event :eventId "event-delete-2"
+                                  :eventType "authorization.relationship.deleted"
+                                  :version 50)))))
+          (is (= :stale
+                 (:status (rebac/apply-projection-event!
+                           (assoc event :eventId "event-old-3" :version 49)))))
+          (is (false? (rebac/with-tenant "tenant-a"
+                        (rebac/has-relation? {:class "Person" :id "alice"}
+                                             "member"
+                                             {:class "Group" :id "finance"}))))
+          (finally
+            (rebac/clear-relations! {:persist true})))))))
+
+(deftest projection-subject-and-resource-deletions-revoke-their-tuples
+  (let [alice {:class "Person" :id "alice"}
+        bob {:class "Person" :id "bob"}
+        doc {:class "Document" :id "doc-1"}
+        base {:tenantId "tenant-a" :source "documents" :occurredAt "2026-08-13T10:00:00Z"}]
+    (rebac/with-tenant "tenant-a"
+      (rebac/add-relation! alice "viewer" doc {:source "documents"}))
+    (is (= 1 (:deletedCount
+              (rebac/apply-projection-event!
+               (merge base {:eventId "subject-delete-1" :eventType "authorization.subject.deleted" :version 4
+                            :subject alice})))))
+    (rebac/with-tenant "tenant-a"
+      (rebac/add-relation! alice "viewer" doc {:source "documents"})
+      (rebac/add-relation! bob "viewer" doc {:source "documents"}))
+    (is (= 2 (:deletedCount
+              (rebac/apply-projection-event!
+               (merge base {:eventId "resource-delete-1" :eventType "authorization.resource.deleted" :version 5
+                            :resource doc})))))
+    (is (empty? (rebac/with-tenant "tenant-a" (rebac/list-relations))))))
+
+(deftest reconciliation-reports-missing-and-obsolete-tuples
+  (let [alice {:class "Person" :id "alice"}
+        bob {:class "Person" :id "bob"}
+        document {:class "Document" :id "doc-1"}]
+    (rebac/with-tenant "tenant-a"
+      (rebac/add-relation! alice "viewer" document {:source "documents" :sourceVersion "1"})
+      (rebac/add-relation! bob "viewer" document {:source "documents"})
+      (let [report (rebac/reconcile-snapshot "documents"
+                                             [{:subject alice :relation "viewer" :resource document :sourceVersion "2"}
+                                              {:subject {:class "Person" :id "carol"} :relation "viewer" :resource document}])]
+        (is (= 1 (count (:missing report))))
+        (is (= "carol" (get-in report [:missing 0 :subject :id])))
+        (is (= 1 (count (:obsolete report))))
+        (is (= "bob" (get-in report [:obsolete 0 :subject :id])))
+        (is (= 1 (count (:conflicts report))))
+        (is (= "2" (get-in report [:conflicts 0 :expected :projection :sourceVersion])))))))
 
 (deftest durable-rewrites-survive-reinit-test
   (let [test-db {:classname "org.h2.Driver"

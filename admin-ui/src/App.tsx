@@ -11,6 +11,7 @@ import AuditPage from '@/pages/AuditPage'
 import InfrastructurePage from '@/pages/InfrastructurePage'
 import PipDataPage from '@/pages/PipDataPage'
 import SettingsPage from '@/pages/SettingsPage'
+import RelationsPage from '@/pages/RelationsPage'
 import { handleQueryError } from '@/lib/api-client'
 
 const queryClient = new QueryClient({
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="simulator" element={<SimulatorPage />} />
             <Route path="audit" element={<AuditPage />} />
             <Route path="pip-data" element={<PipDataPage />} />
+            <Route path="relations" element={<RelationsPage />} />
             <Route path="infrastructure" element={<InfrastructurePage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>

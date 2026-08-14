@@ -113,6 +113,44 @@
     (keyword (:tier claims))
     :free))
 
+(defn decision-limit
+  "Monthly deployment-wide decision entitlement, or nil when the active
+   licence does not define a limit. The value is intentionally exposed as data
+   before it is enforced in the authorization path."
+  []
+  (let [limit (:decisions @active-claims)]
+    (when (some? limit)
+      (try
+        (let [parsed (long (if (number? limit) limit (Long/parseLong (str limit))))]
+          (when (neg? parsed)
+            (throw (ex-info "Licence decision limit cannot be negative" {:limit limit})))
+          parsed)
+        (catch NumberFormatException _
+          (.warn logger "Ignoring invalid decision entitlement: {}" limit)
+          nil)))))
+
+(defn entitlements
+  "Safe commercial entitlements suitable for status and usage responses.
+   No signature, raw token or customer-sensitive metadata is exposed."
+  []
+  {:tier (name (active-tier))
+   :monthlyDecisionLimit (decision-limit)
+   :instanceLimit (:instances @active-claims)})
+
+(defn quota-enforcement-mode
+  "Returns the active quota mode. `hard` is deliberately opt-in because it
+   makes metering availability part of the authorization path."
+  []
+  (let [configured (some-> (env "AUTHO_QUOTA_ENFORCEMENT") str/lower-case str/trim)]
+    (case configured
+      "hard" :hard
+      "soft" :soft
+      "observation" :observation
+      nil :observation
+      (do
+        (.warn logger "Unknown AUTHO_QUOTA_ENFORCEMENT '{}'; using observation" configured)
+        :observation))))
+
 (defn licence-info
   "Returns a summary map for the /status endpoint."
   []

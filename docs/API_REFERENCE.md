@@ -782,6 +782,62 @@ La revue d'impact requiert `governance-admin` ou `policy-reviewer`. Le rollout d
 
 Les tuples relationnels sont administrables via `GET/POST/DELETE /v1/relations`. Les mutations requierent `governance-admin` ou `relation-admin`. Les tuples sont persistés dans la base H2 des politiques, table `REBAC_RELATIONS`, puis rechargés en index mémoire par `rebac/init!` au démarrage PDP.
 
+Les opérations relationnelles sont résolues dans le tenant authentifié (ou le
+tenant explicitement sélectionné et autorisé). Le tenant est une clé interne de
+partition : il n'est pas fourni par le tuple et deux tuples identiques dans des
+tenants distincts sont indépendants.
+
+Lorsqu'un tuple est une projection issue d'un système métier, son écriture peut
+porter `source`, `sourceEventId`, `sourceVersion`, `occurredAt`, `receivedAt`
+et `expiresAt` (ISO-8601). Ces métadonnées persistent avec le tuple ; une
+relation expirée n'est jamais utilisée pour autoriser une décision.
+
+Les adaptateurs d'ingestion doivent transmettre des événements idempotents de
+type `authorization.relationship.upserted` ou
+`authorization.relationship.deleted`, contenant `eventId`, `tenantId`,
+`source`, `version`, `occurredAt` et `tuple`. Le noyau ReBAC déduplique les
+`eventId` durablement avant d'appliquer le changement.
+
+Les révocations en cascade sont aussi supportées :
+`authorization.subject.deleted` contient `subject` et
+`authorization.resource.deleted` contient `resource`. Elles retirent les
+tuples concernés uniquement dans le `tenantId` de l'événement et conservent
+leur version, ce qui empêche un événement relationnel reçu en retard de les
+réintroduire.
+
+Les clauses relationnelles peuvent imposer une cohérence : `eventual` utilise
+la projection telle quelle, `bounded-staleness` impose `maxStalenessMs`,
+`fresh` exige la confirmation d'un PIP, et `fail-closed` refuse une projection
+sans horodatage de fraîcheur ou au-delà du seuil indiqué.
+
+Les administrateurs portant `relation-admin` peuvent consulter la quarantaine
+avec `GET /v1/relations/quarantine` et rejouer une entrée après correction avec
+`POST /v1/relations/quarantine/{id}/replay`.
+
+Le contrôle opérationnel est disponible via `GET /v1/relations/status`
+(consommateur, âge de projection, lag et seuils), `GET /v1/relations/audit`
+(journal de projection tenantisé), `GET /v1/relations/reconcile/reports` et
+`GET /v1/relations/reconcile/sources`. Une source REST déclarée dans
+`reconciliation-sources.edn` peut être comparée en lecture seule avec
+`POST /v1/relations/reconcile/{source}/import`. Les identifiants, en-têtes et
+secrets éventuels restent côté configuration serveur et ne sont jamais rendus
+par l'API. Les réécritures (`/v1/relations/rewrites`) sont elles aussi
+tenantisées : une organisation ne peut pas changer le sens d'une relation
+dérivée dans une autre.
+
+Pour une vérification périodique, une entrée de
+`reconciliation-sources.edn` peut préciser `interval-ms` et `tenant-ids`.
+Autho ne planifie que les couples source/tenant explicitement déclarés et ne
+fait qu'établir un rapport : il ne produit aucune correction locale.
+
+Une réconciliation en lecture seule est disponible avec
+`POST /v1/relations/reconcile`. Le corps contient `source` et `tuples`; la
+réponse distingue les relations manquantes de la projection et celles devenues
+obsolètes, ainsi que les conflits de version lorsque le snapshot et la
+projection portent tous deux une `sourceVersion` différente. La correction doit
+être faite par les événements de la source, afin de préserver sa propriété
+métier.
+
 ```bash
 curl -H "X-API-Key: key" \
   http://localhost:8080/v1/relations
@@ -814,6 +870,23 @@ Une politique peut ensuite utiliser :
 ```json
 {"conditions": [["relation", "$s", "viewer", "$r"]]}
 ```
+
+Une clause peut sélectionner explicitement son mode de résolution. Le mode
+compatible par défaut est la projection locale ; `pip` utilise un resolver
+relationnel nommé et `hybrid` exige à la fois l'autorisation de la projection
+et sa confirmation par ce PIP (comportement fail-closed) :
+
+```json
+{"conditions": [["relation", "$s", "member", "$r",
+                 {"source": "pip", "pip": "iam"}]]}
+```
+
+Un PIP non configuré retourne `unknown` et n'autorise jamais une règle. Les
+PIP relationnels REST sont déclarés dans `resources/relation-pips.edn` (ou dans
+le fichier pointé par `RELATION_PIPS_CONFIG_PATH`). Ils reçoivent un `POST`
+contenant `subject`, `relation`, `resource`, `context` et `tenantId`, et doivent
+répondre avec un booléen ou un objet portant `status` (`allowed`, `denied`,
+`unknown` ou `error`). Une erreur HTTP ou réseau ne peut pas autoriser l'accès.
 
 Le check relationnel commence par le tuple direct, applique les rewrites persistés, suit les groupes via des tuples `member`, puis remonte les ressources parentes via des tuples `parent`. Exemple : si `can-read` est réécrit vers `viewer`, `alice member team-a`, `team-a viewer folder-1` et `doc-1 parent folder-1`, alors `alice` a aussi `can-read` sur `doc-1`.
 

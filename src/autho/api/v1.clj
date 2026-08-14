@@ -61,6 +61,26 @@
           (plane-call :data #(handlers/batch-decisions request))))
 
   ;; ===================================================================
+  ;; API Key Registry Endpoints
+  ;; ===================================================================
+  (context "/api-keys" []
+    (GET "/" request
+         (plane-call :control #(handlers/list-api-keys request)))
+
+    (POST "/" request
+          (plane-call :control #(handlers/create-api-key request)))
+
+    (DELETE "/:key-id" [key-id :as request]
+            (plane-call :control #(handlers/revoke-api-key key-id request))))
+
+  ;; ===================================================================
+  ;; Usage and Entitlement Observation Endpoints
+  ;; ===================================================================
+  (context "/usage" []
+    (GET "/decisions" request
+         (plane-call :control #(handlers/decision-usage request))))
+
+  ;; ===================================================================
   ;; Policy Management Endpoints
   ;; ===================================================================
   (context "/policies" []
@@ -166,11 +186,35 @@
   ;; Relationship Management Endpoints
   ;; ===================================================================
   (context "/relations" []
-    (GET "/" []
-         (plane-call :control handlers/list-relations))
+    (GET "/" request
+         (plane-call :control #(handlers/list-relations request)))
 
-    (GET "/rewrites" []
-         (plane-call :control handlers/list-relation-rewrites))
+    (GET "/rewrites" request
+         (plane-call :control #(handlers/list-relation-rewrites request)))
+
+    (GET "/quarantine" request
+         (plane-call :control #(handlers/list-relation-quarantine request)))
+
+    (GET "/status" request
+         (plane-call :control #(handlers/relation-projection-status request)))
+
+    (GET "/audit" request
+         (plane-call :control #(handlers/list-relation-projection-audit request)))
+
+    (POST "/quarantine/:id/replay" [id :as request]
+          (plane-call :control #(handlers/replay-relation-quarantine id request)))
+
+    (POST "/reconcile" request
+          (plane-call :control #(handlers/reconcile-relations request)))
+
+    (GET "/reconcile/reports" request
+         (plane-call :control #(handlers/list-reconciliation-reports request)))
+
+    (POST "/reconcile/:source/import" [source :as request]
+          (plane-call :control #(handlers/import-reconciliation-source source request)))
+
+    (GET "/reconcile/sources" request
+         (plane-call :control #(handlers/list-reconciliation-sources request)))
 
     (PUT "/rewrites/:relation" [relation :as request]
          (plane-call :control #(handlers/upsert-relation-rewrite relation request)))

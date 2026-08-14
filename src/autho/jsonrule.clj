@@ -1,7 +1,7 @@
 (ns autho.jsonrule
   (:require [autho.jsonpath :as js]
             [autho.attfun :as attfun]
-            [autho.rebac :as rebac]
+            [autho.relation-provider :as relation-provider]
             [clojure.string :as str])
   (:use clojure.test))
 
@@ -93,14 +93,15 @@
   (contains? #{"relation" "related" "has-relation"} (name operator)))
 
 (defn- eval-relation-clause
-  [[_ subject-op relation-op resource-op] ctxt]
+  [[_ subject-op relation-op resource-op options] ctxt]
   (let [subject (relation-entity subject-op ctxt)
         resource (relation-entity resource-op ctxt)
         relation (if (keyword? relation-op) (name relation-op) (str relation-op))]
     (boolean
      (and (map? subject)
           (map? resource)
-          (rebac/has-relation? subject relation resource)))))
+          (relation-provider/allowed?
+           (relation-provider/check-relation ctxt subject relation resource (or options {})))))))
 
 (defn- eval-policy-clause
   [[operator :as clause] request]

@@ -2,9 +2,11 @@
   "Prometheus metrics registry for autho.
    Exposes counters and timers for PDP decisions, cache activity, and HTTP traffic."
   (:import (io.micrometer.prometheusmetrics PrometheusMeterRegistry PrometheusConfig)
-           (io.micrometer.core.instrument Counter Counter$Builder Timer Timer$Builder)
+           (io.micrometer.core.instrument Counter Counter$Builder Timer Timer$Builder Gauge)
            (io.micrometer.core.instrument.binder.jvm JvmMemoryMetrics JvmGcMetrics JvmThreadMetrics)
-           (io.micrometer.core.instrument.binder.system ProcessorMetrics)))
+           (io.micrometer.core.instrument.binder.system ProcessorMetrics)
+           (java.util.concurrent.atomic AtomicLong)
+           (java.util.function ToDoubleFunction)))
 
 (defonce ^PrometheusMeterRegistry registry
   (PrometheusMeterRegistry. PrometheusConfig/DEFAULT))
@@ -98,6 +100,78 @@
       (catch Exception e
         (.stop sample (http-timer method uri "500"))
         (throw e)))))
+
+;; ---------------------------------------------------------------------------
+;; ReBAC projection metrics
+;; ---------------------------------------------------------------------------
+
+(defn- rebac-projection-counter ^Counter [^String status ^String source]
+  (-> ^Counter$Builder (Counter/builder "autho_rebac_projection_events_total")
+      (.description "Relationship projection events processed by outcome")
+      (.tags (into-array String ["status" status "source" source]))
+      (.register registry)))
+
+(defn record-rebac-projection-event!
+  [status source]
+  (.increment (rebac-projection-counter (name status) (or source "unknown"))))
+
+(defn- rebac-quarantine-counter ^Counter [^String operation]
+  (-> ^Counter$Builder (Counter/builder "autho_rebac_quarantine_events_total")
+      (.description "Relationship projection events entering or leaving quarantine")
+      (.tags (into-array String ["operation" operation]))
+      (.register registry)))
+
+(defn record-rebac-quarantine!
+  [operation]
+  (.increment (rebac-quarantine-counter (name operation))))
+
+(defonce ^AtomicLong rebac-last-event-ms (AtomicLong. 0))
+(defonce ^AtomicLong rebac-last-kafka-poll-ms (AtomicLong. 0))
+(defonce ^:private rebac-kafka-lag-values (atom {}))
+
+(defn- timestamp-gauge [name description value]
+  (-> (Gauge/builder name value
+                     (reify ToDoubleFunction
+                       (applyAsDouble [_ atomic-value]
+                         (/ (.get ^AtomicLong atomic-value) 1000.0))))
+      (.description description)
+      (.register registry)))
+
+(defonce rebac-last-event-gauge
+  (timestamp-gauge "autho_rebac_projection_last_event_timestamp_seconds"
+                   "Unix timestamp of the last processed relationship projection event"
+                   rebac-last-event-ms))
+
+(defonce rebac-last-kafka-poll-gauge
+  (timestamp-gauge "autho_rebac_kafka_last_poll_timestamp_seconds"
+                   "Unix timestamp of the last successful ReBAC Kafka poll"
+                   rebac-last-kafka-poll-ms))
+
+(defn record-rebac-projection-observed! []
+  (.set rebac-last-event-ms (System/currentTimeMillis)))
+
+(defn record-rebac-kafka-poll! []
+  (.set rebac-last-kafka-poll-ms (System/currentTimeMillis)))
+
+(defn record-rebac-kafka-lag!
+  "Publishes the current consumer lag for one assigned Kafka partition."
+  [topic partition lag]
+  (let [key [topic partition]
+        value (or (get @rebac-kafka-lag-values key)
+                  (let [candidate (AtomicLong. 0)]
+                    (get (swap! rebac-kafka-lag-values
+                                #(if (contains? % key) % (assoc % key candidate)))
+                         key)))]
+    (-> (Gauge/builder "autho_rebac_kafka_consumer_lag_records" value
+                       (reify ToDoubleFunction
+                         (applyAsDouble [_ atomic-value] (double (.get ^AtomicLong atomic-value)))))
+        (.description "Unconsumed authorization relationship records by Kafka partition")
+        (.tags (into-array String ["topic" topic "partition" (str partition)]))
+        (.register registry))
+    (.set ^AtomicLong value (long (max 0 lag)))))
+
+(defn rebac-kafka-lags []
+  (into {} (map (fn [[key value]] [key (.get ^AtomicLong value)]) @rebac-kafka-lag-values)))
 
 ;; ---------------------------------------------------------------------------
 ;; JVM Metrics

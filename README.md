@@ -223,12 +223,25 @@ Les endpoints `/v1/*` sont l'API stable et recommandée pour les nouvelles inté
 | `POST /v1/relations/list-subjects` | Lister les sujets autorisés sur une ressource |
 | `POST /v1/relations/traverse` | Suivre un chemin relationnel explicite |
 | `DELETE /v1/relations` | Supprimer un tuple sujet-relation-ressource |
+| `GET /v1/relations/status` | État de la projection, fraîcheur et retard Kafka |
+| `GET /v1/relations/quarantine` | Examiner les événements rejetés |
+| `POST /v1/relations/quarantine/:id/replay` | Rejouer un événement corrigé à la source |
+| `POST /v1/relations/reconcile` | Comparer un snapshot métier en lecture seule |
+| `GET /v1/relations/reconcile/reports` | Consulter l’historique des réconciliations |
 
 Les mutations de politiques, profils de risque, reviews, rollouts et relations sont protégées par des rôles de gouvernance (`policy-admin`, `risk-profile-admin`, `policy-reviewer`, `policy-deployer`, `relation-admin` ou `governance-admin`). Pour les clients API key, ces rôles sont configurés via `API_CLIENT_ROLES`.
 
-Les tuples ReBAC sont persistés dans la base H2 des politiques (`REBAC_RELATIONS`) et rechargés en index mémoire au démarrage du PDP.
+Les tuples ReBAC sont une **projection d’autorisation** tenantisée, persistée
+dans la base H2 des politiques (`REBAC_RELATIONS`) et rechargée en index mémoire
+au démarrage du PDP. Les systèmes métier restent propriétaires des relations :
+Autho les résout par projection locale, PIP synchrone ou mode hybride selon la
+politique. Les relations projetées sont attribuées à une source, versionnées,
+expirables et alimentables par événements Kafka/outbox. La page **Relations**
+permet de suivre la santé, la quarantaine et les réconciliations ; elle ne doit
+pas servir à administrer des faits métier courants.
 La relation `member` permet les groupes imbriqués ; la relation `parent` permet l'héritage depuis les ressources parentes.
-Les rewrites de relations sont persistés dans `REBAC_RELATION_REWRITES` et administrables via `/v1/relations/rewrites`.
+Les rewrites de relations sont persistés dans `REBAC_RELATION_REWRITES`,
+tenantisés et administrables via `/v1/relations/rewrites`.
 Les endpoints `list-objects` et `list-subjects` appliquent les tuples directs, rewrites, groupes imbriqués et héritage parent.
 Le endpoint `traverse` suit des chemins relationnels explicites en sens sortant ou inverse.
 

@@ -1,0 +1,12 @@
+; Optional relation PIP declarations.
+; Autho remains agnostic of the business source: each connector answers the
+; generic question subject-relation-resource, rather than exposing an object
+; model to the PDP.
+;
+; Example:
+; {:name "iam"
+;  :type :rest
+;  :url "https://iam.internal/authorization/relations/check"
+;  :timeout-ms 500
+;  :headers {"X-Source" "autho"}}
+[]

@@ -11,7 +11,12 @@
             [autho.policy-versions :as pv]
             [autho.policy-impact-history :as pih]
             [autho.policy-risk-profiles :as risk-profiles]
+            [autho.api-keys :as api-keys]
+            [autho.usage :as usage]
             [autho.rebac :as rebac]
+            [autho.rebac-kafka :as rebac-kafka]
+            [autho.reconciliation :as reconciliation]
+            [autho.relation-provider :as relation-provider]
             [autho.tenant :as tenant]
             [autho.otel :as otel]
             [autho.delegation :as deleg]
@@ -173,7 +178,7 @@
        (contains? #{"relation" "related" "has-relation"} (name operator))))
 
 (defn- relation-proof
-  [[_ subject-op relation resource-op] request]
+  [[_ subject-op relation resource-op options] request]
   (let [subject (case (str subject-op)
                   "$s" (:subject request)
                   subject-op)
@@ -181,7 +186,7 @@
                    "$r" (:resource request)
                    resource-op)]
     (when (and (map? subject) (map? resource))
-      (rebac/explain-relation subject relation resource))))
+      (relation-provider/check-relation request subject relation resource (or options {})))))
 
 (defn- relation-proofs
   [rule request]
@@ -207,7 +212,10 @@
       :operation (:operation body)
       :context (tenant/with-tenant-context (:context body) tenant-context)
       :tenant tenant-context
-      :tenantId (:tenantId tenant-context)})))
+      :tenantId (:tenantId tenant-context)
+      :organizationId (:organizationId tenant-context)
+      :projectId (:projectId tenant-context)
+      :environment (:environment tenant-context)})))
 
 (defn- build-rule-evaluation
   [rule augreq operation]
@@ -260,7 +268,7 @@
   "Common additive decision fields shared by public decision endpoints.
    Historical fields are kept by each endpoint for compatibility."
   [{:keys [allowed? decision subject resource operation strategy matched-rule-names
-           policy-source policy-version tenant-id]}]
+           policy-source policy-version tenant-id organization-id project-id environment]}]
   (cond-> {:allowed? allowed?
            :decisionType (name decision)
            :tenantId tenant-id
@@ -272,6 +280,9 @@
            :strategy strategy
            :matchedRuleNames (vec matched-rule-names)
            :policySource (or policy-source :current)}
+    organization-id (assoc :organizationId organization-id)
+    project-id (assoc :projectId project-id)
+    environment (assoc :environment environment)
     policy-version (assoc :policyVersion policy-version)))
 
 (defn- who-authorized-matches
@@ -439,13 +450,24 @@
           resource-class (:class (:resource authz-request))
           resource-id (:id (:resource authz-request))
           operation (:operation authz-request)
-          globalPolicy (prp/getGlobalPolicy resource-class)]
+          globalPolicy (prp/getGlobalPolicy resource-class)
+          decision-limit (features/decision-limit)
+          hard-quota? (and (= :hard (features/quota-enforcement-mode))
+                           (some? decision-limit))]
       (if-not globalPolicy
         (throw (ex-info "No global policy applicable" {:status 404 :error-code "NO_POLICY"})))
 
-      (or (when-not (:timestamp (:context body))
-            (local-cache/get-cached-decision tenant-id subject-id resource-class resource-id operation))
-          (let [decision-result (evalRequest authz-request)
+      (when (and hard-quota?
+                 (not (usage/reserve-decision! authz-request decision-limit)))
+        (throw (ex-info "Monthly decision quota exceeded"
+                        {:status 429
+                         :error-code "DECISION_QUOTA_EXCEEDED"
+                         :monthlyDecisionLimit decision-limit
+                         :quotaEnforcement "hard"})))
+
+      (let [result (or (when-not (:timestamp (:context body))
+                         (local-cache/get-cached-decision tenant-id subject-id resource-class resource-id operation))
+                       (let [decision-result (evalRequest authz-request)
                 allowed? (:result decision-result)
                 matched-rules (mapv :name (:rules decision-result))
                 decision-key (if allowed? :allow :deny)
@@ -453,6 +475,9 @@
                                 (decision-contract {:allowed? allowed?
                                                     :decision decision-key
                                                     :tenant-id (:tenantId authz-request)
+                                                    :organization-id (:organizationId authz-request)
+                                                    :project-id (:projectId authz-request)
+                                                    :environment (:environment authz-request)
                                                     :subject (:subject authz-request)
                                                     :resource (:resource authz-request)
                                                     :operation operation
@@ -465,8 +490,11 @@
                                  :resourceClass resource-class
                                  :resourceId resource-id
                                  :operation operation})]
-            (local-cache/cache-decision! tenant-id subject-id resource-class resource-id operation result)
-            result)))))
+                         (local-cache/cache-decision! tenant-id subject-id resource-class resource-id operation result)
+                         result))]
+        (when-not hard-quota?
+          (usage/record-decision! authz-request))
+        result))))
 
 ;; V2.0 retreive charasteristics of persons allowed to do an operation on a resource*
 ;; on considÃ¨re pour simplifier que la condition est un ET de clauses
@@ -722,7 +750,16 @@
     (pv/init!)
     (pih/init!)
     (risk-profiles/init!))
+  (api-keys/init!)
+  (usage/init!)
   (rebac/init!)
+  (relation-provider/load-configured-pip-resolvers!)
+  (reconciliation/load-sources!)
+  (reconciliation/start-scheduled-reconciliations!)
+  (when (Boolean/parseBoolean (or (System/getenv "REBAC_KAFKA_ENABLED") "false"))
+    (rebac-kafka/start! {:bootstrap-servers (or (System/getenv "REBAC_KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")
+                         :topic (or (System/getenv "REBAC_KAFKA_TOPIC") "authorization-relationships")
+                         :group-id (System/getenv "REBAC_KAFKA_GROUP_ID")}))
 
   ;; Only register Kafka shutdown hook if Kafka is enabled
   (when (kafka-enabled?)
