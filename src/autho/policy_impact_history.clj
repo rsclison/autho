@@ -2,28 +2,14 @@
   "Persistent storage for policy impact previews in H2."
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.data.json :as json]
-            [autho.jdbc-utils :as jdbc-utils])
+            [autho.jdbc-utils :as jdbc-utils]
+            [autho.database :as database])
   (:import (org.slf4j LoggerFactory)
            (java.time Instant)))
 
 (defonce ^:private logger (LoggerFactory/getLogger "autho.policy-impact-history"))
 
-(def ^:private h2-policy-cipher-key (System/getenv "H2_POLICY_CIPHER_KEY"))
-(def ^:private h2-policy-db-path
-  (or (System/getenv "AUTHO_POLICY_DB_PATH")
-      (System/getProperty "autho.policy.db.path")
-      "./resources/h2db"))
-
-(def ^:private db
-  (merge
-   {:classname "org.h2.Driver"
-    :subprotocol "h2"
-    :user "sa"}
-   (if h2-policy-cipher-key
-     {:subname (str h2-policy-db-path ";CIPHER=AES")
-      :password (str h2-policy-cipher-key " ")}
-     {:subname h2-policy-db-path
-      :password ""})))
+(def ^:private db (database/policy-db))
 
 (def allowed-review-statuses #{"draft" "reviewed" "approved" "rejected"})
 (def allowed-rollout-statuses #{"not_deployed" "deployed"})
@@ -54,8 +40,8 @@
   []
   (try
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS POLICY_IMPACT_HISTORY (
-         id                BIGINT AUTO_INCREMENT PRIMARY KEY,
+                   [(format "CREATE TABLE IF NOT EXISTS POLICY_IMPACT_HISTORY (
+         id                %s,
          resource_class    VARCHAR(255) NOT NULL,
          baseline_version  INT,
          candidate_version INT,
@@ -73,10 +59,10 @@
          deployed_version  INT,
          deployed_by       VARCHAR(255),
          deployed_at       TIMESTAMP,
-         candidate_policy_json CLOB,
-         analysis_json     CLOB NOT NULL,
+         candidate_policy_json %s,
+         analysis_json     %s NOT NULL,
          created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-       )"])
+       )" (database/identity-column) (database/text-column) (database/text-column))])
     (jdbc/execute! db ["ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS review_status VARCHAR(50) DEFAULT 'draft'"])
     (jdbc/execute! db ["ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255)"])
     (jdbc/execute! db ["ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS review_note VARCHAR(2000)"])
@@ -85,7 +71,7 @@
     (jdbc/execute! db ["ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS deployed_version INT"])
     (jdbc/execute! db ["ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS deployed_by VARCHAR(255)"])
     (jdbc/execute! db ["ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS deployed_at TIMESTAMP"])
-    (jdbc/execute! db ["ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS candidate_policy_json CLOB"])
+    (jdbc/execute! db [(str "ALTER TABLE POLICY_IMPACT_HISTORY ADD COLUMN IF NOT EXISTS candidate_policy_json " (database/text-column))])
     (.info logger "POLICY_IMPACT_HISTORY table ready")
     (catch Exception e
       (.error logger "Failed to create POLICY_IMPACT_HISTORY table: {}" (.getMessage e) e))))

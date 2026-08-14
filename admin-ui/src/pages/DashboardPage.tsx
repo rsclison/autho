@@ -30,6 +30,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <section className="rounded-2xl border border-autho-blue/20 bg-gradient-to-br from-autho-dark to-slate-800 px-6 py-7 text-white shadow-sm">
+        <p className="text-sm font-semibold uppercase tracking-[0.12em] text-autho-blue">Vue d’ensemble</p>
+        <h2 className="mt-2 text-2xl font-bold tracking-tight">Santé et activité du moteur d’autorisation</h2>
+        <p className="mt-2 max-w-3xl text-base text-white/75">Surveillez les décisions, les politiques chargées et les dépendances avant d’investiguer un accès ou de modifier une règle.</p>
+      </section>
       {/* Métriques principales */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
@@ -64,15 +69,15 @@ export default function DashboardPage() {
 
       {/* Graphique + Circuit breakers */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">
+        <div className="app-surface lg:col-span-2 p-6">
+          <h2 className="section-title mb-5">
             Décisions d'autorisation (simulation 1h)
           </h2>
           <DecisionsChart allowTotal={allowTotal} denyTotal={denyTotal} />
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Circuit Breakers</h2>
+        <div className="app-surface p-6">
+          <h2 className="section-title mb-5">Circuit Breakers</h2>
           {status?.circuitBreakers ? (
             <CircuitBreakerList breakers={status.circuitBreakers} />
           ) : (
@@ -85,8 +90,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Dernières décisions */}
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-4">
+      <div className="app-surface p-6">
+        <h2 className="section-title mb-5">
           Dernières décisions d'autorisation
         </h2>
         {auditUnavailable ? (

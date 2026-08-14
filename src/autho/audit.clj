@@ -6,6 +6,7 @@
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.data.json :as json]
             [clojure.string :as str]
+            [autho.database :as database]
             [com.brunobonacci.mulog :as u])
   (:import (java.time Instant)
            (javax.crypto Mac)
@@ -19,23 +20,8 @@
 ;; Configuration
 ;; ---------------------------------------------------------------------------
 
-;; H2_AUDIT_CIPHER_KEY enables AES-128 at-rest encryption of the audit database.
-;; If set (≥ 32 chars recommended), the database file is encrypted transparently.
-;; WARNING: changing this key on an existing unencrypted database requires migration
-;; (see docs/SECURITY_ADMIN_GUIDE.md § "Migration vers le chiffrement H2").
-;; If unset, the database is stored unencrypted — acceptable for development only.
 (def ^:private h2-audit-cipher-key (System/getenv "H2_AUDIT_CIPHER_KEY"))
-
-(def ^:private audit-db
-  (merge
-   {:classname   "org.h2.Driver"
-    :subprotocol "h2"
-    :user        "sa"}
-   (if h2-audit-cipher-key
-     {:subname  "./resources/auditdb;AUTO_SERVER=TRUE;CIPHER=AES"
-      :password (str h2-audit-cipher-key " ")}
-     {:subname  "./resources/auditdb;AUTO_SERVER=TRUE"
-      :password ""})))
+(def ^:private audit-db (database/audit-db))
 
 ;; hmac-secret is kept as a var for compatibility with audit tests that
 ;; override private vars via with-redefs. Its value is resolved lazily to avoid
@@ -75,8 +61,8 @@
 
 (defn- create-table-if-absent! []
   (jdbc/execute! audit-db
-    ["CREATE TABLE IF NOT EXISTS AUDIT_LOG (
-        id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    [(format "CREATE TABLE IF NOT EXISTS AUDIT_LOG (
+        id            %s,
         ts            TIMESTAMP    NOT NULL,
         request_id    VARCHAR(36),
         subject_id    VARCHAR(255),
@@ -85,14 +71,14 @@
         operation     VARCHAR(100),
         decision      VARCHAR(10),
         matched_rules VARCHAR(2048),
-        request_snapshot CLOB,
-        decision_snapshot CLOB,
+        request_snapshot %s,
+        decision_snapshot %s,
         payload_hash  CHAR(64)     NOT NULL,
         previous_hash CHAR(64)     NOT NULL,
         hmac          CHAR(64)     NOT NULL
-      )"])
-  (doseq [[column ddl] {"request_snapshot" "ALTER TABLE AUDIT_LOG ADD COLUMN request_snapshot CLOB"
-                        "decision_snapshot" "ALTER TABLE AUDIT_LOG ADD COLUMN decision_snapshot CLOB"}]
+     )" (database/identity-column) (database/text-column) (database/text-column))])
+  (doseq [[column ddl] {"request_snapshot" (str "ALTER TABLE AUDIT_LOG ADD COLUMN request_snapshot " (database/text-column))
+                        "decision_snapshot" (str "ALTER TABLE AUDIT_LOG ADD COLUMN decision_snapshot " (database/text-column))}]
     (try
       (jdbc/execute! audit-db [ddl])
       (catch Exception e
@@ -123,14 +109,14 @@
 (defn init!
   "Create the audit table and load the last chain hash. Call from pdp/init."
   []
-  (when-not h2-audit-cipher-key
+  (when (and (database/h2?) (not h2-audit-cipher-key))
     (.warn logger "H2_AUDIT_CIPHER_KEY is not set — audit database is stored UNENCRYPTED. Set this variable in production."))
   (try
     (require-hmac-secret!)
     (create-table-if-absent!)
     (load-last-hash!)
-    (.info logger "Audit log initialised (encryption: {})"
-           (if h2-audit-cipher-key "AES/CIPHER" "none"))
+    (.info logger "Audit log initialised (storage: {})"
+           (if (database/postgres?) "PostgreSQL" (if h2-audit-cipher-key "H2 AES/CIPHER" "H2")))
     (catch Exception e
       (.error logger "Failed to initialise audit log: {}" (.getMessage e) e))))
 

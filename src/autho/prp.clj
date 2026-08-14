@@ -7,31 +7,17 @@
             [autho.policy-safety :as policy-safety]
             [autho.policy-tests :as policy-tests]
             [autho.policy-versions :as pv]
+            [autho.database :as database]
             [java-time :as ti]
             [autho.utils :as utl])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.prp"))
 
-;; H2_POLICY_CIPHER_KEY enables AES-128 at-rest encryption of the policy database.
-;; Must match the key used by policy_versions.clj (shared database).
-;; See docs/SECURITY_ADMIN_GUIDE.md for migration from unencrypted.
-(def ^:private h2-policy-cipher-key (System/getenv "H2_POLICY_CIPHER_KEY"))
-(def ^:private h2-policy-db-path
-  (or (System/getenv "AUTHO_POLICY_DB_PATH")
-      (System/getProperty "autho.policy.db.path")
-      "./resources/h2db"))
-
 (def h2db
-  (merge
-   {:classname   "org.h2.Driver"
-    :subprotocol "h2"
-    :user        "sa"}
-   (if h2-policy-cipher-key
-     {:subname  (str h2-policy-db-path ";CIPHER=AES")
-      :password (str h2-policy-cipher-key " ")}
-     {:subname  h2-policy-db-path
-      :password ""})))
+  "Compatibility name for the shared policy database. Its default is H2;
+   AUTHO_DB_KIND=postgres selects the configured PostgreSQL instance."
+  (database/policy-db))
 
 
 ;;(defrecord Rule [^String name ^String resourceClass ^String operation ^String condition ^String effect ^String startDate ^String endDate])

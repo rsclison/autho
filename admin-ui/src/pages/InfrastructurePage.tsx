@@ -47,10 +47,14 @@ export default function InfrastructurePage() {
 
   return (
     <div className="space-y-6">
+      <div>
+        <h2 className="page-title">Infrastructure</h2>
+        <p className="page-description">Supervisez les caches, dépendances et opérations d’administration du moteur.</p>
+      </div>
       {/* Cache */}
-      <div className="bg-card border border-border rounded-xl p-5">
+      <div className="app-surface p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-foreground">Cache</h2>
+          <h2 className="section-title">Cache</h2>
           <button
             onClick={() => clearCache.mutate()}
             disabled={clearCache.isPending}

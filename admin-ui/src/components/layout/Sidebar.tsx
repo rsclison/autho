@@ -18,7 +18,7 @@ const navItems = [
   { to: '/settings', label: 'Paramètres', icon: Settings },
 ]
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen, onNavigate }: { mobileOpen: boolean; onNavigate: () => void }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { data: status } = useStatus()
@@ -30,10 +30,10 @@ export function Sidebar() {
   const inPolicies = pathname === '/policies' || pathname.startsWith('/policies/')
 
   return (
-    <aside className="flex flex-col w-56 bg-autho-dark text-white shrink-0">
-      <div className="flex items-center gap-2 px-4 py-5 border-b border-white/10">
-        <Zap size={20} className="text-autho-blue" />
-        <span className="text-lg font-bold tracking-tight">autho</span>
+    <aside className={cn('fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 flex-col bg-autho-dark text-white shadow-xl shadow-slate-950/20 transition-transform duration-200 lg:static lg:w-64 lg:translate-x-0', mobileOpen ? 'translate-x-0' : '-translate-x-full')}>
+      <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-autho-blue/15"><Zap size={19} className="text-autho-blue" /></span>
+        <span className="text-xl font-bold tracking-tight">autho</span>
         <span
           className={cn(
             'ml-auto w-2 h-2 rounded-full',
@@ -43,13 +43,14 @@ export function Sidebar() {
         />
       </div>
 
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
         <NavLink
           to="/"
           end
+          onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               isActive
                 ? 'bg-autho-blue/20 text-autho-blue'
                 : 'text-white/70 hover:bg-white/10 hover:text-white',
@@ -63,13 +64,13 @@ export function Sidebar() {
         <div className="space-y-1">
           <div
             className={cn(
-              'flex items-center rounded-md transition-colors',
+              'flex items-center rounded-lg transition-colors',
               inPolicies ? 'bg-autho-blue/20 text-autho-blue' : 'text-white/70 hover:bg-white/10 hover:text-white',
             )}
           >
             <button
-              onClick={() => navigate('/policies')}
-              className="flex flex-1 items-center gap-3 px-3 py-2 text-left text-sm font-medium"
+              onClick={() => { navigate('/policies'); onNavigate() }}
+              className="flex flex-1 items-center gap-3 px-3 py-2.5 text-left text-sm font-medium"
             >
               <Shield size={16} />
               Politiques
@@ -90,9 +91,9 @@ export function Sidebar() {
                 return (
                   <button
                     key={resourceClass}
-                    onClick={() => navigate(`/policies/${resourceClass}`)}
+                    onClick={() => { navigate(`/policies/${resourceClass}`); onNavigate() }}
                     className={cn(
-                      'w-full rounded-md px-3 py-1.5 text-left text-xs font-medium transition-colors',
+                      'w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors',
                       active
                         ? 'bg-white text-autho-dark'
                         : 'text-white/60 hover:bg-white/10 hover:text-white',
@@ -111,9 +112,10 @@ export function Sidebar() {
             key={to}
             to={to}
             end={end}
+            onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-autho-blue/20 text-autho-blue'
                   : 'text-white/70 hover:bg-white/10 hover:text-white',
@@ -126,7 +128,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-white/10 text-xs text-white/40">
+      <div className="border-t border-white/10 px-5 py-4 text-xs text-white/50">
         {status?.version ?? '…'}
       </div>
     </aside>

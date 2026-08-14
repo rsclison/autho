@@ -29,12 +29,12 @@ export default function PipDataPage() {
   const resourceItems = resources.data ?? []
 
   return (
-    <div className="grid h-full grid-cols-[18rem_minmax(24rem,1fr)_minmax(22rem,32rem)] gap-4">
-      <section className="min-h-0 rounded-xl border border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+    <div className="grid min-h-[42rem] grid-cols-1 gap-5 lg:grid-cols-[16rem_minmax(22rem,1fr)_minmax(20rem,28rem)]">
+      <section className="app-surface min-h-0 overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2">
             <Database size={15} />
-            <h2 className="text-sm font-semibold text-foreground">Classes RocksDB</h2>
+            <h2 className="section-title">Classes RocksDB</h2>
           </div>
           <button
             onClick={refresh}
@@ -82,7 +82,7 @@ export default function PipDataPage() {
         </div>
       </section>
 
-      <section className="min-h-0 rounded-xl border border-border bg-card">
+      <section className="app-surface min-h-0 overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">{effectiveClass ?? 'Ressources'}</h2>
@@ -143,7 +143,7 @@ export default function PipDataPage() {
         </div>
       </section>
 
-      <section className="min-h-0 rounded-xl border border-border bg-card">
+      <section className="app-surface min-h-0 overflow-hidden">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">Detail objet</h2>
           <p className="text-xs text-muted-foreground">

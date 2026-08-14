@@ -39,25 +39,26 @@ export default function RelationsPage() {
   }
   return (
     <div className="space-y-6">
-      <div className="bg-card border border-border rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-autho-blue/10 p-2 text-autho-blue"><GitBranch size={20} /></div>
+      <div className="rounded-2xl border border-autho-blue/20 bg-gradient-to-br from-autho-dark to-slate-800 p-6 text-white shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="rounded-xl bg-autho-blue/15 p-3 text-autho-blue"><GitBranch size={22} /></div>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Projection relationnelle</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-autho-blue">Autorisation relationnelle</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight">Projection et santé des relations</h2>
+            <p className="mt-2 max-w-3xl text-base text-white/75">
               Autho consomme une projection d’autorisation. Les systèmes métier restent propriétaires des relations.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground">Journal des opérations relationnelles</h2>
+      <div className="app-surface p-6">
+        <h2 className="section-title">Journal des opérations relationnelles</h2>
         {projectionAudit.isLoading ? <div className="mt-3 h-12 animate-pulse rounded bg-muted" /> : (projectionAudit.data?.events.length ?? 0) === 0 ? <p className="mt-3 text-sm text-muted-foreground">Aucune opération enregistrée.</p> : <div className="mt-3 space-y-2">{projectionAudit.data?.events.slice(0, 10).map((event) => <div key={event.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-xs"><span className="font-medium">{event.action}</span><span className="text-muted-foreground">{event.source ?? 'source inconnue'}</span><span className="font-mono text-muted-foreground">{event.event_id ?? event.id}</span></div>)}</div>}
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground">Historique des réconciliations</h2>
+      <div className="app-surface p-6">
+        <h2 className="section-title">Historique des réconciliations</h2>
         {reconciliationReports.isLoading ? <div className="mt-3 h-12 animate-pulse rounded bg-muted" /> : (reconciliationReports.data?.reports.length ?? 0) === 0 ? <p className="mt-3 text-sm text-muted-foreground">Aucune réconciliation enregistrée.</p> : <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-muted-foreground"><tr><th className="pb-2">Source</th><th className="pb-2">Attendus</th><th className="pb-2">Projetés</th><th className="pb-2">Manquants</th><th className="pb-2">Obsolètes</th></tr></thead><tbody>{reconciliationReports.data?.reports.map((report) => <tr key={report.id} className="border-t border-border"><td className="py-2 font-medium">{report.source}</td><td>{report.expected_count}</td><td>{report.projected_count}</td><td className={report.missing_count ? 'text-amber-600' : ''}>{report.missing_count}</td><td className={report.obsolete_count ? 'text-amber-600' : ''}>{report.obsolete_count}</td></tr>)}</tbody></table></div>}
       </div>
 
@@ -69,8 +70,8 @@ export default function RelationsPage() {
         </div>
       ) : null}
 
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground">Réconciliation avec une source métier</h2>
+      <div className="app-surface p-6">
+        <h2 className="section-title">Réconciliation avec une source métier</h2>
         <p className="mt-1 text-xs text-muted-foreground">Compare un snapshot sans modifier la projection. Les corrections doivent être publiées par la source.</p>
         <div className="mt-4 grid gap-3">
           <input value={snapshotSource} onChange={(event) => setSnapshotSource(event.target.value)} placeholder="Source (ex. iam, documents)" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
@@ -81,10 +82,10 @@ export default function RelationsPage() {
         {(reconciliationSources.data?.sources.length ?? 0) > 0 ? <div className="mt-4 border-t border-border pt-3"><p className="text-xs text-muted-foreground">Imports automatisés configurés</p><div className="mt-2 flex flex-wrap gap-2">{reconciliationSources.data?.sources.map((source) => <button key={source.name} onClick={() => importSource.mutate(source.name, { onSuccess: () => toast.success(`Snapshot ${source.name} importé`) })} disabled={importSource.isPending} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50">Importer {source.name}</button>)}</div></div> : null}
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5">
+      <div className="app-surface p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Quarantaine d’événements</h2>
+            <h2 className="section-title">Quarantaine d’événements</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Les messages Kafka invalides sont conservés pour analyse et rejeu après correction de leur source.
             </p>

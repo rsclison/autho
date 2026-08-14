@@ -27,8 +27,8 @@ Autho est un composant **PDP (Policy Decision Point)** au sens XACML. Il expose 
      ▼
 [Autho :8080]
      │
-     ├── H2 audit DB     (./resources/auditdb)
-     └── H2 policy DB    (./resources/h2db)
+     ├── H2 audit/policy DB (défaut local)
+     └── ou PostgreSQL      (déploiement explicite)
 ```
 
 **Hypothèse d'environnement obligatoire** : Autho ne doit jamais être exposé directement sur Internet ou sur un réseau non maîtrisé sans terminaison TLS en amont.
@@ -283,7 +283,31 @@ Le rate limiting est activé par défaut. En production, les valeurs par défaut
 
 ---
 
-## 8. Chiffrement au repos des bases H2
+## 8. Stockage relationnel : H2 par défaut ou PostgreSQL
+
+Par défaut, Autho conserve ses bases H2. Aucune variable n'est nécessaire et
+aucune base existante n'est modifiée. PostgreSQL est activé uniquement avec :
+
+```bash
+export AUTHO_DB_KIND=postgres
+export AUTHO_DATABASE_URL=jdbc:postgresql://db.internal:5432/autho
+export AUTHO_DATABASE_USER=autho_app
+export AUTHO_DATABASE_PASSWORD='secret-stocke-dans-le-vault'
+```
+
+L'audit utilise la même base par défaut. Pour l'isoler, configurez
+`AUTHO_AUDIT_DATABASE_URL`, `AUTHO_AUDIT_DATABASE_USER` et
+`AUTHO_AUDIT_DATABASE_PASSWORD`. Le compte applicatif doit uniquement disposer
+des droits de création/évolution des tables Autho et des droits CRUD associés ;
+il ne doit pas être superutilisateur. Les tables sont créées au démarrage.
+
+Le passage d'une installation H2 existante à PostgreSQL n'importe pas les
+données automatiquement : exporter, transformer et vérifier les politiques,
+versions, audit et projections avant le basculement. Conserver H2 est possible
+pour le développement et les démonstrations ; PostgreSQL est recommandé pour
+une exploitation multi-instance.
+
+### 8.1 Chiffrement au repos des bases H2
 
 Autho utilise deux bases H2 persistantes :
 - `./resources/auditdb` — journal d'audit HMAC

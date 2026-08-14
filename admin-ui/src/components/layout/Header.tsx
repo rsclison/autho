@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom'
-import { Moon, Sun, LogOut } from 'lucide-react'
+import { Moon, Sun, LogOut, Menu } from 'lucide-react'
 import { useState } from 'react'
 import { getDarkMode, setDarkMode, clearToken } from '@/lib/auth'
 import { useNavigate } from 'react-router-dom'
@@ -15,7 +15,7 @@ const labels: Record<string, string> = {
   '/settings':       'Paramètres',
 }
 
-export function Header() {
+export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [dark, setDark] = useState(getDarkMode())
@@ -37,19 +37,25 @@ export function Header() {
     ?? 'Autho Admin'
 
   return (
-    <header className="flex items-center justify-between px-6 h-14 border-b border-border bg-card shrink-0">
-      <h1 className="text-base font-semibold text-foreground">{title}</h1>
+    <header className="flex min-h-16 items-center justify-between border-b border-border bg-card px-4 sm:px-6 shrink-0">
+      <div className="flex min-w-0 items-center gap-2">
+        <button onClick={onOpenMenu} className="inline-flex rounded-md p-2 text-muted-foreground hover:bg-muted lg:hidden" aria-label="Ouvrir le menu"><Menu size={20} /></button>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Administration</p>
+          <h1 className="truncate text-lg font-bold tracking-tight text-foreground">{title}</h1>
+        </div>
+      </div>
       <div className="flex items-center gap-2">
         <button
           onClick={toggleDark}
-          className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          className="rounded-md p-2 text-muted-foreground hover:bg-muted transition-colors hover:text-foreground"
           title={dark ? 'Passer en mode clair' : 'Passer en mode sombre'}
         >
           {dark ? <Sun size={16} /> : <Moon size={16} />}
         </button>
         <button
           onClick={logout}
-          className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          className="rounded-md p-2 text-muted-foreground hover:bg-muted transition-colors hover:text-foreground"
           title="Déconnexion"
         >
           <LogOut size={16} />

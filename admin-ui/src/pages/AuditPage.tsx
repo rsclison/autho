@@ -176,7 +176,11 @@ export default function AuditPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div>
+        <h2 className="page-title">Journal d’audit</h2>
+        <p className="page-description">Recherchez les décisions, vérifiez l’intégrité de la chaîne et exportez les éléments nécessaires à une investigation.</p>
+      </div>
       <SearchForm onSearch={(p) => setParams({ ...p, pageSize: params.pageSize })} />
 
       <div className="flex items-center justify-between">
@@ -192,7 +196,7 @@ export default function AuditPage() {
           {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}
         </div>
       ) : (
-        <div className={isFetching ? 'opacity-70 transition-opacity' : ''}>
+        <div className={`app-surface overflow-hidden ${isFetching ? 'opacity-70 transition-opacity' : ''}`}>
           <AuditTable items={data?.items ?? []} />
         </div>
       )}

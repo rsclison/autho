@@ -5,7 +5,8 @@
    result is available. It deliberately does not enforce quotas yet: metering
    must be observed and reconciled before it can affect authorization traffic."
   (:require [clojure.java.jdbc :as jdbc]
-            [autho.prp :as prp])
+            [autho.prp :as prp]
+            [autho.database :as database])
   (:import (java.time YearMonth)
            (org.slf4j LoggerFactory)))
 
@@ -53,10 +54,16 @@
   ;; Reconcile the total table at startup so installations upgraded from the
   ;; scope-only meter retain their already-recorded consumption.
   (jdbc/execute! prp/h2db
-                 ["MERGE INTO DECISION_USAGE_TOTAL (usage_month, decision_count, updated_at)
-                   KEY (usage_month)
-                   SELECT usage_month, SUM(decision_count), CURRENT_TIMESTAMP
-                   FROM DECISION_USAGE GROUP BY usage_month"])
+                 [(if (database/postgres?)
+                    "INSERT INTO DECISION_USAGE_TOTAL (usage_month, decision_count, updated_at)
+                       SELECT usage_month, SUM(decision_count), CURRENT_TIMESTAMP
+                       FROM DECISION_USAGE GROUP BY usage_month
+                       ON CONFLICT (usage_month) DO UPDATE
+                       SET decision_count = EXCLUDED.decision_count, updated_at = EXCLUDED.updated_at"
+                    "MERGE INTO DECISION_USAGE_TOTAL (usage_month, decision_count, updated_at)
+                       KEY (usage_month)
+                       SELECT usage_month, SUM(decision_count), CURRENT_TIMESTAMP
+                       FROM DECISION_USAGE GROUP BY usage_month")])
   (.info logger "DECISION_USAGE table ready"))
 
 (defn- increment-scope!

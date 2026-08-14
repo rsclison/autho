@@ -83,7 +83,7 @@ function YamlImportModal({ onClose }: { onClose: () => void }) {
         >
           {yaml ? (
             <Editor height="320px" language="yaml" value={yaml} onChange={(v) => setYaml(v ?? '')} theme={theme}
-              options={{ minimap: { enabled: false }, fontSize: 12, lineNumbers: 'on' }} />
+              options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'on' }} />
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground text-sm gap-2">
               <Upload size={24} />
@@ -205,7 +205,7 @@ function DiffView({ resourceClass, fromV, toV, onClose }: { resourceClass: strin
             original={original ? JSON.stringify(original, null, 2) : ''}
             modified={modified ? JSON.stringify(modified, null, 2) : ''}
             theme={theme}
-            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, renderSideBySide: true }} />
+            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 14, renderSideBySide: true }} />
         </div>
       </div>
     </div>
@@ -353,9 +353,9 @@ function PoliciesContent() {
 
   return (
     <>
-      <div className="h-[calc(100vh-3.5rem)] flex border border-border rounded-xl overflow-hidden bg-card">
+      <div className="flex h-[calc(100vh-5.5rem)] min-h-[38rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20">
+          <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/20 px-5 py-3">
             <div className="flex items-center gap-2 min-w-0">
               {resourceClass ? (
                 <>

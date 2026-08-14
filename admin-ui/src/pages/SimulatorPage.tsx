@@ -167,22 +167,26 @@ export default function SimulatorPage() {
   const currentResult = simulate.data ?? explain.data
 
   return (
-    <div className="space-y-4 max-w-3xl">
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-4">Requete d'autorisation</h2>
+    <div className="max-w-4xl space-y-6">
+      <div>
+        <h2 className="page-title">Simulateur de décision</h2>
+        <p className="page-description">Testez une requête sans modifier les politiques déployées, puis examinez la preuve de décision.</p>
+      </div>
+      <div className="app-surface p-6">
+        <h2 className="section-title mb-5">Requête d’autorisation</h2>
         <RequestForm value={request} onChange={setRequest} />
         <div className="flex items-center gap-3 mt-4 pt-4 border-t border-border">
           <button
             onClick={() => simulate.mutate(request)}
             disabled={simulate.isPending || !isReady}
-            className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-md bg-autho-dark text-white hover:bg-autho-dark/90 transition-colors disabled:opacity-50"
+            className="button-primary"
           >
             <Sparkles size={13} /> {simulate.isPending ? 'Simulation...' : 'Simuler'}
           </button>
           <button
             onClick={() => explain.mutate(request)}
             disabled={explain.isPending || !isReady}
-            className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-md border border-input hover:bg-muted transition-colors disabled:opacity-50"
+            className="button-secondary"
           >
             <HelpCircle size={13} /> {explain.isPending ? 'Analyse...' : 'Expliquer'}
           </button>
@@ -191,7 +195,7 @@ export default function SimulatorPage() {
               explain.reset()
               simulate.reset()
             }}
-            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-md border border-input hover:bg-muted transition-colors text-muted-foreground ml-auto"
+            className="button-secondary ml-auto text-muted-foreground"
           >
             <Zap size={12} /> Reinitialiser
           </button>

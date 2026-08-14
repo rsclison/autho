@@ -50,10 +50,10 @@ export function DecisionsChart({ allowTotal = 0, denyTotal = 0 }: Props) {
             backgroundColor: 'hsl(var(--card))',
             border: '1px solid hsl(var(--border))',
             borderRadius: '8px',
-            fontSize: 12,
+            fontSize: 13,
           }}
         />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 13 }} />
         <Area type="monotone" dataKey="allow" name="Allow" stroke="#22c55e" fill="url(#gradAllow)" strokeWidth={2} />
         <Area type="monotone" dataKey="deny"  name="Deny"  stroke="#ef4444" fill="url(#gradDeny)"  strokeWidth={2} />
       </AreaChart>

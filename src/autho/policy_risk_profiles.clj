@@ -2,28 +2,14 @@
   "Persistent risk profiles for policy impact analysis."
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.data.json :as json]
-            [autho.jdbc-utils :as jdbc-utils])
+            [autho.jdbc-utils :as jdbc-utils]
+            [autho.database :as database])
   (:import (org.slf4j LoggerFactory)
            (java.time Instant)))
 
 (defonce ^:private logger (LoggerFactory/getLogger "autho.policy-risk-profiles"))
 
-(def ^:private h2-policy-cipher-key (System/getenv "H2_POLICY_CIPHER_KEY"))
-(def ^:private h2-policy-db-path
-  (or (System/getenv "AUTHO_POLICY_DB_PATH")
-      (System/getProperty "autho.policy.db.path")
-      "./resources/h2db"))
-
-(def ^:private db
-  (merge
-   {:classname "org.h2.Driver"
-    :subprotocol "h2"
-    :user "sa"}
-   (if h2-policy-cipher-key
-     {:subname (str h2-policy-db-path ";CIPHER=AES")
-      :password (str h2-policy-cipher-key " ")}
-     {:subname h2-policy-db-path
-      :password ""})))
+(def ^:private db (database/policy-db))
 
 (def allowed-scope-types #{"default" "environment" "resource_class"})
 
@@ -31,29 +17,29 @@
   []
   (try
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS POLICY_RISK_PROFILES (
-         id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+                   [(format "CREATE TABLE IF NOT EXISTS POLICY_RISK_PROFILES (
+         id            %s,
          scope_type    VARCHAR(50)  NOT NULL,
          scope_key     VARCHAR(255) NOT NULL,
-         profile_json  CLOB         NOT NULL,
+         profile_json  %s         NOT NULL,
          updated_by    VARCHAR(255),
          updated_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
          UNIQUE (scope_type, scope_key)
-       )"])
+       )" (database/identity-column) (database/text-column))])
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS POLICY_RISK_PROFILE_REVISIONS (
-         id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+                   [(format "CREATE TABLE IF NOT EXISTS POLICY_RISK_PROFILE_REVISIONS (
+         id                  %s,
          scope_type          VARCHAR(50)  NOT NULL,
          scope_key           VARCHAR(255) NOT NULL,
          action              VARCHAR(50)  NOT NULL,
-         previous_profile_json CLOB,
-         new_profile_json    CLOB,
+         previous_profile_json %s,
+         new_profile_json    %s,
          approval_required   BOOLEAN      DEFAULT FALSE,
          approved_by         VARCHAR(255),
          approval_note       VARCHAR(2000),
          changed_by          VARCHAR(255),
          changed_at          TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
-       )"])
+       )" (database/identity-column) (database/text-column) (database/text-column))])
     (jdbc/execute! db ["ALTER TABLE POLICY_RISK_PROFILE_REVISIONS ADD COLUMN IF NOT EXISTS approval_required BOOLEAN DEFAULT FALSE"])
     (jdbc/execute! db ["ALTER TABLE POLICY_RISK_PROFILE_REVISIONS ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255)"])
     (jdbc/execute! db ["ALTER TABLE POLICY_RISK_PROFILE_REVISIONS ADD COLUMN IF NOT EXISTS approval_note VARCHAR(2000)"])

@@ -19,14 +19,14 @@ const colorMap = {
 
 export function MetricCard({ title, value, sub, icon: Icon, color = 'default' }: Props) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5 flex items-start gap-4">
-      <div className={cn('p-2.5 rounded-lg', colorMap[color])}>
-        <Icon size={18} />
+    <div className="app-surface flex min-h-32 items-start gap-4 p-5">
+      <div className={cn('rounded-xl p-3', colorMap[color])}>
+        <Icon size={20} />
       </div>
       <div className="min-w-0">
-        <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        <p className="mt-1 text-3xl font-bold tracking-tight text-foreground leading-tight">{value}</p>
+        {sub && <p className="mt-1 text-sm text-muted-foreground">{sub}</p>}
       </div>
     </div>
   )

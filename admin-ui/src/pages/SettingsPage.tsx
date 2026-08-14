@@ -6,8 +6,8 @@ import toast from 'react-hot-toast'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-sm font-semibold text-foreground mb-4">{title}</h2>
+    <div className="app-surface p-6">
+      <h2 className="section-title mb-5">{title}</h2>
       {children}
     </div>
   )
@@ -32,7 +32,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-xl">
+    <div className="max-w-2xl space-y-6">
+      <div>
+        <h2 className="page-title">Paramètres</h2>
+        <p className="page-description">Préférences de l’interface et informations de session.</p>
+      </div>
       {/* Appearance */}
       <Section title="Apparence">
         <div className="flex items-center justify-between">

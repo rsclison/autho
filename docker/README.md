@@ -34,6 +34,7 @@ Pour supprimer aussi les volumes persistants :
 | Admin UI | `http://localhost:8080/admin/ui` | API key ci-dessous |
 | Kafka | `localhost:9092` | - |
 | Kafka UI | `http://localhost:8090` | - |
+| PostgreSQL (optionnel) | `localhost:5432/autho` | `autho` / `autho-dev-password` |
 | OpenLDAP | `localhost:389` | `admin` / `admin` |
 | phpLDAPadmin | `http://localhost:8091` | voir ci-dessous |
 
@@ -116,6 +117,23 @@ Le paquet contient :
 - une section `integrity` avec digest canonique et signature HMAC.
 
 ## Configuration utilisee
+
+## PostgreSQL optionnel
+
+H2 reste le stockage par défaut, y compris lorsque PostgreSQL est lancé par
+Docker Compose. Pour utiliser PostgreSQL, définissez explicitement :
+
+```bash
+export AUTHO_DB_KIND=postgres
+export AUTHO_DATABASE_URL=jdbc:postgresql://localhost:5432/autho
+export AUTHO_DATABASE_USER=autho
+export AUTHO_DATABASE_PASSWORD=autho-dev-password
+```
+
+L’audit utilise la même base par défaut ; `AUTHO_AUDIT_DATABASE_URL`,
+`AUTHO_AUDIT_DATABASE_USER` et `AUTHO_AUDIT_DATABASE_PASSWORD` permettent de
+le séparer. En production, utilisez des secrets et un compte SQL à privilèges
+limités : le mot de passe ci-dessus ne convient qu’au poste de développement.
 
 La stack Docker utilise :
 

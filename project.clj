@@ -32,6 +32,7 @@
                  [hiccup "2.0.0"]
                  [metosin/jsonista "0.3.14"]
                  [com.h2database/h2 "2.4.240"]
+                 [org.postgresql/postgresql "42.7.8"]
                  [com.brunobonacci/mulog "0.10.1"]
                  [org.slf4j/slf4j-api "2.0.17"]
                  [ch.qos.logback/logback-classic "1.5.32"]

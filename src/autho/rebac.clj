@@ -1,7 +1,8 @@
 (ns autho.rebac
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [autho.database :as database])
   (:import (org.slf4j LoggerFactory)
            (java.time Instant)))
 
@@ -19,22 +20,7 @@
   `(binding [*tenant-id* ~tenant-id]
      ~@body))
 
-(def ^:private h2-policy-cipher-key (System/getenv "H2_POLICY_CIPHER_KEY"))
-(def ^:private h2-policy-db-path
-  (or (System/getenv "AUTHO_POLICY_DB_PATH")
-      (System/getProperty "autho.policy.db.path")
-      "./resources/h2db"))
-
-(def ^:private db
-  (merge
-   {:classname "org.h2.Driver"
-    :subprotocol "h2"
-    :user "sa"}
-   (if h2-policy-cipher-key
-     {:subname (str h2-policy-db-path ";CIPHER=AES")
-      :password (str h2-policy-cipher-key " ")}
-     {:subname h2-policy-db-path
-      :password ""})))
+(def ^:private db (database/policy-db))
 
 (defonce relation-tuples
   (atom {:tuples #{}
@@ -232,8 +218,8 @@
   []
   (try
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS REBAC_RELATIONS (
-         id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+                   [(format "CREATE TABLE IF NOT EXISTS REBAC_RELATIONS (
+         id             %s,
          tenant_id      VARCHAR(255) NOT NULL DEFAULT '__legacy__',
          subject_class  VARCHAR(255) NOT NULL,
          subject_id     VARCHAR(255) NOT NULL,
@@ -248,7 +234,7 @@
          expires_at     VARCHAR(64),
          created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
          UNIQUE (tenant_id, subject_class, subject_id, relation, resource_class, resource_id)
-       )"])
+       )" (database/identity-column))])
     ;; Existing installations used an unscoped table. Keep their tuples in the
     ;; legacy partition while new writes carry a tenant key.
     (jdbc/execute! db
@@ -263,13 +249,14 @@
     ;; Replace the pre-tenant uniqueness constraint when upgrading an existing
     ;; H2 store. Without this migration the same business tuple could not be
     ;; represented independently in two tenants after a restart.
-    (doseq [{:keys [constraint_name]}
-            (jdbc/query db
+    (when (database/h2?)
+      (doseq [{:keys [constraint_name]}
+              (jdbc/query db
                         ["SELECT constraint_name
                             FROM information_schema.table_constraints
                            WHERE table_name = 'REBAC_RELATIONS'
                              AND constraint_type = 'UNIQUE'"])]
-      (jdbc/execute! db [(str "ALTER TABLE REBAC_RELATIONS DROP CONSTRAINT " constraint_name)]))
+        (jdbc/execute! db [(str "ALTER TABLE REBAC_RELATIONS DROP CONSTRAINT " constraint_name)])))
     (jdbc/execute! db
                    ["CREATE UNIQUE INDEX IF NOT EXISTS UX_REBAC_RELATIONS_TENANT_TUPLE
                        ON REBAC_RELATIONS
@@ -290,12 +277,12 @@
          updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
        )"])
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS REBAC_PROJECTION_QUARANTINE (
+                   [(format "CREATE TABLE IF NOT EXISTS REBAC_PROJECTION_QUARANTINE (
          id             VARCHAR(255) PRIMARY KEY,
-         event_value    CLOB NOT NULL,
+         event_value    %s NOT NULL,
          reason         VARCHAR(2000),
          created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-       )"])
+       )" (database/text-column))])
     (jdbc/execute! db
                    ["CREATE TABLE IF NOT EXISTS REBAC_RECONCILIATION_REPORTS (
          id              VARCHAR(255) PRIMARY KEY,
@@ -308,36 +295,37 @@
          created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
        )"])
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS REBAC_PROJECTION_AUDIT (
+                   [(format "CREATE TABLE IF NOT EXISTS REBAC_PROJECTION_AUDIT (
          id         VARCHAR(255) PRIMARY KEY,
          action     VARCHAR(255) NOT NULL,
          tenant_id  VARCHAR(255),
          source     VARCHAR(255),
          event_id   VARCHAR(255),
-         details    CLOB,
+         details    %s,
          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-       )"])
+       )" (database/text-column))])
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS REBAC_RELATION_REWRITES (
-         id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+                   [(format "CREATE TABLE IF NOT EXISTS REBAC_RELATION_REWRITES (
+         id                 %s,
          tenant_id          VARCHAR(255) NOT NULL DEFAULT '__legacy__',
          relation           VARCHAR(255) NOT NULL,
          rewritten_relation VARCHAR(255) NOT NULL,
          created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
          UNIQUE (tenant_id, relation, rewritten_relation)
-       )"])
+       )" (database/identity-column))])
     ;; Rewrites affect the meaning of derived relations and therefore must be
     ;; isolated just like tuples. Pre-tenant rewrites remain available only in
     ;; the explicit legacy partition.
     (jdbc/execute! db
                    ["ALTER TABLE REBAC_RELATION_REWRITES ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255) NOT NULL DEFAULT '__legacy__'"])
-    (doseq [{:keys [constraint_name]}
-            (jdbc/query db
+    (when (database/h2?)
+      (doseq [{:keys [constraint_name]}
+              (jdbc/query db
                         ["SELECT constraint_name
                             FROM information_schema.table_constraints
                            WHERE table_name = 'REBAC_RELATION_REWRITES'
                              AND constraint_type = 'UNIQUE'"])]
-      (jdbc/execute! db [(str "ALTER TABLE REBAC_RELATION_REWRITES DROP CONSTRAINT " constraint_name)]))
+        (jdbc/execute! db [(str "ALTER TABLE REBAC_RELATION_REWRITES DROP CONSTRAINT " constraint_name)])))
     (jdbc/execute! db
                    ["CREATE UNIQUE INDEX IF NOT EXISTS UX_REBAC_REWRITES_TENANT_RELATION
                        ON REBAC_RELATION_REWRITES
@@ -429,7 +417,8 @@
                                            :event_type (:eventType event)
                                            :occurred_at (:occurredAt event)})
                             true
-                            (catch org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException _ false))
+                            (catch Exception e
+                              (if (database/unique-violation? e) false (throw e))))
                           true)]
           (when inserted?
             (swap! processed-event-ids conj event-id))
@@ -462,7 +451,8 @@
         (try
           (jdbc/insert! db :rebac_projection_state {:tuple_key tuple-key
                                                      :source_version (str version)})
-          (catch org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException _ nil))))
+          (catch Exception e
+            (when-not (database/unique-violation? e) (throw e))))))
     (swap! projection-versions assoc tuple-key (str version))))
 
 (defn apply-projection-event!

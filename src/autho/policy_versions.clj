@@ -5,6 +5,7 @@
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.data.json :as json]
             [autho.jdbc-utils :as jdbc-utils]
+            [autho.database :as database]
             [autho.policy-format :as policy-format]
             [clojure.set :as set]
             [clojure.string :as str]
@@ -18,22 +19,7 @@
 ;; DB -- shares the PRP H2 database
 ;; ---------------------------------------------------------------------------
 
-(def ^:private h2-policy-cipher-key (System/getenv "H2_POLICY_CIPHER_KEY"))
-(def ^:private h2-policy-db-path
-  (or (System/getenv "AUTHO_POLICY_DB_PATH")
-      (System/getProperty "autho.policy.db.path")
-      "./resources/h2db"))
-
-(def ^:private db
-  (merge
-   {:classname "org.h2.Driver"
-    :subprotocol "h2"
-    :user "sa"}
-   (if h2-policy-cipher-key
-     {:subname (str h2-policy-db-path ";CIPHER=AES")
-      :password (str h2-policy-cipher-key " ")}
-     {:subname h2-policy-db-path
-      :password ""})))
+(def ^:private db (database/policy-db))
 
 ;; ---------------------------------------------------------------------------
 ;; Schema
@@ -44,11 +30,11 @@
   []
   (try
     (jdbc/execute! db
-                   ["CREATE TABLE IF NOT EXISTS POLICY_VERSIONS (
-         id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+                   [(format "CREATE TABLE IF NOT EXISTS POLICY_VERSIONS (
+         id             %s,
          resource_class VARCHAR(255) NOT NULL,
          version        INT          NOT NULL,
-         policy_json    CLOB         NOT NULL,
+         policy_json    %s         NOT NULL,
          author         VARCHAR(255),
          comment        VARCHAR(500),
          source_analysis_id BIGINT,
@@ -59,7 +45,7 @@
          rollback_from_version INT,
          created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
          UNIQUE (resource_class, version)
-       )"])
+       )" (database/identity-column) (database/text-column))])
     (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS source_analysis_id BIGINT"])
     (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS deployment_kind VARCHAR(50)"])
     (jdbc/execute! db ["ALTER TABLE POLICY_VERSIONS ADD COLUMN IF NOT EXISTS source_candidate_version INT"])

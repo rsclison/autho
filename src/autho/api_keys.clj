@@ -8,6 +8,7 @@
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
             [autho.jdbc-utils :as jdbc-utils]
+            [autho.database :as database]
             [autho.prp :as prp])
   (:import (java.math BigInteger)
            (java.security MessageDigest SecureRandom)
@@ -18,7 +19,7 @@
 (defonce ^:private logger (LoggerFactory/getLogger "autho.api-keys"))
 (def ^:private random (SecureRandom.))
 
-(defn- now [] (str (Instant/now)))
+(defn- now [] (java.sql.Timestamp/from (Instant/now)))
 
 (defn- csv-values [value]
   (->> (cond
@@ -84,22 +85,23 @@
 (defn init!
   []
   (jdbc/execute! prp/h2db
-                 ["CREATE TABLE IF NOT EXISTS API_KEYS (
+                 [(format "CREATE TABLE IF NOT EXISTS API_KEYS (
                      key_id VARCHAR(64) PRIMARY KEY,
                      name VARCHAR(255) NOT NULL,
                      secret_hash VARCHAR(128) NOT NULL,
                      client_id VARCHAR(255) NOT NULL,
                      client_class VARCHAR(255) NOT NULL,
-                     roles CLOB,
-                     tenants CLOB,
-                     organizations CLOB,
-                     projects CLOB,
-                     environments CLOB,
+                     roles %s,
+                     tenants %s,
+                     organizations %s,
+                     projects %s,
+                     environments %s,
                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                      last_used_at TIMESTAMP,
                      expires_at TIMESTAMP,
                      revoked_at TIMESTAMP
-                   )"])
+                   )" (database/text-column) (database/text-column) (database/text-column)
+                        (database/text-column) (database/text-column))])
   (jdbc/execute! prp/h2db ["CREATE INDEX IF NOT EXISTS IDX_API_KEYS_ACTIVE ON API_KEYS (key_id, revoked_at)"])
   (.info logger "API_KEYS table ready"))
 
