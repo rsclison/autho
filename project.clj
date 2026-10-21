@@ -45,7 +45,8 @@
                  [diehard "0.12.0"]
                  [io.opentelemetry/opentelemetry-api "1.60.1"]]
   :main autho.core
-  :aliases {"policy:validate" ["run" "-m" "autho.policy-cli" "validate"]}
+  :aliases {"policy:validate" ["run" "-m" "autho.policy-cli" "validate"]
+            "evidence:verify" ["run" "-m" "autho.evidence-cli"]}
   :target-path "target/%s"
   :test-selectors {:default (complement :integration)
                    :integration :integration

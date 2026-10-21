@@ -696,6 +696,19 @@
                                (str "Failed to export evidence package: " (.getMessage e))
                                500))))
 
+(defn evidence-public-key
+  "Public half of the evidence signing key. Not secret: published so auditors
+   can verify bundles offline."
+  [_request]
+  (try
+    (if-let [info (evidence/public-key-info)]
+      (response/success-response info)
+      (response/error-response "EVIDENCE_SIGNING_KEY_NOT_CONFIGURED"
+                               "No evidence signing key configured (EVIDENCE_SIGNING_PRIVATE_KEY / EVIDENCE_SIGNING_PUBLIC_KEY)"
+                               404))
+    (catch clojure.lang.ExceptionInfo e
+      (exception->response e "EVIDENCE_PUBLIC_KEY_ERROR" "Failed to read evidence public key: "))))
+
 (defn verify-evidence-package
   [request]
   (log/debug "Verifying evidence package")
@@ -1507,6 +1520,26 @@
                                    (str "Failed to create relation: " (.getMessage e))
                                    500))))))
 
+(defn- audit-relation-check!
+  "Direct ReBAC checks are authorization decisions too: they are recorded in the
+   audit log with a \"relation:<name>\" operation. Anything but an affirmative
+   result is logged as deny, mirroring relation-provider/allowed?."
+  [scoped-request body subject relation resource explanation]
+  (audit/log-decision!
+   {:subject-id     (:id subject)
+    :resource-class (or (:class resource) (:resourceClass resource))
+    :resource-id    (:id resource)
+    :operation      (str "relation:" (if (keyword? relation) (name relation) relation))
+    :decision       (if (relation-provider/allowed? explanation) :allow :deny)
+    :matched-rules  []
+    :request-snapshot {:plane "rebac"
+                       :tenantId (:tenantId scoped-request)
+                       :subject subject
+                       :relation relation
+                       :resource resource
+                       :options (:options body)}
+    :decision-snapshot (assoc explanation :plane "rebac")}))
+
 (defn check-relation
   [request]
   (let [body-or-response (require-body request)]
@@ -1516,6 +1549,7 @@
         (let [{:keys [subject relation resource]} (validate-relation-payload! body-or-response)
               scoped-request (with-relation-tenant request body-or-response)
               explanation (relation-provider/check-relation scoped-request subject relation resource)]
+          (audit-relation-check! scoped-request body-or-response subject relation resource explanation)
           (response/success-response explanation))
         (catch clojure.lang.ExceptionInfo e
           (policy-exception->response e "RELATION_CHECK_ERROR" "Failed to check relation: "))

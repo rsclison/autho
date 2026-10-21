@@ -102,6 +102,20 @@
         (throw e)))))
 
 ;; ---------------------------------------------------------------------------
+;; Audit log metrics
+;; ---------------------------------------------------------------------------
+
+(defn- audit-write-counter ^Counter [^String outcome]
+  (-> ^Counter$Builder (Counter/builder "autho_audit_writes_total")
+      (.description "Audit log write attempts by outcome")
+      (.tags (into-array String ["outcome" outcome]))
+      (.register registry)))
+
+(defn record-audit-write!
+  [outcome]
+  (.increment (audit-write-counter (name outcome))))
+
+;; ---------------------------------------------------------------------------
 ;; ReBAC projection metrics
 ;; ---------------------------------------------------------------------------
 

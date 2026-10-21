@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Audit log hardening:
+  - entry hashes are computed from the stored columns (`hash_version` 2) and re-checked by `verify-chain`; altering any column of an entry is detected
+  - removal of the latest entries is detected (recorded chain head in `AUDIT_CHAIN_HEAD`, head written by the instance, optional `anchorId`/`anchorHash` on `GET /admin/audit/verify`)
+  - audit search queries are parameterised (SQL injection through filters); invalid dates return `400 INVALID_AUDIT_FILTER`
+  - several instances sharing one audit database keep a single chain (head row locked with `SELECT ... FOR UPDATE`)
+
 ### Added
+- Audit write health: `autho_audit_writes_total{outcome}` metric, `GET /admin/audit/health`, `audit` block in `/status`; with `AUDIT_REQUIRED=true` an unhealthy audit log makes `/readiness` return 503
+- Audit retention: `POST /admin/audit/purge` and `AUDIT_RETENTION_DAYS`, leaving an HMAC-signed checkpoint from which verification resumes
+- Direct ReBAC checks (`POST /v1/relations/check`) are recorded in the audit log (operation `relation:<name>`, `plane=rebac` search filter)
+- Ed25519 signature of evidence bundles (`EVIDENCE_SIGNING_PRIVATE_KEY` / `EVIDENCE_SIGNING_PUBLIC_KEY`), `GET /v1/evidence/public-key` and offline verification with `lein evidence:verify <bundle.json> <public-key>`
+
+### Changed
+- A decision granted through delegation is audited once, for the requesting subject, with `delegationChain` and `grantedVia` in the decision snapshot (previously logged under the delegate's id)
 - Authorization Operations foundations:
   - canonical decision fields on the main v1 decision endpoints
   - pre-deployment policy validation endpoint and policy validation CLI

@@ -1219,8 +1219,32 @@ components:
           type: boolean
         total:
           type: integer
-        error:
+        headId:
+          type: integer
+          nullable: true
+        headHash:
           type: string
+        legacyEntries:
+          type: integer
+          description: Entries written before content hashing (hash_version 2); their content cannot be checked
+        anchorPurged:
+          type: boolean
+        checkpoint:
+          $ref: '#/components/schemas/AuditCheckpoint'
+        broken-at:
+          type: integer
+          nullable: true
+        reason:
+          type: string
+
+    AuditCheckpoint:
+      type: object
+      nullable: true
+      properties:
+        lastPurgedId: {type: integer}
+        lastPurgedHash: {type: string}
+        purgedEntries: {type: integer}
+        purgedAt: {type: string, format: date-time}
 
     AdminActionResponse:
       type: object
@@ -2635,6 +2659,13 @@ paths:
           schema:
             type: integer
             default: 20
+            maximum: 1000
+        - in: query
+          name: plane
+          description: abac = PDP decisions, rebac = direct relation checks (operation "relation:<name>")
+          schema:
+            type: string
+            enum: [abac, rebac]
       responses:
         '200':
           description: Audit search result
@@ -2642,6 +2673,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuditSearchResult'
+        '400':
+          description: Invalid filter (dates must be ISO-8601, paging must be integers)
         '402':
           description: Pro or Enterprise licence required
 
@@ -2649,7 +2682,21 @@ paths:
     get:
       tags: [audit]
       summary: Verify the audit HMAC chain
+      description: >
+        Recomputes every entry hash from its stored columns, checks the links and
+        HMACs from the purge checkpoint onwards, and checks that the recorded chain
+        head is still present. Pass the headId/headHash of an earlier verification
+        (or of a signed evidence bundle) as an anchor to detect removed entries.
       operationId: verifyAuditChain
+      parameters:
+        - in: query
+          name: anchorId
+          schema:
+            type: integer
+        - in: query
+          name: anchorHash
+          schema:
+            type: string
       responses:
         '200':
           description: Audit chain verification result
@@ -2659,6 +2706,66 @@ paths:
                 $ref: '#/components/schemas/AuditVerifyResult'
         '402':
           description: Pro or Enterprise licence required
+
+  /admin/audit/health:
+    get:
+      tags: [audit]
+      summary: Audit write health (failed writes, pending writes)
+      operationId: auditHealth
+      responses:
+        '200':
+          description: Audit write health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  healthy: {type: boolean}
+                  initialized: {type: boolean}
+                  required: {type: boolean}
+                  writesSucceeded: {type: integer}
+                  writesFailed: {type: integer}
+                  pendingWrites: {type: integer}
+                  lastWriteAt: {type: string, format: date-time, nullable: true}
+                  lastFailureAt: {type: string, format: date-time, nullable: true}
+                  lastFailure: {type: string, nullable: true}
+
+  /admin/audit/purge:
+    post:
+      tags: [audit]
+      summary: Purge audit entries older than a date
+      description: >
+        Deletes the oldest entries (contiguous prefix of the chain) and records an
+        HMAC-signed checkpoint from which verification resumes. Refused (409) when
+        the chain does not verify.
+      operationId: purgeAudit
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [before]
+              properties:
+                before:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Purge result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purged: {type: integer}
+                  checkpoint:
+                    $ref: '#/components/schemas/AuditCheckpoint'
+        '400':
+          description: Missing or invalid date
+        '402':
+          description: Pro or Enterprise licence required
+        '409':
+          description: Audit chain does not verify; purge refused
 
   /admin/reinit:
     post:

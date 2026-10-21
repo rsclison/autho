@@ -383,61 +383,63 @@
          :deny (mapv #(project-what-authorized-rule % pagination-opts)
                      (:deny-rules matches))}))))
 
+(defn- decide-with-delegation
+  "Evaluates the request, falling back to the subject's delegations when the
+   subject itself is not allowed. Side-effect free (no metrics, no audit).
+   :delegation-chain lists the delegate ids through which access was granted."
+  [^Map request visited-subjects]
+  (validate-authz-request! request)
+  (let [subject-id (:id (:subject request))
+        globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
+        decision-result (-> (evaluate-policy-rules globalPolicy request)
+                            (canonical-decision))
+        own-decision {:allowed? (boolean (:allowed? decision-result))
+                      :rules (:matched-rule-objs decision-result)
+                      :matched-rule-names (:matched-rule-names decision-result)
+                      :delegation-chain []}]
+    (if (:allowed? own-decision)
+      own-decision
+      (let [new-visited (conj visited-subjects subject-id)
+            delegations (remove (fn [d]
+                                  (let [delegate-id (:id (:delegate d))]
+                                    (when (contains? new-visited delegate-id)
+                                      (.warn (org.slf4j.LoggerFactory/getLogger "autho.pdp")
+                                             "Circular delegation detected: {} -> {}"
+                                             subject-id delegate-id)
+                                      true)))
+                                (deleg/findDelegation (:subject request)))]
+        (or (some (fn [d]
+                    (let [ev (decide-with-delegation (assoc request :subject (:delegate d)) new-visited)]
+                      (when (:allowed? ev)
+                        (update ev :delegation-chain #(into [(:id (:delegate d))] %)))))
+                  delegations)
+            own-decision)))))
+
 (defn evalRequest
   "Evaluates an authorization request.
-  Optional visited-subjects parameter tracks delegation chain to prevent cycles."
+  Optional visited-subjects parameter tracks delegation chain to prevent cycles.
+  One metric and one audit entry are recorded, for the requesting subject; when
+  access is granted through delegation the chain is kept in the decision snapshot."
   ([request] (evalRequest request #{}))
   ([^Map request visited-subjects]
-   (validate-authz-request! request)
-
-   (let [subject-id (:id (:subject request))
-         globalPolicy (prp/getGlobalPolicy (:class (:resource request)))
-         decision-result (-> (evaluate-policy-rules globalPolicy request)
-                             (canonical-decision))
-         allowed? (:allowed? decision-result)]
-
-     (if allowed?
-       (do
-         (metrics/record-decision! :allow (:class (:resource request)))
-         (audit/log-decision! {:subject-id     (:id (:subject request))
-                               :resource-class (:class (:resource request))
-                               :resource-id    (:id (:resource request))
-                               :operation      (:operation request)
-                               :decision       :allow
-                               :matched-rules  (:matched-rule-names decision-result)
-                               :request-snapshot request
-                               :decision-snapshot {:allowed? true
-                                                   :decisionType "allow"
-                                                   :matchedRuleNames (:matched-rule-names decision-result)}})
-         {:result true :rules (:matched-rule-objs decision-result)})
-       (let [deleg (deleg/findDelegation (:subject request))
-             safe-deleg (filter #(let [delegate-id (:id (:delegate %))]
-                                   (not (contains? visited-subjects delegate-id)))
-                                deleg)
-             new-visited (conj visited-subjects subject-id)
-             delegated-allow (some #(let [delegate-id (:id (:delegate %))]
-                                      (when (contains? visited-subjects delegate-id)
-                                        (.warn (org.slf4j.LoggerFactory/getLogger "autho.pdp")
-                                               "Circular delegation detected: {} -> {}"
-                                               subject-id delegate-id))
-                                      (let [ev (evalRequest (assoc request :subject (:delegate %)) new-visited)]
-                                        (when (:result ev) ev)))
-                                   safe-deleg)]
-         (if delegated-allow
-           delegated-allow
-           (do
-             (metrics/record-decision! :deny (:class (:resource request)))
-             (audit/log-decision! {:subject-id     (:id (:subject request))
-                                   :resource-class (:class (:resource request))
-                                   :resource-id    (:id (:resource request))
-                                   :operation      (:operation request)
-                                   :decision       :deny
-                                   :matched-rules  (:matched-rule-names decision-result)
-                                   :request-snapshot request
-                                   :decision-snapshot {:allowed? false
-                                                       :decisionType "deny"
-                                                       :matchedRuleNames (:matched-rule-names decision-result)}})
-             {:result false :rules (:matched-rule-objs decision-result)})))))))
+   (let [{:keys [allowed? rules matched-rule-names delegation-chain]}
+         (decide-with-delegation request visited-subjects)
+         decision (if allowed? :allow :deny)]
+     (metrics/record-decision! decision (:class (:resource request)))
+     (audit/log-decision! {:subject-id     (:id (:subject request))
+                           :resource-class (:class (:resource request))
+                           :resource-id    (:id (:resource request))
+                           :operation      (:operation request)
+                           :decision       decision
+                           :matched-rules  matched-rule-names
+                           :request-snapshot request
+                           :decision-snapshot (cond-> {:allowed? allowed?
+                                                       :decisionType (name decision)
+                                                       :matchedRuleNames matched-rule-names}
+                                                (seq delegation-chain)
+                                                (assoc :delegationChain delegation-chain
+                                                       :grantedVia (last delegation-chain)))})
+     {:result allowed? :rules rules})))
 
 (defn isAuthorized [request body]
   (otel/with-span "authz.isAuthorized"

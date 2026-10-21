@@ -355,14 +355,26 @@
                                 :timestamp (str (java.time.Instant/now))}))
 
            (GET "/readiness" []
-                (let [rules-status (prp/get-rules-repository-status)]
-                  (if (= :failed rules-status)
+                (let [rules-status (prp/get-rules-repository-status)
+                      audit-health (audit/health-status)]
+                  (cond
+                    (= :failed rules-status)
                     (json-response {:status "not_ready"
                                     :reason "Rule repository not loaded"
                                     :timestamp (str (java.time.Instant/now))}
                                    503)
+
+                    (and (:required audit-health) (not (:healthy audit-health)))
+                    (json-response {:status "not_ready"
+                                    :reason "Audit log unavailable (AUDIT_REQUIRED=true)"
+                                    :audit audit-health
+                                    :timestamp (str (java.time.Instant/now))}
+                                   503)
+
+                    :else
                     (json-response {:status "ready"
                                     :rulesRepository "loaded"
+                                    :audit {:healthy (:healthy audit-health)}
                                     :timestamp (str (java.time.Instant/now))}))))
 
            (GET "/status" []
@@ -390,6 +402,7 @@
                                   :kafka {:enabled kafka-enabled}
                                   :topology (topology/current-config)
                                   :circuitBreakers (cb/get-all-status)
+                                  :audit (audit/health-status)
                                   :timestamp (str (java.time.Instant/now))})))
 
            (GET "/openapi.yaml" []
@@ -659,8 +672,16 @@
                                                 :decision       (when-let [d (get params "decision")] (keyword d))
                                                 :from           (get params "from")
                                                 :to             (get params "to")
+                                                :plane          (get params "plane")
                                                 :page           (some-> (get params "page") Long/parseLong)
                                                 :page-size      (some-> (get params "pageSize") Long/parseLong)}))
+                               (catch clojure.lang.ExceptionInfo e
+                                 (if-let [status (:status (ex-data e))]
+                                   (error-response (:error-code (ex-data e)) (.getMessage e) status)
+                                   (do (.error logger "Audit search failed" e)
+                                       (error-response "AUDIT_SEARCH_FAILED"
+                                                       (str "Audit search failed: " (.getMessage e))
+                                                       500))))
                                (catch Exception e
                                  (.error logger "Audit search failed" e)
                                  (error-response "AUDIT_SEARCH_FAILED"
@@ -706,13 +727,53 @@
                                              conditions)]
                            (json-response mined)))
 
-                    (GET "/audit/verify" []
+                    (GET "/audit/health" []
+                         (json-response (audit/health-status)))
+
+                    (POST "/audit/purge" request
                          (if-not (features/licensed? :audit)
                            (error-response "LICENSE_REQUIRED"
                                            "L'audit requiert une licence Pro ou Enterprise."
                                            402)
                            (try
-                             (json-response (audit/verify-chain))
+                             (let [body (when-let [b (:body request)]
+                                          (let [raw (slurp b)]
+                                            (when-not (str/blank? raw)
+                                              (json/read-value raw json/keyword-keys-object-mapper))))
+                                   before (or (:before body) (get-in request [:query-params "before"]))]
+                               (json-response (audit/purge-before! before)))
+                             (catch clojure.lang.ExceptionInfo e
+                               (let [data (ex-data e)]
+                                 (if-let [status (:status data)]
+                                   (json-response (cond-> {:error {:code (:error-code data)
+                                                                   :message (.getMessage e)}}
+                                                    (:verification data) (assoc :verification (:verification data)))
+                                                  status)
+                                   (error-response "AUDIT_PURGE_FAILED"
+                                                   (str "Audit purge failed: " (.getMessage e))
+                                                   500))))
+                             (catch Exception e
+                               (.error logger "Audit purge failed" e)
+                               (error-response "AUDIT_PURGE_FAILED"
+                                               (str "Audit purge failed: " (.getMessage e))
+                                               500)))))
+
+                    (GET "/audit/verify" request
+                         (if-not (features/licensed? :audit)
+                           (error-response "LICENSE_REQUIRED"
+                                           "L'audit requiert une licence Pro ou Enterprise."
+                                           402)
+                           (try
+                             (let [params (:query-params request)]
+                               (json-response (audit/verify-chain
+                                               {:anchor-id   (get params "anchorId")
+                                                :anchor-hash (get params "anchorHash")})))
+                             (catch clojure.lang.ExceptionInfo e
+                               (if-let [status (:status (ex-data e))]
+                                 (error-response (:error-code (ex-data e)) (.getMessage e) status)
+                                 (error-response "AUDIT_VERIFY_FAILED"
+                                                 (str "Audit verification failed: " (.getMessage e))
+                                                 500)))
                              (catch Exception e
                                (error-response "AUDIT_VERIFY_FAILED"
                                                (str "Audit verification failed: " (.getMessage e))

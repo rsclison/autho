@@ -789,6 +789,27 @@
     (finally
       (rebac/clear-relations!))))
 
+(deftest relation-check-handler-records-audit-entry-test
+  (rebac/clear-relations!)
+  (try
+    (let [logged (atom [])
+          payload {:subject {:class "Person" :id "alice"}
+                   :relation "viewer"
+                   :resource {:class "Document" :id "doc-1"}}]
+      (rebac/with-tenant "default"
+        (rebac/add-relation! (:subject payload) "viewer" (:resource payload)))
+      (with-redefs [audit/log-decision! (fn [entry] (swap! logged conj entry))]
+        (handlers/check-relation (mock-request :body (json/write-value-as-string payload)))
+        (handlers/check-relation (mock-request :body (json/write-value-as-string
+                                                      (assoc payload :relation "editor")))))
+      (is (= [["alice" "Document" "doc-1" "relation:viewer" :allow]
+              ["alice" "Document" "doc-1" "relation:editor" :deny]]
+             (map (juxt :subject-id :resource-class :resource-id :operation :decision) @logged)))
+      (is (= "rebac" (get-in (first @logged) [:request-snapshot :plane])))
+      (is (= "rebac" (get-in (first @logged) [:decision-snapshot :plane]))))
+    (finally
+      (rebac/clear-relations!))))
+
 (deftest relation-rewrite-handlers-manage-rewrites-test
   (rebac/clear-relation-rewrites!)
   (try

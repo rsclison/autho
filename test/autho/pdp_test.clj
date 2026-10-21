@@ -688,3 +688,43 @@
           (is (= "read" (:operation what-result)))
           (is (= 1 (:page what-result)))
           (is (= 20 (:pageSize what-result))))))))
+
+(deftest delegated-decision-is-audited-for-requesting-subject-test
+  (let [logged (atom [])
+        decisions (atom [])]
+    (with-redefs [prp/getGlobalPolicy (fn [_]
+                                        {:rules [{:name "allow-rule" :effect "allow" :priority 1}]
+                                         :strategy :almost_one_allow_no_deny})
+                  prp/getPolicy (fn [c a] {:rules []})
+                  deleg/findDelegation (fn [subject]
+                                         (cond
+                                           (= (:id subject) "user1") [{:delegate {:id "user2"}}]
+                                           (= (:id subject) "user2") [{:delegate {:id "user3"}}]
+                                           :else []))
+                  rule/evaluateRule (fn [rule req]
+                                      {:value (= (:id (:subject req)) "user3")})
+                  metrics/record-decision! (fn [& args] (swap! decisions conj args))
+                  audit/log-decision! (fn [entry] (swap! logged conj entry))]
+      (is (true? (:result (evalRequest {:subject {:id "user1"} :resource {:class "doc"} :operation "read"}))))
+      (is (= 1 (count @logged)))
+      (is (= 1 (count @decisions)))
+      (let [entry (first @logged)]
+        (is (= "user1" (:subject-id entry)))
+        (is (= :allow (:decision entry)))
+        (is (= ["user2" "user3"] (get-in entry [:decision-snapshot :delegationChain])))
+        (is (= "user3" (get-in entry [:decision-snapshot :grantedVia])))))))
+
+(deftest denied-request-with-delegations-is-audited-once-test
+  (let [logged (atom [])]
+    (with-redefs [prp/getGlobalPolicy (fn [_]
+                                        {:rules [{:name "allow-rule" :effect "allow" :priority 1}]
+                                         :strategy :almost_one_allow_no_deny})
+                  prp/getPolicy (fn [c a] {:rules []})
+                  deleg/findDelegation (fn [subject]
+                                         (if (= (:id subject) "user1") [{:delegate {:id "user2"}}] []))
+                  rule/evaluateRule (fn [_ _] {:value false})
+                  metrics/record-decision! (fn [& _] nil)
+                  audit/log-decision! (fn [entry] (swap! logged conj entry))]
+      (is (false? (:result (evalRequest {:subject {:id "user1"} :resource {:class "doc"} :operation "read"}))))
+      (is (= [["user1" :deny]] (map (juxt :subject-id :decision) @logged)))
+      (is (nil? (get-in (first @logged) [:decision-snapshot :delegationChain]))))))

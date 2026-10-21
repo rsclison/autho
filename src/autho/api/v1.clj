@@ -180,7 +180,10 @@
 
   (context "/evidence" []
     (POST "/verify" request
-          (plane-call :evidence #(handlers/verify-evidence-package request))))
+          (plane-call :evidence #(handlers/verify-evidence-package request)))
+
+    (GET "/public-key" request
+         (plane-call :evidence #(handlers/evidence-public-key request))))
 
   ;; ===================================================================
   ;; Relationship Management Endpoints

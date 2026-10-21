@@ -46,8 +46,9 @@
                    #'autho.audit/hmac-secret test-secret}
     (fn []
       (reset-chain!)
-      (try (jdbc/execute! test-db ["DROP TABLE IF EXISTS AUDIT_LOG"])
-           (catch Exception _))
+      (doseq [table ["AUDIT_LOG" "AUDIT_CHAIN_HEAD" "AUDIT_CHECKPOINT"]]
+        (try (jdbc/execute! test-db [(str "DROP TABLE IF EXISTS " table)])
+             (catch Exception _)))
       (audit/init!)
       (f))))
 
@@ -105,7 +106,7 @@
                           :matched-rules  []})
     (await-agent)
     (let [row      (first (jdbc/query test-db ["SELECT * FROM AUDIT_LOG ORDER BY id ASC"]))
-          expected (hmac-sha256 (str zero-hash (:payload_hash row)) test-secret)]
+          expected (hmac-sha256 (str "v2|" zero-hash "|" (:payload_hash row)) test-secret)]
       (is (= expected (:hmac row)))
       (is (= zero-hash (:previous_hash row))))))
 
@@ -326,3 +327,202 @@
     (let [result (audit/verify-chain)]
       (is (true? (:valid result)))
       (is (= 0 (:total result))))))
+
+;; ---------------------------------------------------------------------------
+;; Content tampering, truncation and injection
+;; ---------------------------------------------------------------------------
+
+(defn- log-n! [n subject]
+  (doseq [i (range n)]
+    (audit/log-decision! {:request-id     (str "req-" subject "-" i)
+                          :subject-id     subject
+                          :resource-class "Doc"
+                          :resource-id    (str "d-" i)
+                          :operation      "read"
+                          :decision       :deny
+                          :matched-rules  ["R-deny"]
+                          :request-snapshot {:subject {:id subject}}}))
+  (await-agent))
+
+(deftest detect-altered-decision-column-test
+  (testing "verify-chain detects a row whose content changed while hashes were left intact"
+    (log-n! 3 "grace")
+    (let [id-mid (:id (second (jdbc/query test-db ["SELECT id FROM AUDIT_LOG ORDER BY id ASC"])))]
+      (jdbc/execute! test-db ["UPDATE AUDIT_LOG SET decision = 'allow' WHERE id = ?" id-mid])
+      (let [result (audit/verify-chain)]
+        (is (false? (:valid result)))
+        (is (= id-mid (:broken-at result)))))))
+
+(deftest detect-altered-snapshot-test
+  (log-n! 2 "heidi")
+  (jdbc/execute! test-db ["UPDATE AUDIT_LOG SET request_snapshot = '{}' WHERE id = (SELECT MIN(id) FROM AUDIT_LOG)"])
+  (is (= "Payload hash mismatch (entry content altered)" (:reason (audit/verify-chain)))))
+
+(deftest detect-altered-timestamp-test
+  (log-n! 1 "ivan")
+  (jdbc/execute! test-db ["UPDATE AUDIT_LOG SET ts = TIMESTAMP '2001-01-01 00:00:00'"])
+  (is (= "Payload hash mismatch (entry content altered)" (:reason (audit/verify-chain)))))
+
+(deftest downgrading-hash-version-is-detected-test
+  (log-n! 1 "judy")
+  (jdbc/execute! test-db ["UPDATE AUDIT_LOG SET hash_version = NULL, decision = 'allow'"])
+  (is (false? (:valid (audit/verify-chain)))))
+
+(deftest verify-reports-chain-head-test
+  (log-n! 2 "ken")
+  (let [last-row (first (jdbc/query test-db ["SELECT * FROM AUDIT_LOG ORDER BY id DESC LIMIT 1"]))
+        result   (audit/verify-chain)]
+    (is (true? (:valid result)))
+    (is (= (:id last-row) (:headId result)))
+    (is (= (:payload_hash last-row) (:headHash result)))
+    (is (= 0 (:legacyEntries result)))))
+
+(deftest detect-truncated-tail-test
+  (testing "removing the latest entries is detected against the head known by this instance"
+    (log-n! 3 "leo")
+    (jdbc/execute! test-db ["DELETE FROM AUDIT_LOG WHERE id = (SELECT MAX(id) FROM AUDIT_LOG)"])
+    (let [result (audit/verify-chain)]
+      (is (false? (:valid result)))
+      (is (string? (:reason result))))))
+
+(deftest detect-truncation-against-external-anchor-test
+  (testing "an anchor saved earlier (id + hash) must still be present in the chain"
+    (log-n! 3 "mia")
+    (let [{:keys [headId headHash]} (audit/verify-chain)]
+      (is (true? (:valid (audit/verify-chain {:anchor-id headId :anchor-hash headHash}))))
+      ;; attacker removes the last entry and rewrites the head record, then the
+      ;; instance restarts and reloads its head from the database
+      (jdbc/execute! test-db ["DELETE FROM AUDIT_LOG WHERE id = ?" headId])
+      (let [new-head (:payload_hash (first (jdbc/query test-db ["SELECT payload_hash FROM AUDIT_LOG ORDER BY id DESC LIMIT 1"])))]
+        (jdbc/execute! test-db ["UPDATE AUDIT_CHAIN_HEAD SET last_hash = ?" new-head])
+        (reset! @#'autho.audit/last-hash new-head))
+      (is (true? (:valid (audit/verify-chain))))
+      (is (false? (:valid (audit/verify-chain {:anchor-id headId :anchor-hash headHash})))))))
+
+(deftest search-is-not-injectable-test
+  (log-n! 2 "nina")
+  (let [result (audit/search {:subject-id "x' OR '1'='1"})]
+    (is (= 0 (:total result))))
+  (is (= 0 (:total (audit/search {:resource-class "Doc' OR 1=1 --x"}))))
+  (is (thrown? Exception (audit/search {:from "2020-01-01' OR '1'='1"}))))
+
+(deftest search-accepts-date-formats-and-string-paging-test
+  (log-n! 3 "olga")
+  (is (= 3 (:total (audit/search {:from "2000-01-01"}))))
+  (is (= 3 (:total (audit/search {:from "2000-01-01T00:00"}))))
+  (is (= 3 (:total (audit/search {:from "2000-01-01T00:00:00Z"}))))
+  (is (= 0 (:total (audit/search {:to "2000-01-01T00:00:00Z"}))))
+  (let [page (audit/search {:page "2" :page-size "2"})]
+    (is (= 1 (count (:items page))))
+    (is (= 2 (:pageSize page))))
+  (is (= 2 (:returned (audit/replay-requests {:limit "2"})))))
+
+;; ---------------------------------------------------------------------------
+;; Shared chain head, write health, purge
+;; ---------------------------------------------------------------------------
+
+(deftest truncation-detected-after-restart-test
+  (testing "the head stored in AUDIT_CHAIN_HEAD reveals truncation even after a restart"
+    (log-n! 3 "pia")
+    (jdbc/execute! test-db ["DELETE FROM AUDIT_LOG WHERE id = (SELECT MAX(id) FROM AUDIT_LOG)"])
+    (reset-chain!)
+    (let [result (audit/verify-chain)]
+      (is (false? (:valid result)))
+      (is (re-find #"Recorded chain head" (:reason result))))))
+
+(deftest stale-instance-does-not-fork-chain-test
+  (testing "a second instance with a stale in-memory head still appends after the real head"
+    (log-n! 2 "quentin")
+    ;; another instance that loaded its head before those writes
+    (reset-chain!)
+    (log-n! 2 "rose")
+    (let [result (audit/verify-chain)]
+      (is (true? (:valid result)))
+      (is (= 4 (:total result))))))
+
+(deftest legacy-table-seeds-chain-head-test
+  (log-n! 2 "sam")
+  (jdbc/execute! test-db ["DROP TABLE AUDIT_CHAIN_HEAD"])
+  (audit/init!)
+  (log-n! 1 "sam")
+  (is (= 3 (:total (audit/verify-chain)))))
+
+(deftest health-reports-write-failures-test
+  (log-n! 1 "tom")
+  (is (true? (:healthy (audit/health-status))))
+  (with-redefs [jdbc/insert! (fn [& _] (throw (ex-info "disk full" {})))]
+    (log-n! 1 "tom"))
+  (let [h (audit/health-status)]
+    (is (false? (:healthy h)))
+    (is (= 1 (:writesFailed h)))
+    (is (= "disk full" (:lastFailure h))))
+  (Thread/sleep 5)
+  (log-n! 1 "tom")
+  (is (true? (:healthy (audit/health-status))))
+  (is (true? (:valid (audit/verify-chain)))))
+
+(deftest purge-keeps-remaining-chain-verifiable-test
+  (log-n! 2 "uma")
+  (Thread/sleep 5)
+  (let [cut (str (.toInstant ^java.sql.Timestamp
+                             (:ts (first (jdbc/query test-db ["SELECT MAX(ts) AS ts FROM AUDIT_LOG"])))))]
+    (Thread/sleep 5)
+    (log-n! 2 "uma")
+    (let [result (audit/purge-before! (str (.plusMillis (java.time.Instant/parse cut) 1)))]
+      (is (= 2 (:purged result)))
+      (is (= 2 (get-in result [:checkpoint :purgedEntries]))))
+    (let [verify (audit/verify-chain)]
+      (is (true? (:valid verify)))
+      (is (= 2 (:total verify)))
+      (is (= 2 (get-in verify [:checkpoint :purgedEntries]))))
+    (log-n! 1 "uma")
+    (is (= 3 (:total (audit/verify-chain))))
+    (audit/purge-before! "2999-01-01")
+    (log-n! 1 "uma")
+    (let [verify (audit/verify-chain)]
+      (is (true? (:valid verify)))
+      (is (= 1 (:total verify)))
+      (is (= 5 (get-in verify [:checkpoint :purgedEntries]))))))
+
+(deftest purge-refused-on-tampered-chain-test
+  (log-n! 2 "vera")
+  (jdbc/execute! test-db ["UPDATE AUDIT_LOG SET decision = 'allow'"])
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"purge refused"
+                        (audit/purge-before! "2999-01-01")))
+  (is (= 2 (:n (first (jdbc/query test-db ["SELECT COUNT(*) AS n FROM AUDIT_LOG"]))))))
+
+(deftest tampered-checkpoint-is-detected-test
+  (log-n! 3 "will")
+  (audit/purge-before! "2999-01-01")
+  (jdbc/execute! test-db ["UPDATE AUDIT_CHECKPOINT SET purged_entries = 0"])
+  (is (= "Purge checkpoint HMAC mismatch" (:reason (audit/verify-chain)))))
+
+(deftest deleting-checkpoint-breaks-chain-test
+  (log-n! 3 "xena")
+  (Thread/sleep 5)
+  (let [cut (str (java.time.Instant/now))]
+    (Thread/sleep 5)
+    (log-n! 1 "xena")
+    (audit/purge-before! cut))
+  (jdbc/execute! test-db ["DELETE FROM AUDIT_CHECKPOINT"])
+  (is (false? (:valid (audit/verify-chain)))))
+
+(deftest anchor-older-than-checkpoint-is-reported-test
+  (log-n! 2 "yan")
+  (let [{:keys [headId headHash]} (audit/verify-chain)]
+    (audit/purge-before! "2999-01-01")
+    (let [result (audit/verify-chain {:anchor-id headId :anchor-hash headHash})]
+      (is (true? (:valid result)))
+      (is (true? (:anchorPurged result))))))
+
+(deftest replay-excludes-rebac-checks-test
+  (log-n! 1 "zoe")
+  (audit/log-decision! {:subject-id "zoe" :resource-class "Doc" :resource-id "d-9"
+                        :operation "relation:viewer" :decision :allow :matched-rules []
+                        :request-snapshot {:plane "rebac" :at (java.time.Instant/now)}})
+  (await-agent)
+  (is (= 2 (:total (audit/search {}))))
+  (is (= 1 (:total (audit/search {:plane "rebac"}))))
+  (is (= 1 (:total (audit/search {:plane "abac"}))))
+  (is (= 1 (:returned (audit/replay-requests {:resource-class "Doc"}))))
+  (is (true? (:valid (audit/verify-chain)))))

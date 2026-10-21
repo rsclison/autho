@@ -32,6 +32,10 @@ export interface AuditResult {
 
 export interface AuditChainResult {
   valid: boolean
-  'broken-at'?: number
+  'broken-at'?: number | null
   reason?: string
+  total?: number
+  headId?: number | null
+  headHash?: string
+  legacyEntries?: number
 }
