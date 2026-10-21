@@ -113,7 +113,10 @@ fois lisible dans l’IHM et vérifiable par une machine.
 2. Montrer la stratégie `almost_one_allow_no_deny`, les règles d’autorisation
    et de refus, puis l’historique de versions.
 3. Dans **Simulateur**, évaluer `DossierDemo` / `DOS-002` / `lire` : le refus
-   est expliqué par `DENY-SECRET`.
+   est expliqué par `DENY-SECRET`. Le formulaire ne saisit que l’identifiant
+   de la ressource : l’attribut `classification: secret` vient du cache, rempli
+   par la décision de `demo_start.sh`. Faire cette étape **avant**
+   `demo_inject_kafka.sh`, qui vide les caches.
 4. Revenir sur `DossierDemo`, ouvrir la vue de gouvernance et lancer la
    prévisualisation d’impact ; le script a déjà généré une analyse candidate.
 
@@ -144,14 +147,17 @@ Exécuter alors `./demo_inject_kafka.sh`, puis revenir dans **Relations** :
 
 1. consulter les tuples projetés et leurs métadonnées de source/version ;
 2. montrer l’état du consommateur, l’âge de projection et le lag ;
-3. consulter le journal de projection ;
+3. consulter le journal de projection : une entrée `upserted` par relation
+   reçue de Kafka, puis la réconciliation ;
 4. ouvrir la réconciliation et le rapport de la source `demo-iam` : aucun
    écart est attendu ;
 5. vérifier que la quarantaine est vide.
 
 Dans **Audit**, filtrer `DocumentPartageDemo` :
 
-- `DOC-PARTAGE-001` est autorisé ;
+- `DOC-PARTAGE-001` est autorisé, deux fois : la décision du PDP et le contrôle
+  ReBAC direct (`POST /v1/relations/check`, opération `relation:can-read`),
+  désormais journalisé lui aussi ;
 - `DOC-PARTAGE-REFUSE` est refusé.
 
 La page Relations est une vue d’exploitation de projection, non l’outil qui
@@ -164,6 +170,13 @@ réconciliation compare seulement les états et ne modifie jamais la projection.
 Dans Kafka UI, ouvrir les topics `business-objects-compacted` et
 `authorization-relationships`. Le premier contient les factures ; le second
 contient les événements d’outbox relationnels.
+
+Ouvrir aussi `business-objects-history` : le service `topic-mirror` y recopie
+chaque objet métier, enveloppé d’un horodatage (`{"_timestamp": …, "_data": …}`).
+Contrairement au topic compacté, qui ne garde que le dernier état de chaque
+objet, ce topic conserve toutes les versions successives : c’est lui que
+rejouent les requêtes time-travel du chapitre 7. Après `demo_audit.sh`, on y
+voit les trois états successifs d’alice (`AgentDemo`).
 
 Dans l’Admin UI, ouvrir **Données PIP**, sélectionner `Facture` et montrer les
 objets reçus dans RocksDB. Dans **Audit**, filtrer `Facture` :

@@ -511,9 +511,11 @@
                          "authorization.relationship.deleted"
                          (remove-relation! subject relation resource)))]
           (store-version! tuple-key version)
-          (record-projection-audit! (if (= eventType "authorization.relationship.deleted") :deleted :upserted)
-                                    {:source source :eventId eventId
-                                     :details {:tuple tuple :version version}})
+          ;; journaled under the event's tenant so the tenant's journal shows it
+          (with-tenant tenantId
+            (record-projection-audit! (if (= eventType "authorization.relationship.deleted") :deleted :upserted)
+                                      {:source source :eventId eventId
+                                       :details {:tuple tuple :version version}}))
           {:status :applied :eventId eventId :eventType eventType :tuple result})
         (let [target (with-tenant tenantId (entity-key (or subject resource)))
               matches? (if (= eventType "authorization.subject.deleted")
@@ -525,9 +527,10 @@
             (with-tenant tenantId
               (remove-relation! (:subject relation-tuple) (:relation relation-tuple) (:resource relation-tuple)))
             (store-version! (version-key tenantId relation-tuple) version))
-          (record-projection-audit! (if (= eventType "authorization.subject.deleted") :subject-deleted :resource-deleted)
-                                    {:source source :eventId eventId
-                                     :details {:target target :version version :deletedCount (count current)}})
+          (with-tenant tenantId
+            (record-projection-audit! (if (= eventType "authorization.subject.deleted") :subject-deleted :resource-deleted)
+                                      {:source source :eventId eventId
+                                       :details {:target target :version version :deletedCount (count current)}}))
           {:status :applied :eventId eventId :eventType eventType :deletedCount (count current)})))))
 
 (defn add-relation!

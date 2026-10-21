@@ -422,3 +422,19 @@
     (rebac/add-relation! folder-b "parent" folder-a)
     (rebac/add-relation! subject "viewer" folder-b)
     (is (true? (rebac/has-relation? subject "viewer" folder-a)))))
+
+(deftest projection-events-are-journaled-under-their-tenant-test
+  (let [alice {:class "Person" :id "alice-journal"}
+        doc {:class "Document" :id "doc-journal"}
+        base {:tenantId "tenant-journal" :source "documents" :occurredAt "2026-08-13T10:00:00Z"}
+        journal (fn [] (rebac/with-tenant "tenant-journal" (rebac/list-projection-audit-events)))]
+    (rebac/apply-projection-event!
+     (merge base {:eventId "journal-upsert-1" :eventType "authorization.relationship.upserted" :version 1
+                  :tuple {:subject alice :relation "viewer" :resource doc}}))
+    (rebac/apply-projection-event!
+     (merge base {:eventId "journal-subject-delete-1" :eventType "authorization.subject.deleted" :version 2
+                  :subject alice}))
+    (is (= [["upserted" "journal-upsert-1"] ["subject-deleted" "journal-subject-delete-1"]]
+           (map (juxt :action :event_id)
+                (filter #(contains? #{"journal-upsert-1" "journal-subject-delete-1"} (:event_id %)) (journal)))))
+    (is (every? #(= "tenant-journal" (:tenant_id %)) (journal)))))
