@@ -8,7 +8,20 @@
 
 (defonce logger (LoggerFactory/getLogger "autho.attfun"))
 
+(declare findAndCallPip*)
+
+(def ^:dynamic *attribute-resolver*
+  "When bound to (fn [attribute-name obj]), replaces PIP calls: attributes
+   missing from an object are read from it instead. Used by time-travel
+   evaluation so that no live (current) value leaks into a historical decision."
+  nil)
+
 (defn findAndCallPip [attName obj]
+  (if *attribute-resolver*
+    (*attribute-resolver* attName obj)
+    (findAndCallPip* attName obj)))
+
+(defn- findAndCallPip* [attName obj]
   (let [pipdecl (prp/findPip (:class obj) attName)]
     (if (nil? pipdecl)
       nil

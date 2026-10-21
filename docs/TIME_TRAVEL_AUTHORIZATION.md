@@ -84,6 +84,23 @@ Les nouveaux endpoints sont automatiquement disponibles.
 
 ## Utilisation
 
+### Comment une décision passée est reconstruite
+
+Pour une date T, les endpoints 1 à 3 :
+
+1. **Reconstruisent l'état des objets métier à T**, en rejouant le topic d'historique (`business-objects-history`, ou `KAFKA_HISTORY_TOPIC`) jusqu'à T.
+2. **Retrouvent la politique en vigueur à T** : la dernière version déployée avant T pour l'environnement demandé (`environment`, `prod` par défaut), lue dans `POLICY_VERSIONS`. Si aucune version n'a jamais été enregistrée, par exemple pour une politique chargée depuis un fichier, la politique courante est utilisée avec l'avertissement `POLICY_VERSION_UNAVAILABLE`.
+3. **Évaluent la règle avec ces seuls attributs.** Aucun PIP, filler ni cache n'est consulté, pour qu'aucune valeur actuelle ne se glisse dans une décision passée. Les attributs envoyés par l'appelant sont écrasés par ceux de l'historique : l'appelant ne fait qu'identifier les objets.
+
+Ces évaluations n'écrivent ni dans le journal d'audit ni dans les métriques de décision.
+
+**Ce qui n'a pas d'historique :**
+- **Relations ReBAC** : les clauses `relation` sont évaluées sur l'état *courant* des relations, avec l'avertissement `RELATIONS_EVALUATED_ON_CURRENT_STATE`.
+- **Délégations** : elles ne sont pas appliquées.
+- **Sujets** : ils ne sont trouvés que s'ils sont publiés dans le topic d'historique. Une personne connue seulement via LDAP déclenche `SUBJECT_NOT_IN_SNAPSHOT`.
+
+Avertissements possibles : `POLICY_VERSION_UNAVAILABLE`, `NO_POLICY_AT_TIME` (aucune politique à T, décision `deny`), `SUBJECT_NOT_IN_SNAPSHOT`, `RESOURCE_NOT_IN_SNAPSHOT`, `RELATIONS_EVALUATED_ON_CURRENT_STATE`.
+
 ### Endpoint 1 : `/isAuthorized-at-time`
 
 Évalue une autorisation à un moment T dans le passé.
@@ -96,24 +113,34 @@ curl -X POST http://localhost:3000/isAuthorized-at-time \
   -d '{
     "timestamp": "2024-03-15T10:30:00Z",
     "subject": {"id": "alice@company.com"},
-    "action": "view",
+    "action": "approve",
     "resource": {"class": "Facture", "id": "INV-12345"}
   }'
 ```
+
+`action` est un alias de `operation`. `subject.class` est facultatif : il est déduit de l'historique, et une erreur 400 `AMBIGUOUS_SUBJECT_CLASS` est renvoyée si l'identifiant existe dans plusieurs classes.
 
 **Réponse** :
 ```json
 {
   "timestamp": "2024-03-15T10:30:00Z",
-  "decision": "PERMIT",
+  "decision": "allow",
+  "allowed": true,
+  "matchedRules": ["R-approve"],
+  "subject": {"class": "Person", "id": "alice@company.com", "role": "manager"},
+  "resource": {"class": "Facture", "id": "INV-12345", "amount": 5000},
+  "operation": "approve",
+  "policy": {"source": "version", "version": 7, "createdAt": "2024-03-01T09:00:00Z"},
   "snapshot-size": 1523,
-  "reason": "User had role:manager and invoice amount was 5000€ at that time"
+  "warnings": []
 }
 ```
 
 ### Endpoint 2 : `/who-was-authorized-at`
 
-Liste tous les sujets autorisés à accéder une ressource à un moment T.
+Liste les sujets de l'historique qui étaient autorisés sur une ressource à un moment T.
+
+Les candidats sont les objets des classes dont la politique lit des attributs de sujet (`["Person", "$s", "role"]` → `Person`), ou de la classe donnée par `subjectClass`. Le paramètre `limit` (1000 par défaut, 10000 au maximum) borne le nombre de candidats évalués ; `truncated` indique s'il a été atteint.
 
 **Requête** :
 ```bash
@@ -135,16 +162,22 @@ curl -X POST http://localhost:3000/who-was-authorized-at \
   "resource": {"class": "Facture", "id": "INV-12345"},
   "action": "approve",
   "timestamp": "2024-03-15T10:30:00Z",
+  "policy": {"source": "version", "version": 7, "createdAt": "2024-03-01T09:00:00Z"},
   "authorized-subjects": [
-    {"id": "alice@company.com", "role": "manager"},
-    {"id": "bob@company.com", "role": "finance-director"}
-  ]
+    {"class": "Person", "id": "alice@company.com", "matchedRules": ["R-approve"]},
+    {"class": "Person", "id": "bob@company.com", "matchedRules": ["R-approve"]}
+  ],
+  "evaluated": 240,
+  "truncated": false,
+  "warnings": []
 }
 ```
 
 ### Endpoint 3 : `/what-could-access-at`
 
-Liste toutes les ressources qu'un sujet pouvait accéder à un moment T.
+Liste les objets de l'historique auxquels un sujet pouvait accéder à un moment T.
+
+Les candidats sont les objets de toutes les classes qui avaient une politique à T, ou seulement ceux de `resourceClass`. Les paramètres `subjectClass` et `limit` fonctionnent comme pour l'endpoint 2.
 
 **Requête** :
 ```bash
@@ -165,11 +198,17 @@ curl -X POST http://localhost:3000/what-could-access-at \
   "subject": "alice@company.com",
   "action": "view",
   "timestamp": "2024-03-15T10:30:00Z",
+  "policies": {
+    "Facture": {"source": "version", "version": 7, "createdAt": "2024-03-01T09:00:00Z"},
+    "Contrat": {"source": "current"}
+  },
   "accessible-resources": [
-    {"class": "Facture", "id": "INV-12345", "amount": 5000},
-    {"class": "Facture", "id": "INV-12346", "amount": 7500},
-    {"class": "Contrat", "id": "CTR-789", "classification": "public"}
-  ]
+    {"class": "Facture", "id": "INV-12345", "matchedRules": ["R-view"]},
+    {"class": "Contrat", "id": "CTR-789", "matchedRules": ["R-public"]}
+  ],
+  "evaluated": 812,
+  "truncated": false,
+  "warnings": ["POLICY_VERSION_UNAVAILABLE"]
 }
 ```
 
@@ -294,6 +333,7 @@ curl -X POST http://localhost:3000/isAuthorized-at-time \
 | Variable | Description | Défaut |
 |----------|-------------|--------|
 | `KAFKA_BOOTSTRAP_SERVERS` | Serveurs Kafka | `localhost:9092` |
+| `KAFKA_HISTORY_TOPIC` | Topic d'historique rejoué par les endpoints 1 à 3 | `business-objects-history` |
 | `RETENTION_DAYS` | Jours de rétention history | `365` |
 
 ### Monitoring
@@ -336,9 +376,19 @@ docker exec autho-kafka kafka-console-consumer \
 
 ## Limitations
 
-1. **Pas de données avant activation** : L'historique commence quand le mirror service démarre
-2. **Replay complet** : Chaque requête rejoue depuis le début (optimisation future: snapshots)
-3. **Subjects non versionnés** : Les attributs utilisateurs (LDAP) ne sont pas historisés pour l'instant
+1. **Pas de données avant activation** : l'historique commence quand le mirror service démarre.
+2. **Replay complet** : chaque requête rejoue le topic depuis le début (optimisation future : snapshots).
+3. **Sujets non versionnés** : les attributs utilisateurs (LDAP) ne sont pas historisés ; seuls les sujets publiés dans le topic d'historique sont connus.
+4. **Relations et délégations** : les relations ReBAC sont évaluées sur l'état courant (avec un avertissement), et les délégations ne sont pas appliquées.
+5. **Politiques non versionnées** : une politique chargée depuis un fichier et jamais mise à jour par l'API n'a pas de version ; la politique courante est alors utilisée, avec l'avertissement `POLICY_VERSION_UNAVAILABLE`.
+
+En cas d'erreur, un topic d'historique absent renvoie 503 `HISTORY_TOPIC_NOT_FOUND`, et un Kafka injoignable 503 `HISTORY_UNAVAILABLE`.
+
+Un test d'intégration rejoue un vrai topic Kafka :
+
+```bash
+TIME_TRAVEL_TEST_KAFKA=localhost:9092 lein test :integration :only autho.time-travel-kafka-integration-test
+```
 
 ## Roadmap
 

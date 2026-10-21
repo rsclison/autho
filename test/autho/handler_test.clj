@@ -155,3 +155,34 @@
           (is (= ["Facture" "INV-1" "2026-03-01T00:00:00Z" "2026-03-31T23:59:59Z"] (:args parsed))))))
     (with-redefs [features/licensed? (constantly false)]
       (is (= 402 (:status (app (request {:role "admin"}))))))))
+
+(deftest time-travel-routes-test
+  (let [app (auth/wrap-authentication app-routes)
+        call (fn [uri body]
+               (let [response (app {:request-method :post :uri uri :headers {}
+                                    :identity {:role "admin"}
+                                    :body (ByteArrayInputStream. (.getBytes (json/write-value-as-string body) "UTF-8"))})]
+                 [(:status response) (json/read-value (:body response) json/keyword-keys-object-mapper)]))]
+    (with-redefs [kafka-enabled false]
+      (is (= 503 (first (call "/isAuthorized-at-time" {:timestamp "2026-03-15T10:30:00Z"})))))
+    (with-redefs [kafka-enabled true
+                  time-travel/is-authorized-at-time (fn [req ts config]
+                                                      {:decision "allow" :req req :ts ts :env (:environment config)})
+                  time-travel/who-was-authorized-at (fn [rc rid action ts config]
+                                                      {:args [rc rid action ts (:subject-class config) (:limit config)]})
+                  time-travel/what-could-access-at (fn [sid action ts config]
+                                                     (throw (ex-info "bad timestamp" {:status 400 :error-code "INVALID_TIMESTAMP"})))]
+      (let [[status body] (call "/isAuthorized-at-time" {:timestamp "2026-03-15T10:30:00Z" :environment "staging"
+                                                          :subject {:id "alice"} :resource {:class "Facture" :id "1"}})]
+        (is (= 200 status))
+        (is (= "staging" (:env body)))
+        (is (= {:subject {:id "alice"} :resource {:class "Facture" :id "1"}} (:req body))))
+      (is (= 400 (first (call "/isAuthorized-at-time" {:subject {:id "alice"}}))))
+      (let [[status body] (call "/who-was-authorized-at" {:resourceClass "Facture" :resourceId "1" :operation "approve"
+                                                           :timestamp "2026-03-15T10:30:00Z" :subjectClass "Person" :limit 5})]
+        (is (= 200 status))
+        (is (= ["Facture" "1" "approve" "2026-03-15T10:30:00Z" "Person" 5] (:args body))))
+      (is (= 400 (first (call "/who-was-authorized-at" {:resourceClass "Facture"}))))
+      (let [[status body] (call "/what-could-access-at" {:subjectId "alice" :action "view" :timestamp "x"})]
+        (is (= 400 status))
+        (is (= "INVALID_TIMESTAMP" (get-in body [:error :code])))))))

@@ -1,6 +1,7 @@
 (ns autho.pdp
   (:require [autho.prp :as prp]
             [autho.jsonrule :as rule]
+            [autho.attfun :as attfun]
             [autho.kafka-pip :as kafka-pip]
             [autho.kafka-pip-unified :as kafka-pip-unified]
             [autho.local-cache :as local-cache]
@@ -252,6 +253,21 @@
      :all-rules all-rules
      :evaluated-rules evaluated-rules
      :matched-rule-objs matched-rule-objs}))
+
+(defn evaluate-with-attributes
+  "Evaluates authz-request against policy using only the attributes carried by
+   the request and those returned by attribute-resolver (fn [attribute obj]).
+   No fillers, decision cache, live PIPs, delegation, audit or metrics: used to
+   replay a decision against a reconstructed (historical) state.
+   Relation clauses are still checked against the current relation store."
+  [policy authz-request attribute-resolver]
+  (binding [attfun/*attribute-resolver* attribute-resolver]
+    (let [op (:operation authz-request)
+          evaluated (mapv #(build-rule-evaluation % authz-request op)
+                          (vec (or (:rules policy) [])))
+          matched (mapv :rule (filter :matched evaluated))]
+      {:allowed? (boolean (resolve-conflict policy matched))
+       :matched-rule-names (mapv :name matched)})))
 
 (defn- canonical-decision
   [policy-eval]

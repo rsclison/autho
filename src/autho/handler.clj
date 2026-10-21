@@ -433,6 +433,39 @@
                  (.debug logger "POST /astro body: {}" (slurp body))
                  (json-response {:signe "poisson" :ascendant "poisson"})))
 
+(defn- time-travel-route
+  "Common guard for the Kafka-backed time-travel endpoints. f receives the
+   parsed body and the history configuration and returns a result map or a
+   ring response."
+  [request f]
+  (cond
+    (not kafka-enabled)
+    (error-response "KAFKA_DISABLED"
+                    "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
+                    503)
+
+    (nil? (:body request))
+    (error-response "EMPTY_REQUEST_BODY" "Request body is empty." 400)
+
+    :else
+    (try
+      (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
+            config (cond-> {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}
+                     (System/getenv "KAFKA_HISTORY_TOPIC") (assoc :history-topic (System/getenv "KAFKA_HISTORY_TOPIC"))
+                     (:environment body) (assoc :environment (:environment body)))
+            result (f body config)]
+        (if (and (map? result) (:status result) (:body result))
+          result
+          (json-response result)))
+      (catch clojure.lang.ExceptionInfo e
+        (if-let [status (:status (ex-data e))]
+          (error-response (or (:error-code (ex-data e)) "TIME_TRAVEL_ERROR") (.getMessage e) status)
+          (do (.error logger "Time-travel query failed" e)
+              (error-response "TIME_TRAVEL_ERROR" (str "Time-travel query failed: " (.getMessage e)) 500))))
+      (catch Exception e
+        (.error logger "Time-travel query failed" e)
+        (error-response "TIME_TRAVEL_ERROR" (str "Time-travel query failed: " (.getMessage e)) 500)))))
+
 (defroutes protected-routes
            (GET "/policies" []
                 (json-response (prp/get-policies)))
@@ -525,74 +558,34 @@
                    (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)]
                      (json-response (pdp/explain request body)))))
 
-           ;; Time-Travel Authorization Endpoints
+           ;; Time-Travel Authorization Endpoints (history rebuilt from Kafka)
            (POST "/isAuthorized-at-time" request
-                 (cond
-                   (not kafka-enabled)
-                   (error-response "KAFKA_DISABLED"
-                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
-                                   503)
-
-                   (= :failed (prp/get-rules-repository-status))
-                   (rules-not-loaded-response)
-
-                   (nil? (:body request))
-                   (error-response "EMPTY_REQUEST_BODY"
-                                   "Request body is empty."
-                                   400)
-
-                   :else
-                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
-                         timestamp (:timestamp body)
-                         auth-request (dissoc body :timestamp)]
-                     (if timestamp
-                       (let [config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}
-                             result (time-travel/is-authorized-at-time auth-request timestamp config)]
-                         (json-response result))
+                 (time-travel-route request
+                   (fn [body config]
+                     (if-let [timestamp (:timestamp body)]
+                       (time-travel/is-authorized-at-time (dissoc body :timestamp :environment) timestamp config)
                        (error-response "MISSING_TIMESTAMP"
                                        "Request body must include a 'timestamp' field in ISO-8601 format."
                                        400)))))
 
            (POST "/who-was-authorized-at" request
-                 (cond
-                   (not kafka-enabled)
-                   (error-response "KAFKA_DISABLED"
-                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
-                                   503)
-
-                   (nil? (:body request))
-                   (error-response "EMPTY_REQUEST_BODY"
-                                   "Request body is empty."
-                                   400)
-
-                   :else
-                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
-                         {:keys [resourceClass resourceId action timestamp]} body
-                         config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}]
-                     (if (and resourceClass resourceId action timestamp)
-                       (json-response (time-travel/who-was-authorized-at resourceClass resourceId action timestamp config))
+                 (time-travel-route request
+                   (fn [{:keys [resourceClass resourceId action operation timestamp subjectClass limit]} config]
+                     (if (and resourceClass resourceId (or action operation) timestamp)
+                       (time-travel/who-was-authorized-at resourceClass resourceId (or action operation) timestamp
+                                                          (assoc config :subject-class subjectClass :limit limit))
                        (error-response "MISSING_PARAMETERS"
                                        "Request must include: resourceClass, resourceId, action, timestamp"
                                        400)))))
 
            (POST "/what-could-access-at" request
-                 (cond
-                   (not kafka-enabled)
-                   (error-response "KAFKA_DISABLED"
-                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
-                                   503)
-
-                   (nil? (:body request))
-                   (error-response "EMPTY_REQUEST_BODY"
-                                   "Request body is empty."
-                                   400)
-
-                   :else
-                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
-                         {:keys [subjectId action timestamp]} body
-                         config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}]
-                     (if (and subjectId action timestamp)
-                       (json-response (time-travel/what-could-access-at subjectId action timestamp config))
+                 (time-travel-route request
+                   (fn [{:keys [subjectId action operation timestamp subjectClass resourceClass limit]} config]
+                     (if (and subjectId (or action operation) timestamp)
+                       (time-travel/what-could-access-at subjectId (or action operation) timestamp
+                                                         (assoc config :subject-class subjectClass
+                                                                       :resource-class resourceClass
+                                                                       :limit limit))
                        (error-response "MISSING_PARAMETERS"
                                        "Request must include: subjectId, action, timestamp"
                                        400)))))

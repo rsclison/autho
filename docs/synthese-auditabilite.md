@@ -137,7 +137,7 @@ Dans le code :
 - Un attaquant qui a accès à la base **et** connaît `AUDIT_HMAC_SECRET` peut réécrire la chaîne. Seule une ancre conservée à l'extérieur (paquet signé en Ed25519) le révèle.
 - L'écriture reste asynchrone : une décision est rendue même si son audit échoue ensuite. L'échec est visible (métriques, santé, readiness), mais il n'y a pas de mode « fail-closed » par décision.
 - La purge supprime un préfixe contigu par identifiant ; avec des horloges décalées entre instances, quelques entrées proches de la date limite peuvent être purgées.
-- Les endpoints time-travel `isAuthorized-at-time`, `who-was-authorized-at` et `what-could-access-at` ne rendent pas encore de décision : il manque l'intégration du PDP avec l'état historique reconstruit depuis Kafka. `audit-trail`, lui, est opérationnel.
+- Les endpoints time-travel (`isAuthorized-at-time`, `who-was-authorized-at`, `what-could-access-at`) rejouent une décision passée avec les attributs historiques (Kafka) et la version de politique en vigueur à la date demandée. Les relations ReBAC y sont évaluées sur l'état courant et les délégations ne sont pas appliquées (voir `docs/TIME_TRAVEL_AUTHORIZATION.md`).
 - Le mode PostgreSQL du journal a été validé sur PostgreSQL 16 (suite `autho.audit-test`, avec `AUDIT_TEST_POSTGRES_URL`). La concurrence réelle entre plusieurs instances n'a pas été testée en charge.
 
 ## Résumé opérationnel

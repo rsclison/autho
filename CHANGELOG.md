@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /audit-trail` returns the recorded access history of a resource from the audit log (no longer requires Kafka; admin identity and audit licence required)
 - Audit search filters by `resourceId` and accepts `order=asc|desc`
 - Audit tests can run against PostgreSQL with `AUDIT_TEST_POSTGRES_URL`
+- Time-travel decisions: `POST /isAuthorized-at-time`, `/who-was-authorized-at` and `/what-could-access-at` evaluate the policy version in force at the timestamp against the business objects rebuilt from the Kafka history topic (no live PIP, filler or cache value); responses carry the policy used and warnings (`POLICY_VERSION_UNAVAILABLE`, `NO_POLICY_AT_TIME`, `SUBJECT_NOT_IN_SNAPSHOT`, `RESOURCE_NOT_IN_SNAPSHOT`, `RELATIONS_EVALUATED_ON_CURRENT_STATE`)
+- `KAFKA_HISTORY_TOPIC` selects the history topic; a missing topic or an unreachable broker returns 503
 
 ### Changed
 - Audit timestamps (`ts`) are returned as ISO-8601 UTC instants

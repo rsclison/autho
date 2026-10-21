@@ -1237,6 +1237,47 @@ components:
         reason:
           type: string
 
+    TimeTravelPolicy:
+      type: object
+      description: Policy used for the historical evaluation
+      properties:
+        source:
+          type: string
+          enum: [version, current, none]
+          description: version = last deployed version before the timestamp; current = no version recorded (fallback); none = no policy at that time
+        version: {type: integer}
+        createdAt: {type: string, format: date-time}
+
+    TimeTravelMatch:
+      type: object
+      properties:
+        class: {type: string}
+        id: {type: string}
+        matchedRules:
+          type: array
+          items: {type: string}
+
+    TimeTravelDecision:
+      type: object
+      properties:
+        timestamp: {type: string, format: date-time}
+        decision: {type: string, enum: [allow, deny]}
+        allowed: {type: boolean}
+        matchedRules:
+          type: array
+          items: {type: string}
+        subject: {type: object, description: Subject with its attributes at that time}
+        resource: {type: object, description: Resource with its attributes at that time}
+        operation: {type: string}
+        policy:
+          $ref: '#/components/schemas/TimeTravelPolicy'
+        snapshot-size: {type: integer}
+        warnings:
+          type: array
+          items:
+            type: string
+            enum: [POLICY_VERSION_UNAVAILABLE, NO_POLICY_AT_TIME, SUBJECT_NOT_IN_SNAPSHOT, RESOURCE_NOT_IN_SNAPSHOT, RELATIONS_EVALUATED_ON_CURRENT_STATE]
+
     AuditCheckpoint:
       type: object
       nullable: true
@@ -2851,11 +2892,23 @@ paths:
                     timestamp:
                       type: string
                       format: date-time
+                    action:
+                      type: string
+                      description: Alias of operation
+                    environment:
+                      type: string
+                      default: prod
       responses:
         '200':
           description: Historical decision result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeTravelDecision'
+        '400':
+          description: Missing parameters, invalid timestamp or ambiguous subject class
         '503':
-          description: Kafka is disabled
+          description: Kafka is disabled, the history topic is missing or Kafka is unreachable
 
   /who-was-authorized-at:
     post:
@@ -2879,11 +2932,39 @@ paths:
                 timestamp:
                   type: string
                   format: date-time
+                subjectClass:
+                  type: string
+                  description: Candidate subject class (default - classes the policy reads subject attributes from)
+                limit:
+                  type: integer
+                  default: 1000
+                  maximum: 10000
+                environment:
+                  type: string
+                  default: prod
       responses:
         '200':
-          description: Historical subject authorization result
+          description: Subjects of the historical snapshot authorized at that time
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorized-subjects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimeTravelMatch'
+                  evaluated: {type: integer}
+                  truncated: {type: boolean}
+                  policy:
+                    $ref: '#/components/schemas/TimeTravelPolicy'
+                  warnings:
+                    type: array
+                    items: {type: string}
+        '400':
+          description: Missing parameters, invalid timestamp or ambiguous subject class
         '503':
-          description: Kafka is disabled
+          description: Kafka is disabled, the history topic is missing or Kafka is unreachable
 
   /what-could-access-at:
     post:
@@ -2905,11 +2986,43 @@ paths:
                 timestamp:
                   type: string
                   format: date-time
+                subjectClass:
+                  type: string
+                resourceClass:
+                  type: string
+                  description: Restrict candidates to one resource class
+                limit:
+                  type: integer
+                  default: 1000
+                  maximum: 10000
+                environment:
+                  type: string
+                  default: prod
       responses:
         '200':
-          description: Historical resource access result
+          description: Objects of the historical snapshot the subject could access at that time
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessible-resources:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimeTravelMatch'
+                  evaluated: {type: integer}
+                  truncated: {type: boolean}
+                  policies:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/TimeTravelPolicy'
+                  warnings:
+                    type: array
+                    items: {type: string}
+        '400':
+          description: Missing parameters, invalid timestamp or ambiguous subject class
         '503':
-          description: Kafka is disabled
+          description: Kafka is disabled, the history topic is missing or Kafka is unreachable
 
   /audit-trail:
     post:
