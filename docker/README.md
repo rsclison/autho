@@ -38,8 +38,8 @@ Pour supprimer aussi les volumes persistants :
 
 | Service | URL / Port | Credentials |
 | --- | --- | --- |
-| Autho API | `http://localhost:8080` | API key ci-dessous |
-| Admin UI | `http://localhost:8080/admin/ui` | API key ci-dessous |
+| Admin UI (navigateur) | `http://localhost:8080/admin/ui` | API key ci-dessous |
+| Autho API (curl, pas de page a la racine) | `http://localhost:8080` (sante : `/health`) | API key ci-dessous |
 | Kafka | `localhost:9092` | - |
 | Kafka UI | `http://localhost:8090` | - |
 | PostgreSQL (optionnel) | `localhost:5432/autho` | `autho` / `autho-dev-password` |

@@ -299,11 +299,14 @@ cat <<EOF
 
 La stack de démonstration est prête.
 
-URLs:
-- Autho API:       $BASE_URL
-- Admin UI:        $BASE_URL/admin/ui
-- Kafka UI:        http://localhost:8090
-- phpLDAPadmin:    http://localhost:8091
+Ouvrir dans le navigateur :
+- Admin UI :       $BASE_URL/admin/ui
+- Kafka UI :       http://localhost:8090
+- phpLDAPadmin :   http://localhost:8091
+
+API (appels curl, pas de page d’accueil à la racine $BASE_URL) :
+- Santé :          $BASE_URL/health
+- Spécification :  $BASE_URL/openapi.yaml
 
 Credentials:
 - Mode Admin UI :   API Key

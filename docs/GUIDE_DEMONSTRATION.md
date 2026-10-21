@@ -55,11 +55,15 @@ Pour arrêter la démo sans perdre les volumes :
 Ajouter `--volumes` uniquement pour supprimer les données persistantes de la
 démonstration.
 
-| Service | Adresse |
+| Service | Adresse à ouvrir |
 | --- | --- |
-| API et Admin UI | `http://localhost:8080` et `/admin/ui` |
+| Admin UI | `http://localhost:8080/admin/ui` |
 | Kafka UI | `http://localhost:8090` |
 | phpLDAPadmin | `http://localhost:8091` |
+
+L’API répond sur `http://localhost:8080`, mais la racine n’a pas de page
+d’accueil (réponse « Not Found ») : dans le navigateur, ouvrir directement
+`/admin/ui`. Pour vérifier que le serveur est prêt : `http://localhost:8080/health`.
 
 Dans l’Admin UI, choisir **API Key**, saisir
 `abcdefghijklmnopqrstuvwxyz123456` et sélectionner le tenant `demo`. Cette
