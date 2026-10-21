@@ -20,7 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct ReBAC checks (`POST /v1/relations/check`) are recorded in the audit log (operation `relation:<name>`, `plane=rebac` search filter)
 - Ed25519 signature of evidence bundles (`EVIDENCE_SIGNING_PRIVATE_KEY` / `EVIDENCE_SIGNING_PUBLIC_KEY`), `GET /v1/evidence/public-key` and offline verification with `lein evidence:verify <bundle.json> <public-key>`
 
+- `POST /audit-trail` returns the recorded access history of a resource from the audit log (no longer requires Kafka; admin identity and audit licence required)
+- Audit search filters by `resourceId` and accepts `order=asc|desc`
+- Audit tests can run against PostgreSQL with `AUDIT_TEST_POSTGRES_URL`
+
 ### Changed
+- Audit timestamps (`ts`) are returned as ISO-8601 UTC instants
 - A decision granted through delegation is audited once, for the requesting subject, with `delegationChain` and `grantedVia` in the decision snapshot (previously logged under the delegate's id)
 - Authorization Operations foundations:
   - canonical decision fields on the main v1 decision endpoints

@@ -140,11 +140,24 @@
               (:last_hash (first (jdbc/query db ["SELECT last_hash FROM AUDIT_CHAIN_HEAD WHERE id = 1"])))
               (throw e)))))))
 
-(defn- lock-chain-head!
-  "Locks the chain head row for the current transaction and returns its hash."
-  [tx]
-  (ensure-chain-head! tx)
-  (:last_hash (first (jdbc/query tx ["SELECT last_hash FROM AUDIT_CHAIN_HEAD WHERE id = 1 FOR UPDATE"]))))
+(defn- with-locked-chain-head
+  "Runs (f tx head-hash) in a transaction holding the lock on the chain head row.
+   A missing head row is seeded outside the transaction (a failed insert would
+   abort the transaction on PostgreSQL), then the transaction is retried once."
+  [f]
+  (let [attempt (fn []
+                  (jdbc/with-db-transaction [tx audit-db]
+                    (if-let [head (:last_hash (first (jdbc/query tx ["SELECT last_hash FROM AUDIT_CHAIN_HEAD WHERE id = 1 FOR UPDATE"])))]
+                      [::done (f tx head)]
+                      [::missing])))
+        [status result] (attempt)]
+    (if (= ::done status)
+      result
+      (do (ensure-chain-head! audit-db)
+          (let [[status result] (attempt)]
+            (if (= ::done status)
+              result
+              (throw (ex-info "Audit chain head row is missing" {:type ::missing-chain-head}))))))))
 
 (defn- load-last-hash! []
   (reset! last-hash (ensure-chain-head! audit-db)))
@@ -292,8 +305,8 @@
                                 :request_snapshot (json-safe request-snapshot)
                                 :decision_snapshot (json-safe decision-snapshot)}
                   payload-hash (row-payload-hash row)]
-              (jdbc/with-db-transaction [tx audit-db]
-                (let [prev-hash (lock-chain-head! tx)]
+              (with-locked-chain-head
+                (fn [tx prev-hash]
                   (jdbc/insert! tx :audit_log
                                 (assoc row
                                        :payload_hash  payload-hash
@@ -312,7 +325,7 @@
 
 (defn- normalize-row
   "Convert JDBC row to a JSON-safe map:
-   - java.sql.Timestamp → ISO-8601 string
+   - java.sql.Timestamp → ISO-8601 UTC instant string
    - matched_rules string → vector of rule names
    - request/decision snapshots → maps when present"
   [row]
@@ -320,7 +333,7 @@
             (when-let [s (sql-value->str v)]
               (json/read-str s :key-fn keyword)))]
     (-> row
-        (update :ts #(when % (.toString ^java.sql.Timestamp %)))
+        (update :ts #(when % (str (.toInstant ^java.sql.Timestamp %))))
         (update :request_snapshot parse-json-value)
         (update :decision_snapshot parse-json-value)
         (update :matched_rules
@@ -372,12 +385,13 @@
 (defn search
   "Query the audit log with optional filters.
    Returns {:items [...] :total N :page N :pageSize N}."
-  [{:keys [subject-id resource-class decision from to page page-size plane]}]
+  [{:keys [subject-id resource-class resource-id decision from to page page-size plane order]}]
   (let [page      (max 1 (->long "page" page 1))
         page-size (-> (->long "pageSize" page-size 20) (max 1) (min max-page-size))
         filters   (cond-> []
                     subject-id     (conj ["subject_id = ?" (str subject-id)])
                     resource-class (conj ["resource_class = ?" (str resource-class)])
+                    resource-id    (conj ["resource_id = ?" (str resource-id)])
                     decision       (conj ["decision = ?" (column-str decision)])
                     from           (conj ["ts >= ?" (->timestamp "from" from)])
                     to             (conj ["ts <= ?" (->timestamp "to" to)])
@@ -386,10 +400,14 @@
                     (= "abac" (column-str plane))  (conj ["(operation IS NULL OR operation NOT LIKE ?)" "relation:%"]))
         where      (str/join " AND " (cons "1=1" (map first filters)))
         params     (mapv second filters)
+        direction  (case (some-> order column-str str/lower-case)
+                     (nil "desc") "DESC"
+                     "asc" "ASC"
+                     (invalid-filter! "Invalid order: expected asc or desc" {:field "order"}))
         offset     (* (dec page) page-size)
         count-sql  (str "SELECT COUNT(*) AS n FROM AUDIT_LOG WHERE " where)
         data-sql   (str "SELECT * FROM AUDIT_LOG WHERE " where
-                        " ORDER BY id DESC LIMIT ? OFFSET ?")
+                        " ORDER BY id " direction " LIMIT ? OFFSET ?")
         total      (or (:n (first (jdbc/query audit-db (into [count-sql] params)))) 0)
         rows       (jdbc/query audit-db (into [data-sql] (conj params page-size offset))
                                {:row-fn normalize-row})]
@@ -568,8 +586,8 @@
     (when-not (:valid check)
       (throw (ex-info "Audit chain does not verify; purge refused"
                       {:status 409 :error-code "AUDIT_CHAIN_INVALID" :verification check})))
-    (jdbc/with-db-transaction [tx audit-db]
-      (lock-chain-head! tx)
+    (with-locked-chain-head
+     (fn [tx _head]
       (if-let [cutoff (first (jdbc/query tx [(str "SELECT id, payload_hash FROM AUDIT_LOG WHERE ts < ?"
                                                     " ORDER BY id DESC LIMIT 1")
                                                cutoff-ts]))]
@@ -586,7 +604,7 @@
           (jdbc/insert! tx :audit_checkpoint checkpoint)
           (.info logger "Audit log purged: {} entries before {}" purged (str cutoff-ts))
           {:purged purged :checkpoint (checkpoint->api checkpoint)})
-        {:purged 0 :checkpoint (checkpoint->api (read-checkpoint tx))}))))
+        {:purged 0 :checkpoint (checkpoint->api (read-checkpoint tx))})))))
 
 (defn- retention-days []
   (some-> (System/getenv "AUDIT_RETENTION_DAYS") str/trim not-empty Long/parseLong))

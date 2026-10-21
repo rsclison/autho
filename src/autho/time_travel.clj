@@ -2,7 +2,8 @@
   "Time-travel authorization queries: answer 'who was authorized at time T?'"
   (:require [clojure.tools.logging :as log]
             [jsonista.core :as json]
-            [autho.pdp :as pdp])
+            [autho.pdp :as pdp]
+            [autho.audit :as audit])
   (:import (org.apache.kafka.clients.consumer KafkaConsumer ConsumerConfig)
            (org.apache.kafka.common TopicPartition)
            (java.util Properties)
@@ -198,12 +199,37 @@
    :accessible-resources []  ;; To be implemented with PDP integration
    })
 
+(defn- audit-row->trail-event
+  [{:keys [id ts subject_id operation decision matched_rules decision_snapshot]}]
+  (cond-> {:auditId id
+           :timestamp ts
+           :subject subject_id
+           :action operation
+           :decision decision
+           :plane (or (:plane decision_snapshot) "abac")
+           :matchedRules matched_rules}
+    (:delegationChain decision_snapshot)
+    (assoc :delegationChain (:delegationChain decision_snapshot)
+           :grantedVia (:grantedVia decision_snapshot))))
+
 (defn audit-trail
-  "Returns complete access history for a resource over a time range"
+  "Returns the recorded access history (ABAC decisions and ReBAC checks) for a
+   resource over a time range, oldest first, read from the audit log.
+   config may carry :page and :page-size."
   [resource-class resource-id start-time end-time config]
   (log/info "Audit trail for" resource-class resource-id "from" start-time "to" end-time)
-  {:query "audit-trail"
-   :resource {:class resource-class :id resource-id}
-   :time-range {:start start-time :end end-time}
-   :events []  ;; To be implemented - requires decision logging
-   })
+  (let [result (audit/search {:resource-class resource-class
+                              :resource-id resource-id
+                              :from start-time
+                              :to end-time
+                              :order "asc"
+                              :page (:page config)
+                              :page-size (:page-size config)})]
+    {:query "audit-trail"
+     :source "audit-log"
+     :resource {:class resource-class :id resource-id}
+     :time-range {:start start-time :end end-time}
+     :total (:total result)
+     :page (:page result)
+     :pageSize (:pageSize result)
+     :events (mapv audit-row->trail-event (:items result))}))

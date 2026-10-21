@@ -597,27 +597,36 @@
                                        "Request must include: subjectId, action, timestamp"
                                        400)))))
 
+           ;; Read from the audit log: no Kafka needed, but same access as /admin/audit/search
            (POST "/audit-trail" request
-                 (cond
-                   (not kafka-enabled)
-                   (error-response "KAFKA_DISABLED"
-                                   "Time-travel features are disabled. Set KAFKA_ENABLED=true to enable."
-                                   503)
+                 ((wrap-admin-auth
+                   (fn [request]
+                     (cond
+                       (not (features/licensed? :audit))
+                       (error-response "LICENSE_REQUIRED"
+                                       "L'audit requiert une licence Pro ou Enterprise."
+                                       402)
 
-                   (nil? (:body request))
-                   (error-response "EMPTY_REQUEST_BODY"
-                                   "Request body is empty."
-                                   400)
+                       (nil? (:body request))
+                       (error-response "EMPTY_REQUEST_BODY"
+                                       "Request body is empty."
+                                       400)
 
-                   :else
-                   (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
-                         {:keys [resourceClass resourceId startTime endTime]} body
-                         config {:bootstrap-servers (or (System/getenv "KAFKA_BOOTSTRAP_SERVERS") "localhost:9092")}]
-                     (if (and resourceClass resourceId startTime endTime)
-                       (json-response (time-travel/audit-trail resourceClass resourceId startTime endTime config))
-                       (error-response "MISSING_PARAMETERS"
-                                       "Request must include: resourceClass, resourceId, startTime, endTime"
-                                       400)))))
+                       :else
+                       (let [body (json/read-value (slurp (:body request)) json/keyword-keys-object-mapper)
+                             {:keys [resourceClass resourceId startTime endTime page pageSize]} body]
+                         (if (and resourceClass resourceId startTime endTime)
+                           (try
+                             (json-response (time-travel/audit-trail resourceClass resourceId startTime endTime
+                                                                     {:page page :page-size pageSize}))
+                             (catch clojure.lang.ExceptionInfo e
+                               (if-let [status (:status (ex-data e))]
+                                 (error-response (:error-code (ex-data e)) (.getMessage e) status)
+                                 (throw e))))
+                           (error-response "MISSING_PARAMETERS"
+                                           "Request must include: resourceClass, resourceId, startTime, endTime"
+                                           400))))))
+                  request))
 
            (context "/admin" []
                     (wrap-admin-auth
@@ -669,6 +678,8 @@
                                (json-response (audit/search
                                                {:subject-id     (get params "subjectId")
                                                 :resource-class (get params "resourceClass")
+                                                :resource-id    (get params "resourceId")
+                                                :order          (get params "order")
                                                 :decision       (when-let [d (get params "decision")] (keyword d))
                                                 :from           (get params "from")
                                                 :to             (get params "to")

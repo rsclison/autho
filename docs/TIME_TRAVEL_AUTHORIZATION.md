@@ -175,7 +175,9 @@ curl -X POST http://localhost:3000/what-could-access-at \
 
 ### Endpoint 4 : `/audit-trail`
 
-Retourne l'historique complet des accès à une ressource sur une période.
+Retourne l'historique des accès enregistrés pour une ressource sur une période, du plus ancien au plus récent. Il couvre les décisions du PDP et les vérifications ReBAC directes.
+
+Contrairement aux autres endpoints time-travel, celui-ci **lit le journal d'audit** et ne nécessite pas Kafka. Il exige une licence Pro/Enterprise et une identité admin (clé API `governance-admin` ou JWT avec le rôle `admin`), comme `/admin/audit/search`.
 
 **Requête** :
 ```bash
@@ -186,7 +188,9 @@ curl -X POST http://localhost:3000/audit-trail \
     "resourceClass": "Facture",
     "resourceId": "INV-12345",
     "startTime": "2024-03-01T00:00:00Z",
-    "endTime": "2024-03-31T23:59:59Z"
+    "endTime": "2024-03-31T23:59:59Z",
+    "page": 1,
+    "pageSize": 100
   }'
 ```
 
@@ -194,27 +198,41 @@ curl -X POST http://localhost:3000/audit-trail \
 ```json
 {
   "query": "audit-trail",
+  "source": "audit-log",
   "resource": {"class": "Facture", "id": "INV-12345"},
   "time-range": {
     "start": "2024-03-01T00:00:00Z",
     "end": "2024-03-31T23:59:59Z"
   },
+  "total": 2,
+  "page": 1,
+  "pageSize": 100,
   "events": [
     {
+      "auditId": 1042,
       "timestamp": "2024-03-15T10:30:00Z",
       "subject": "alice@company.com",
       "action": "view",
-      "decision": "PERMIT"
+      "decision": "allow",
+      "plane": "abac",
+      "matchedRules": ["R-view-own-invoices"]
     },
     {
+      "auditId": 1187,
       "timestamp": "2024-03-20T14:22:13Z",
       "subject": "bob@company.com",
       "action": "approve",
-      "decision": "PERMIT"
+      "decision": "allow",
+      "plane": "abac",
+      "matchedRules": ["R-approve"],
+      "delegationChain": ["carol@company.com"],
+      "grantedVia": "carol@company.com"
     }
   ]
 }
 ```
+
+`delegationChain` et `grantedVia` n'apparaissent que si l'accès a été accordé par délégation. L'intégrité des entrées se vérifie avec `GET /admin/audit/verify`.
 
 ## Cas d'Usage
 

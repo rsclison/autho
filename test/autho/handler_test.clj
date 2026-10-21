@@ -5,7 +5,10 @@
             [autho.pdp :as pdp]
             [autho.prp :as prp]
             [jsonista.core :as json]
-            [autho.auth :as auth])
+            [autho.auth :as auth]
+            [autho.audit :as audit]
+            [autho.features :as features]
+            [autho.time-travel :as time-travel])
   (:import (java.io ByteArrayInputStream)))
 
 (deftest empty-body-protection-test
@@ -131,3 +134,24 @@
         (is (= "PLANE_DISABLED" (get-in body [:error :code]))))
       (finally
         (topology/set-enabled-planes! #{:control :data :evidence})))))
+
+(deftest audit-trail-route-uses-audit-log-test
+  (let [app (auth/wrap-authentication app-routes)
+        body (json/write-value-as-string {:resourceClass "Facture" :resourceId "INV-1"
+                                          :startTime "2026-03-01T00:00:00Z"
+                                          :endTime "2026-03-31T23:59:59Z"})
+        request (fn [identity]
+                  {:request-method :post :uri "/audit-trail" :headers {}
+                   :identity identity
+                   :body (ByteArrayInputStream. (.getBytes body "UTF-8"))})]
+    (with-redefs [features/licensed? (constantly true)
+                  time-travel/audit-trail (fn [& args] {:query "audit-trail" :args (vec (take 4 args))})]
+      (testing "non-admin clients cannot read the audit trail"
+        (is (= 403 (:status (app (request {:auth-method :api-key :client-id "app" :roles ["policy-deployer"]}))))))
+      (testing "admins get the trail without Kafka"
+        (let [response (app (request {:role "admin"}))
+              parsed (json/read-value (:body response) json/keyword-keys-object-mapper)]
+          (is (= 200 (:status response)))
+          (is (= ["Facture" "INV-1" "2026-03-01T00:00:00Z" "2026-03-31T23:59:59Z"] (:args parsed))))))
+    (with-redefs [features/licensed? (constantly false)]
+      (is (= 402 (:status (app (request {:role "admin"}))))))))

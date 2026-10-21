@@ -21,12 +21,16 @@
 ;; Test infrastructure
 ;; ---------------------------------------------------------------------------
 
+;; Set AUDIT_TEST_POSTGRES_URL (and AUTHO_DB_KIND=postgres) to run the same
+;; tests against PostgreSQL, e.g. jdbc:postgresql://localhost:5432/autho?user=..&password=..
 (def ^:private test-db
-  {:classname   "org.h2.Driver"
-   :subprotocol "h2:mem"
-   :subname     "testaudit;DB_CLOSE_DELAY=-1"
-   :user        "sa"
-   :password    ""})
+  (if-let [url (System/getenv "AUDIT_TEST_POSTGRES_URL")]
+    {:connection-uri url}
+    {:classname   "org.h2.Driver"
+     :subprotocol "h2:mem"
+     :subname     "testaudit;DB_CLOSE_DELAY=-1"
+     :user        "sa"
+     :password    ""}))
 
 ;; 44-character test secret (well above the 32-char minimum)
 (def ^:private test-secret "audit-test-hmac-secret-32-chars-min-ok!!")
@@ -41,6 +45,9 @@
   (reset! @#'autho.audit/last-hash zero-hash))
 
 (defn- with-clean-test-db [f]
+  ;; Writes queued by other test namespaces must finish against their own
+  ;; database before the test database is swapped in.
+  (await-agent)
   ;; with-redefs-fn accepts a map of Var→value, allowing access to private vars.
   (with-redefs-fn {#'autho.audit/audit-db    test-db
                    #'autho.audit/hmac-secret test-secret}
@@ -526,3 +533,24 @@
   (is (= 1 (:total (audit/search {:plane "abac"}))))
   (is (= 1 (:returned (audit/replay-requests {:resource-class "Doc"}))))
   (is (true? (:valid (audit/verify-chain)))))
+
+(deftest search-filters-by-resource-id-and-orders-test
+  (log-n! 3 "alba")
+  (is (= 1 (:total (audit/search {:resource-class "Doc" :resource-id "d-1"}))))
+  (is (= ["d-0" "d-1" "d-2"] (map :resource_id (:items (audit/search {:order "asc"})))))
+  (is (= ["d-2" "d-1" "d-0"] (map :resource_id (:items (audit/search {})))))
+  (is (thrown? clojure.lang.ExceptionInfo (audit/search {:order "id; DROP TABLE AUDIT_LOG"}))))
+
+(deftest missing-chain-head-row-is-reseeded-test
+  (log-n! 2 "bruno")
+  (jdbc/execute! test-db ["DELETE FROM AUDIT_CHAIN_HEAD"])
+  (log-n! 1 "bruno")
+  (let [result (audit/verify-chain)]
+    (is (true? (:valid result)))
+    (is (= 3 (:total result))))
+  (is (= 0 (:writesFailed (audit/health-status)))))
+
+(deftest search-returns-iso-8601-timestamps-test
+  (log-n! 1 "carla")
+  (let [ts (:ts (first (:items (audit/search {}))))]
+    (is (re-matches #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z" ts))))
