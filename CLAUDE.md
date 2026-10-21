@@ -3,9 +3,27 @@
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the
 code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+the parts of the codebase it indexes.** The graph is faster, cheaper
+(fewer tokens), and gives you structural context (callers, dependents,
+test coverage) that file scanning cannot.
+
+**Coverage limit: the graph does not parse Clojure.** It indexes the
+admin UI (TypeScript/TSX), the Java client, Python and shell scripts —
+not the server in `src/autho/*.clj` nor `test/autho/*.clj`. For the
+Clojure code, a graph query returns nothing (not "no callers"): use the
+Serena MCP tools instead (below), then Grep/Read.
+
+## MCP Tools: Serena (Clojure code)
+
+Serena (declared in `.mcp.json`) navigates the Clojure server through
+clojure-lsp: `find_symbol` to locate a function, `find_referencing_symbols`
+for its callers, `get_symbols_overview` for the content of a namespace.
+Use it before Grep/Read for structural questions on `src/autho`. The first
+call of a session waits for clojure-lsp to start (about a minute).
+
+Local setup, once per machine: `uv tool install -p 3.13 serena-agent`, a
+`.serena/project.yml` (git-ignored) with `languages: [clojure, typescript]`,
+then `serena project index .`.
 
 ### When to use graph tools FIRST
 
@@ -32,7 +50,9 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 
 ### Workflow
 
-1. The graph auto-updates on file changes (via hooks).
+1. The graph auto-updates on file changes (via hooks in
+   `.claude/settings.json`). The hooks need the `code-review-graph` command
+   on PATH: `uv tool install code-review-graph`.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
