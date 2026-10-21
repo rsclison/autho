@@ -90,6 +90,17 @@ services:
           --config delete.retention.ms=100
         echo "✓ authorization-relationships"
 
+        # Historique (non compacté) des objets métier, alimenté par topic-mirror
+        # et rejoué par les endpoints time-travel
+        /opt/kafka/bin/kafka-topics.sh --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic business-objects-history \
+          --partitions 3 \
+          --replication-factor 1 \
+          --config cleanup.policy=delete \
+          --config retention.ms=31536000000
+        echo "✓ business-objects-history"
+
         echo ""
         echo "=== Topics disponibles ==="
         /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:29092
@@ -165,6 +176,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+    image: autho-demo:latest
     container_name: autho-server
     ports:
       - "8080:8080"
@@ -186,6 +198,13 @@ services:
       LDAP_PASSWORD: "admin"
       AUTHO_POLICY_DB_PATH: "/data/h2db/autho-policy"
       AUDIT_HMAC_SECRET: "audit-test-hmac-secret-32-chars-min-ok!!"
+      AUTHO_AUDIT_DB_PATH: "/data/auditdb"
+      # Time-travel : rejoue business-objects-history
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      # Signature Ed25519 des bundles d'évidence — CLÉS DE DÉMONSTRATION UNIQUEMENT
+      # (clé publique : docker/demo-keys/evidence-signing.pub.pem)
+      EVIDENCE_SIGNING_PRIVATE_KEY: "MC4CAQAwBQYDK2VwBCIEIIBBhO0Js09wV/vAyI0OU20H9ZWIlaVmBI2cmkRQtJqy"
+      EVIDENCE_SIGNING_PUBLIC_KEY: "MCowBQYDK2VwAyEARgfIy7E/HBlJTurgG8IMff0Zy0w8vD5xGI01QeHPQxg="
       POLICY_BUNDLE_HMAC_SECRET: "policy-bundle-hmac-secret-32-chars-min"
     volumes:
       - autho_data:/data
@@ -200,6 +219,19 @@ services:
       timeout: 5s
       retries: 20
       start_period: 40s
+
+  # Copie horodatée de business-objects-compacted vers business-objects-history
+  topic-mirror:
+    image: autho-demo:latest
+    container_name: autho-topic-mirror
+    command: ["./lein", "run", "-m", "autho.topic-mirror"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+    depends_on:
+      autho:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
 
   kafka-producer:
     build:

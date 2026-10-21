@@ -15,3 +15,9 @@ target/
 
 # Git files to exclude from image
 .gitignore
+
+# Local H2 databases (policies, audit) must not leak into images
+resources/auditdb.*
+resources/h2db.*
+*.trace.db
+*.lock.db

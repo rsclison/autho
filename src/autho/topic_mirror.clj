@@ -31,7 +31,7 @@
 (defn build-mirror-topology [builder source-topic target-topic]
   "Builds a Kafka Streams topology that mirrors source to target with timestamp enrichment"
   (log/info "Building mirror topology:" source-topic "->" target-topic)
-  (let [^KStream source-stream (.stream builder (into-array String [source-topic]))]
+  (let [^KStream source-stream (.stream ^StreamsBuilder builder ^String source-topic)]
     (-> source-stream
         ;; Enrich each message with timestamp
         (.mapValues (reify org.apache.kafka.streams.kstream.ValueMapper

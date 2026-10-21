@@ -24,6 +24,7 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.21.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.21"]
                  [org.clojure/data.json "2.5.2"]
+                 [ring/ring-core "1.15.1"]
                  [org.clojure/java.jdbc "0.7.12"]
                  [clojure.java-time "1.4.3"]
                  [org.clojure/core.cache "1.2.263"]

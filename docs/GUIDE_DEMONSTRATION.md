@@ -12,8 +12,9 @@ qui représenteraient en production une outbox métier.
 
 ## Démarrage
 
-Prérequis : Docker avec le plugin `docker compose`, `curl`, et les ports
-locaux `8080`, `8090`, `8091`, `9092` et `389` disponibles.
+Prérequis : Docker avec le plugin `docker compose`, `curl`, `jq` (pour
+`demo_audit.sh`), et les ports locaux `8080`, `8090`, `8091`, `9092` et `389`
+disponibles.
 
 Depuis la racine du dépôt :
 
@@ -31,6 +32,19 @@ Pour injecter les données Kafka du second chapitre :
 ```bash
 ./demo_inject_kafka.sh
 ```
+
+Pour le chapitre audit (journal vérifiable, falsification détectée, preuve
+signée vérifiée hors ligne, rétention, time-travel) :
+
+```bash
+./demo_audit.sh                    # chapitres 1 à 6
+./demo_audit.sh --with-truncation  # ajoute la suppression d’entrées (chapitre 7)
+```
+
+Le script peut être lancé après `demo_start.sh` ; après `demo_inject_kafka.sh`,
+il montre en plus les vérifications ReBAC journalisées. `--with-truncation`
+laisse volontairement le journal invalide : repartir ensuite de
+`./demo_stop.sh --volumes` puis `./demo_start.sh`.
 
 Pour arrêter la démo sans perdre les volumes :
 
@@ -168,6 +182,42 @@ Terminer par **Infrastructure** pour les composants et caches, puis
 **Paramètres** pour la session et le thème. Cela positionne Autho comme un
 produit opéré, pas seulement comme une bibliothèque d’évaluation de règles.
 
+### 7. Audit approfondi avec `demo_audit.sh`
+
+Le script se déroule en chapitres commentés, à projeter dans un terminal :
+
+1. **Journal vérifiable** — santé de l’écriture d’audit, dernières décisions,
+   vérification complète de la chaîne. Le couple `headId` / `headHash` est noté
+   comme ancre externe.
+2. **Falsification détectée** — un refus est transformé en autorisation
+   directement dans la base H2, sans toucher aux hashes : la vérification
+   désigne l’entrée altérée (`Payload hash mismatch`). Restaurée, la chaîne
+   redevient valide. Le même résultat est visible dans l’Admin UI avec
+   **Vérifier l’intégrité**.
+3. **Historique d’une ressource** — `POST /audit-trail` restitue les accès à
+   `DOS-002` dans l’ordre chronologique ; les vérifications ReBAC directes sont
+   journalisées avec `plane=rebac`.
+4. **Preuve vérifiable hors ligne** — le bundle d’évidence porte une signature
+   HMAC et une signature Ed25519. La clé publique est publiée
+   (`GET /v1/evidence/public-key`, fichier `docker/demo-keys/evidence-signing.pub.pem`) ;
+   le bundle est vérifié sans aucun secret avec `autho.evidence-cli`, puis une
+   copie modifiée d’un seul champ est rejetée.
+5. **Rétention** — purge du début de la chaîne ; la vérification reprend à
+   partir d’un checkpoint signé.
+6. **Time-travel** — alice (`AgentDemo`) et la note de frais `NF-1` (800 €)
+   sont publiées dans Kafka, puis alice est promue manager, la politique
+   `NoteFraisDemo` est durcie (v2 : 500 € maximum) et alice est rétrogradée.
+   Interrogée aux quatre instants, `isAuthorized-at-time` répond
+   refus / autorisation / refus / refus, avec les attributs d’alice et la
+   version de politique en vigueur à chaque date. `who-was-authorized-at` et
+   `what-could-access-at` répondent pour l’instant où alice était manager.
+7. *(option `--with-truncation`)* **Suppression d’entrées** — la dernière
+   entrée est effacée en base : la tête de chaîne enregistrée et l’ancre externe
+   révèlent la suppression.
+
+Les clés Ed25519 de `docker/docker-compose.yml` et
+`docker/demo-keys/` sont des clés de démonstration, à ne jamais réutiliser.
+
 ## Vérifications API utiles
 
 Après injection, le contrôle ReBAC suivant doit retourner une relation
@@ -218,4 +268,6 @@ trouve dans [POSTGRESQL_COMPATIBILITY.md](POSTGRESQL_COMPATIBILITY.md).
 4. Purpose contrôlé.
 5. Montrer `DocumentPartageDemo` puis lancer `./demo_inject_kafka.sh`.
 6. Kafka UI, Données PIP, Relations et la décision relationnelle auditée.
-7. Infrastructure, puis `./demo_stop.sh`.
+7. `./demo_audit.sh` : falsification détectée, preuve vérifiée hors ligne,
+   time-travel.
+8. Infrastructure, puis `./demo_stop.sh`.

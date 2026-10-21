@@ -18,6 +18,7 @@ docker compose "${DOWN_ARGS[@]}"
 echo "Nettoyage des éventuels conteneurs nommés restants…"
 docker rm -f \
   autho-server \
+  autho-topic-mirror \
   autho-kafka \
   autho-kafka-init \
   autho-kafka-ui \

@@ -2,7 +2,8 @@
   (:require [clojure.test :refer :all]
             [autho.evidence :as evidence]
             [autho.evidence-cli :as evidence-cli]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [jsonista.core :as jsonista])
   (:import (java.security KeyPairGenerator)
            (java.util Base64)))
 
@@ -103,3 +104,21 @@
     (spit bundle-file (json/write-str (assoc-in bundle [:resourceClass] "Other")))
     (is (= 1 (:exit-code (evidence-cli/run [(str bundle-file) pem]))))
     (is (= 2 (:exit-code (evidence-cli/run []))))))
+
+(deftest bundle-with-jdbc-timestamps-survives-http-serialization-test
+  ;; Values such as java.sql.Timestamp are written differently by the HTTP layer
+  ;; (jsonista) and by canonical JSON: the bundle must be signed as it is sent.
+  (let [signing (ed25519-keys)
+        payload (assoc sample-payload
+                       :policyTimeline {:events [{:eventType "policy_version_created"
+                                                  :occurredAt (java.sql.Timestamp/from
+                                                               (java.time.Instant/parse "2026-10-21T09:15:19.123Z"))}]})
+        bundle (with-redefs [evidence/bundle-secret test-secret
+                             evidence/signing-keys signing]
+                 (evidence/sign-bundle payload))
+        received (jsonista/read-value (jsonista/write-value-as-string {:data bundle})
+                                      jsonista/keyword-keys-object-mapper)]
+    (with-redefs [evidence/bundle-secret test-secret
+                  evidence/signing-keys signing]
+      (is (true? (:valid (evidence/verify-bundle (:data received))))))
+    (is (true? (:valid (evidence/verify-public-signature (:data received) (:public signing)))))))

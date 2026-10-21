@@ -186,3 +186,22 @@
       (let [[status body] (call "/what-could-access-at" {:subjectId "alice" :action "view" :timestamp "x"})]
         (is (= 400 status))
         (is (= "INVALID_TIMESTAMP" (get-in body [:error :code])))))))
+
+(deftest query-string-parameters-reach-handlers-test
+  ;; The HTTP server only provides :query-string; parameters must be decoded
+  ;; by the application, otherwise filters are silently ignored.
+  (let [app (auth/wrap-authentication app-routes)
+        captured (atom nil)]
+    (with-redefs [features/licensed? (constantly true)
+                  audit/search (fn [filters] (reset! captured filters) {:items [] :total 0 :page 1 :pageSize 20})
+                  audit/verify-chain (fn [opts] (reset! captured opts) {:valid true})]
+      (app {:request-method :get :uri "/admin/audit/search" :headers {}
+            :query-string "resourceClass=DossierDemo&decision=deny&pageSize=5&from=2026-01-01T00%3A00%3A00Z"
+            :identity {:role "admin"}})
+      (is (= "DossierDemo" (:resource-class @captured)))
+      (is (= :deny (:decision @captured)))
+      (is (= 5 (:page-size @captured)))
+      (is (= "2026-01-01T00:00:00Z" (:from @captured)))
+      (app {:request-method :get :uri "/admin/audit/verify" :headers {}
+            :query-string "anchorId=12&anchorHash=abc" :identity {:role "admin"}})
+      (is (= {:anchor-id "12" :anchor-hash "abc"} @captured)))))

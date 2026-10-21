@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Time-travel decisions: `POST /isAuthorized-at-time`, `/who-was-authorized-at` and `/what-could-access-at` evaluate the policy version in force at the timestamp against the business objects rebuilt from the Kafka history topic (no live PIP, filler or cache value); responses carry the policy used and warnings (`POLICY_VERSION_UNAVAILABLE`, `NO_POLICY_AT_TIME`, `SUBJECT_NOT_IN_SNAPSHOT`, `RESOURCE_NOT_IN_SNAPSHOT`, `RELATIONS_EVALUATED_ON_CURRENT_STATE`)
 - `KAFKA_HISTORY_TOPIC` selects the history topic; a missing topic or an unreachable broker returns 503
 
+- Audit demonstration `demo_audit.sh` (verifiable chain, tampering detected, offline Ed25519 verification, retention, time-travel); the demo stack mirrors business objects to `business-objects-history` and signs evidence with demo Ed25519 keys
+- `AUTHO_AUDIT_DB_PATH` sets the H2 audit database location (the demo stores it on the `/data` volume)
+
+### Fixed
+- Query-string parameters were ignored by the HTTP server (audit search filters and pagination, verification anchors, evidence and usage filters): requests are now decoded with `wrap-params`
+- Evidence bundles containing JDBC timestamps (policy timeline) failed verification once serialised: bundles are signed in their JSON form
+- Policies with `relation` clauses were rejected by policy safety validation (`INVALID_CLAUSE_ARITY`); relation clauses are now validated on their own shape
+- `topic-mirror` crashed at startup (`StreamsBuilder.stream` called with an array)
+- Local H2 databases were copied into Docker images (`.dockerignore`)
+- Demo: the `DocumentPartageDemo` policy embedded a test that depends on relations injected later, so `demo_start.sh` failed
+
 ### Changed
 - Audit timestamps (`ts`) are returned as ISO-8601 UTC instants
 - A decision granted through delegation is audited once, for the requesting subject, with `delegationChain` and `grantedVia` in the decision snapshot (previously logged under the delegate's id)

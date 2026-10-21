@@ -158,9 +158,39 @@
    []
    (contradiction-facts clauses default-scope)))
 
+(def ^:private relation-operators
+  #{"relation" "related" "has-relation"})
+
+(defn- relation-entity-operand?
+  [operand]
+  (or (contains? #{"$s" "$r"} (str operand))
+      (map? operand)))
+
+(defn- relation-clause-issues
+  "[relation subject relation-name resource] or with an options map as 5th item."
+  [rule-name field clause-index clause]
+  (let [[_ subject relation resource options] clause
+        relation-name (if (keyword? relation) (name relation) relation)]
+    (when-not (and (contains? #{4 5} (count clause))
+                   (relation-entity-operand? subject)
+                   (string? relation-name)
+                   (not (str/blank? relation-name))
+                   (relation-entity-operand? resource)
+                   (or (= 4 (count clause)) (map? options)))
+      [(issue "INVALID_RELATION_CLAUSE"
+              (str "Rule '" rule-name "' has a relation clause in " (name field)
+                   " that must be [\"relation\", subject, relation-name, resource] with an optional options map;"
+                   " subject and resource are \"$s\", \"$r\" or an entity map.")
+              :rule rule-name
+              :field field
+              :clause-index clause-index)])))
+
 (defn- clause-issues
   [rule-name field clause-index clause]
   (cond
+    (and (sequential? clause) (contains? relation-operators (operator-name (first clause))))
+    (vec (relation-clause-issues rule-name field clause-index clause))
+
     (not (sequential? clause))
     [(issue "INVALID_CLAUSE"
             (str "Rule '" rule-name "' has a non-sequential clause in " (name field) ".")

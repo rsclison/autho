@@ -307,3 +307,26 @@
     (is (contains? warning-codes "UNCONDITIONAL_RULE"))
     (is (contains? warning-codes "MISSING_OPERATION"))
     (is (contains? warning-codes "SHADOWED_RULE"))))
+
+(defn- relation-policy [clause]
+  {:resourceClass "Document"
+   :strategy "almost_one_allow_no_deny"
+   :rules [{:name "R-relation" :operation "lire" :priority 1 :effect "allow"
+            :conditions [clause]}]})
+
+(deftest validate-policy-accepts-relation-clauses-test
+  (is (map? (safety/validate-policy! "Document" (relation-policy ["relation" "$s" "can-read" "$r"]))))
+  (is (map? (safety/validate-policy! "Document" (relation-policy ["has-relation" "$s" "viewer" "$r"
+                                                                 {:consistency "fresh" :pip "iam"}]))))
+  (is (map? (safety/validate-policy! "Document" (relation-policy ["related" {:class "Group" :id "g1"} "member" "$r"])))))
+
+(deftest validate-policy-rejects-malformed-relation-clauses-test
+  (doseq [clause [["relation" "$s" "$r"]
+                  ["relation" "$s" "" "$r"]
+                  ["relation" "$x" "viewer" "$r"]
+                  ["relation" "$s" "viewer" "$r" "not-a-map"]
+                  ["relation" "$s" "viewer" "$r" {} "extra"]]]
+    (let [e (try (safety/validate-policy! "Document" (relation-policy clause))
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (instance? clojure.lang.ExceptionInfo e) (pr-str clause))
+      (is (= "INVALID_RELATION_CLAUSE" (:code (first (:issues (ex-data e))))) (pr-str clause)))))

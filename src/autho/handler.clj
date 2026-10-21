@@ -23,7 +23,8 @@
             [jsonista.core :as json]
             [autho.auth :as auth]
             [autho.features :as features]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [ring.middleware.params :refer [wrap-params]])
   (:import (org.slf4j LoggerFactory)))
 
 (defonce logger (LoggerFactory/getLogger "autho.handler"))
@@ -786,14 +787,17 @@
                     ))))
 
 (def app-routes
-  (routes
-   public-routes
-   (-> protected-routes
-       (auth/wrap-authentication))
-   (-> (context "/v1" [] api-v1/v1-routes)
-       (auth/wrap-authentication)
-       (topology/wrap-v1-plane-gating))
-   (route/not-found "Not Found")))
+  ;; The HTTP server only provides :query-string: decode it into :query-params
+  ;; and :params, otherwise query filters (audit search, anchors...) are ignored.
+  (wrap-params
+   (routes
+    public-routes
+    (-> protected-routes
+        (auth/wrap-authentication))
+    (-> (context "/v1" [] api-v1/v1-routes)
+        (auth/wrap-authentication)
+        (topology/wrap-v1-plane-gating))
+    (route/not-found "Not Found"))))
 
 
 (defn init []

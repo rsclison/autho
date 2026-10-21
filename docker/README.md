@@ -16,6 +16,12 @@ Injecter ensuite les donnees Kafka avec :
 ./demo_inject_kafka.sh
 ```
 
+Demontrer les fonctions d'audit (necessite `jq`) avec :
+
+```bash
+./demo_audit.sh                    # option --with-truncation : suppression d'entrees
+```
+
 Elle s'arrete avec :
 
 ```bash
@@ -53,7 +59,8 @@ phpLDAPadmin :
 
 ## Ce que prepare `demo_start.sh`
 
-- Kafka et les topics compactes ;
+- Kafka, les topics compactes et le topic d'historique `business-objects-history` ;
+- le service `topic-mirror`, qui copie les objets metier horodates vers l'historique (time-travel) ;
 - OpenLDAP avec les personnes de demonstration ;
 - Autho en container avec `AUTHO_DEMO_LICENSE_TIER=enterprise` ;
 - RocksDB embarque dans le container Autho, vide au lancement de la demo ;
@@ -133,7 +140,27 @@ Le paquet contient :
 - le replay d'audit ;
 - la recherche d'audit ;
 - la timeline de politique pour la classe choisie ;
-- une section `integrity` avec digest canonique et signature HMAC.
+- une section `integrity` avec digest canonique, signature HMAC et signature Ed25519.
+
+La signature Ed25519 se verifie hors ligne avec la seule cle publique
+(`docker/demo-keys/evidence-signing.pub.pem`, ou `GET /v1/evidence/public-key`) :
+
+```bash
+lein evidence:verify bundle.json docker/demo-keys/evidence-signing.pub.pem
+```
+
+Les cles de `docker-compose.yml` et `docker/demo-keys/` sont des cles de
+demonstration, a ne jamais reutiliser.
+
+## Scenario audit approfondi
+
+`demo_audit.sh` enchaine : verification de la chaine, falsification d'une
+decision directement en base (detectee puis restauree), `/audit-trail`,
+verifications ReBAC journalisees, preuve verifiee hors ligne (et rejet d'une
+copie modifiee), purge avec checkpoint signe, puis un scenario time-travel
+(promotion et retrogradation d'alice, durcissement de la politique
+`NoteFraisDemo`) interroge a quatre instants. Le journal d'audit est stocke sur
+le volume `/data` (`AUTHO_AUDIT_DB_PATH`).
 
 ## Configuration utilisee
 

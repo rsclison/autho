@@ -128,6 +128,13 @@ create_demo_policies() {
     ]
   }' >/dev/null
 
+  # La permission dérivée can-read doit exister avant la politique qui l’utilise.
+  # Le cas « allow » dépend des relations injectées par demo_inject_kafka.sh :
+  # il est démontré après injection, pas testé à la création de la politique.
+  curl_json -X PUT "$BASE_URL/v1/relations/rewrites/can-read" -d '{
+    "relations": ["viewer"]
+  }' >/dev/null
+
   curl_json -X PUT "$BASE_URL/v1/policies/DocumentPartageDemo" -d '{
     "resourceClass": "DocumentPartageDemo",
     "strategy": "almost_one_allow_no_deny",
@@ -142,13 +149,6 @@ create_demo_policies() {
     ],
     "tests": [
       {
-        "name": "membre du groupe finance lit le document partage",
-        "subject": {"id": "001", "class": "Person"},
-        "resource": {"id": "DOC-PARTAGE-001", "class": "DocumentPartageDemo"},
-        "operation": "lire",
-        "expect": "allow"
-      },
-      {
         "name": "un document sans relation est refuse",
         "subject": {"id": "001", "class": "Person"},
         "resource": {"id": "DOC-PARTAGE-REFUSE", "class": "DocumentPartageDemo"},
@@ -158,9 +158,6 @@ create_demo_policies() {
     ]
   }' >/dev/null
 
-  curl_json -X PUT "$BASE_URL/v1/relations/rewrites/can-read" -d '{
-    "relations": ["viewer"]
-  }' >/dev/null
 }
 
 show_auditability_story() {
@@ -289,7 +286,7 @@ show_kafka_mode_preview() {
 echo "Démarrage de la stack complète Autho…"
 echo "Réinitialisation des volumes de démonstration pour partir sans projection Kafka…"
 docker compose --profile tools down --remove-orphans --volumes >/dev/null 2>&1 || true
-docker compose up -d --build kafka kafka-init kafka-ui openldap phpldapadmin autho
+docker compose up -d --build kafka kafka-init kafka-ui openldap phpldapadmin autho topic-mirror
 
 wait_for_autho
 
@@ -320,6 +317,10 @@ Arrêter l’ensemble avec :
 
 Injecter les objets métier et les projections relationnelles Kafka avec :
   ./demo_inject_kafka.sh
+
+Démontrer les fonctions d’audit (journal vérifiable, falsification détectée,
+preuve signée vérifiée hors ligne, rétention, time-travel) avec :
+  ./demo_audit.sh
 
 Reset persisted demo volumes with:
   ./demo_stop.sh --volumes

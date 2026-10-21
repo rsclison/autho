@@ -44,7 +44,8 @@
                        (System/getenv "AUTHO_DATABASE_USER"))
                    (or (System/getenv "AUTHO_AUDIT_DATABASE_PASSWORD")
                        (System/getenv "AUTHO_DATABASE_PASSWORD")))
-    (h2-spec "./resources/auditdb;AUTO_SERVER=TRUE"
+    (h2-spec (str (or (System/getenv "AUTHO_AUDIT_DB_PATH") "./resources/auditdb")
+                  ";AUTO_SERVER=TRUE")
              (System/getenv "H2_AUDIT_CIPHER_KEY"))))
 
 (defn identity-column []

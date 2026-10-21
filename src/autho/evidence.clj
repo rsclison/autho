@@ -8,7 +8,8 @@
    signature that third parties can verify offline with the published public
    key (GET /v1/evidence/public-key, autho.evidence-cli)."
   (:require [clojure.data.json :as json]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [jsonista.core :as jsonista])
   (:import (java.security KeyFactory MessageDigest PrivateKey PublicKey Signature)
            (java.security.spec PKCS8EncodedKeySpec X509EncodedKeySpec)
            (java.util Base64)
@@ -185,9 +186,16 @@
                (and present? key-matches? (not valid-signature?)) (conj "PUBLIC_KEY_SIGNATURE_MISMATCH")
                (not valid-digest?) (conj "PAYLOAD_DIGEST_MISMATCH"))}))
 
+(defn- json-native
+  "The bundle as the HTTP layer will send it: non-JSON values (JDBC timestamps,
+   instants, keywords...) take the form the response writer gives them, so the
+   signature covers exactly what the recipient receives."
+  [value]
+  (jsonista/read-value (jsonista/write-value-as-string value) jsonista/keyword-keys-object-mapper))
+
 (defn sign-bundle
   [bundle]
-  (let [payload (assoc bundle :format bundle-format)
+  (let [payload (json-native (assoc bundle :format bundle-format))
         digest (payload-digest payload)
         signature (sign-payload payload)
         signing (configured-signing-keys)]
